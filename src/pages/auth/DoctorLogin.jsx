@@ -36,85 +36,42 @@ const DoctorLogin = () => {
     };
 
     return (
-        <AuthLayout
-            title="Doctor Portal"
-            subtitle="Access your clinical dashboard and patient records securely."
-            showBack={true}
-            brandColor="#2563eb"
-            heroIcon={ShieldCheck}
-        >
-            <form onSubmit={handleLogin} className="space-y-6">
-                {error && (
-                    <div className="bg-red-50 border border-red-100 text-red-500 text-xs font-black py-3 px-4 rounded-2xl text-center">
-                        {error}
-                    </div>
-                )}
-
-                <div className="space-y-4">
-                    <div className="group relative">
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors">
-                            <User size={18} />
-                        </div>
-                        <input
-                            type="text"
-                            placeholder="Doctor ID (e.g., DOC-123)"
+        <div className="auth-wrapper">
+            <div className="auth-card">
+                <AuthLayout title="Doctor Login" subtitle="Access your Dashboard" showBack={true}>
+                    <form onSubmit={handleLogin} className="flex-col" style={{ gap: 'var(--spacing-md)' }}>
+                        {error && <div style={{ color: 'var(--danger-color)', marginBottom: '10px' }}>{error}</div>}
+                        <Input
+                            label="Doctor ID"
+                            placeholder="DOC-XXXX"
                             value={code}
-                            onChange={(e) => setCode(e.target.value.toUpperCase())}
+                            onChange={(e) => setCode(e.target.value)}
                             required
-                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:border-blue-500/50 focus:bg-white transition-all shadow-sm group-hover:bg-slate-100/50"
                         />
-                    </div>
-
-                    <div className="group relative">
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors">
-                            <Lock size={18} />
-                        </div>
-                        <input
+                        <Input
+                            label="Passkey"
                             type="password"
-                            placeholder="Clinical Passkey"
+                            placeholder="****"
                             value={pin}
                             onChange={(e) => setPin(e.target.value)}
                             required
-                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:border-blue-500/50 focus:bg-white transition-all shadow-sm group-hover:bg-slate-100/50"
                         />
-                    </div>
-                </div>
+                        <div style={{ textAlign: 'right', marginTop: '4px' }}>
+                            <span onClick={() => navigate('/recovery/doctor')} style={{ fontSize: '12px', color: '#3b82f6', cursor: 'pointer' }}>Forgot Passkey?</span>
+                        </div>
 
-                <div className="text-right">
-                    <button
-                        type="button"
-                        onClick={() => navigate('/recovery/doctor')}
-                        className="text-[11px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-wider"
-                    >
-                        Forgot Passkey?
-                    </button>
-                </div>
+                        <div style={{ marginTop: 'var(--spacing-md)' }}>
+                            <Button type="submit" size="block">Login</Button>
+                        </div>
 
-                <button
-                    type="submit"
-                    className="w-full h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-blue-900/10 active:scale-[0.98] transition-all flex items-center justify-center"
-                >
-                    Establish Secure Link
-                </button>
-
-                <div className="flex items-center justify-between pt-4">
-                    <button
-                        type="button"
-                        onClick={() => navigate('/register/doctor')}
-                        className="text-[11px] font-black text-slate-900 hover:text-blue-600 uppercase tracking-widest transition-colors"
-                    >
-                        Request Credentials
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => navigate('/status/doctor')}
-                        className="text-[10px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest underline decoration-slate-200 underline-offset-4"
-                    >
-                        Check Approval
-                    </button>
-                </div>
-            </form>
-        </AuthLayout>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginTop: '16px' }}>
+                            <span onClick={() => navigate('/register/doctor')} style={{ color: 'var(--primary-color)', fontWeight: 'bold', cursor: 'pointer' }}>Register</span>
+                            <span onClick={() => navigate('/status/doctor')} style={{ color: '#666', cursor: 'pointer', textDecoration: 'underline' }}>Check Approval Status</span>
+                        </div>
+                    </form>
+                </AuthLayout>
+            </div>
+        </div>
     );
 };
 

@@ -55,121 +55,139 @@ const HospitalLogin = ({ isEmbedded = false }) => {
     };
 
     return (
-        <AuthLayout
-            title="Hospital Portal"
-            subtitle="Administrative Command Center for hospital operations and medical coordination."
-            showBack={true}
-            brandColor="#059669"
-            heroIcon={Building2}
-        >
-            <div className="relative">
-                <AnimatePresence>
-                    {errorMsg && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}
-                            className="bg-red-50 border border-red-100 text-red-500 text-xs font-black py-3 px-4 rounded-2xl text-center mb-6"
+        <div className={isEmbedded ? "" : "min-h-screen bg-white flex items-center justify-center p-4 font-sans selection:bg-emerald-500/30 overflow-hidden"}>
+            {/* Background Glow */}
+            {!isEmbedded && (
+                <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ background: 'linear-gradient(160deg, #f0fdf4 0%, #f8fafc 40%, #eff6ff 100%)' }}>
+                    <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-emerald-600/5 blur-[120px] rounded-full" />
+                    <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-teal-600/5 blur-[120px] rounded-full" />
+                </div>
+            )}
+
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+                className="w-full max-w-[460px] z-10"
+            >
+                {/* Brand Header */}
+                {!isEmbedded && (
+                    <div className="text-center mb-10">
+                        <motion.button
+                            onClick={() => navigate('/')}
+                            whileHover={{ scale: 1.1 }}
+                            className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-3xl shadow-2xl shadow-emerald-500/20 mb-6 group transition-all"
                         >
-                            {errorMsg}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                            <Building2 className="text-white w-10 h-10" />
+                        </motion.button>
+                        <h1 className="text-4xl font-black text-slate-900 tracking-tighter mb-3">vArogra <span className="text-emerald-600">Hospital</span></h1>
+                        <p className="text-slate-500 font-medium">Administrative Command Center Portal</p>
+                    </div>
+                )}
 
-                <AnimatePresence mode="wait">
-                    {isLogin ? (
-                        <motion.form
-                            key="login"
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 20 }}
-                            onSubmit={handleLogin}
-                            className="space-y-6 pt-2"
-                        >
-                            <div className="space-y-4">
-                                <div className="group relative">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-600 transition-colors">
-                                        <Mail size={18} />
-                                    </div>
-                                    <input
-                                        type="email"
-                                        placeholder="Admin Email / ID"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        required
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:border-emerald-500/50 focus:bg-white transition-all shadow-sm group-hover:bg-slate-100/50"
-                                    />
-                                </div>
-
-                                <div className="group relative">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-600 transition-colors">
-                                        <Lock size={18} />
-                                    </div>
-                                    <input
-                                        type="password"
-                                        placeholder="Secure Protocol Key"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        required
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:border-emerald-500/50 focus:bg-white transition-all shadow-sm group-hover:bg-slate-100/50"
-                                    />
-                                </div>
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={isLoading}
-                                className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-emerald-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-3 mt-4"
+                {/* Main Card */}
+                <div className="bg-white/80 backdrop-blur-2xl border border-slate-200 rounded-[40px] p-10 shadow-2xl relative">
+                    <AnimatePresence>
+                        {errorMsg && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                                className="absolute top-4 left-4 right-4 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold py-3 px-4 rounded-2xl text-center"
                             >
-                                {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Establish Secure Link"}
-                            </button>
-                        </motion.form>
-                    ) : (
-                        <motion.div
-                            key="signup"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-4 pt-2"
-                        >
-                            <AuthInput icon={<Building2 size={18} />} placeholder="Hospital Entity Name" />
-                            <AuthInput icon={<MapPin size={18} />} placeholder="Global Sector Coordinates" />
-                            <AuthInput icon={<User size={18} />} placeholder="Chief Medical Admin" />
-                            <AuthInput icon={<Phone size={18} />} placeholder="Emergency Sync Line" />
+                                {errorMsg}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
-                            <button className="w-full h-14 bg-white text-slate-900 rounded-2xl font-black text-sm tracking-widest uppercase shadow-xl hover:bg-slate-100 transition-all mt-4 border border-slate-100">
-                                Request Activation
-                            </button>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                    <AnimatePresence mode="wait">
+                        {isLogin ? (
+                            <motion.form
+                                key="login"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                onSubmit={handleLogin}
+                                className="space-y-6 pt-2"
+                            >
+                                <AuthInput
+                                    icon={<Mail size={20} />}
+                                    type="email"
+                                    placeholder="Admin Email / ID"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                />
+                                <AuthInput
+                                    icon={<Lock size={20} />}
+                                    type="password"
+                                    placeholder="Secure Protocol Key"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                />
 
-                {/* Social Auth */}
-                <div className="mt-12">
-                    <div className="relative flex items-center justify-center mb-10">
-                        <div className="h-px bg-slate-100 w-full absolute" />
-                        <span className="bg-white px-6 text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase z-10">Multi-Factor Sync</span>
-                    </div>
+                                <button
+                                    type="submit"
+                                    disabled={isLoading}
+                                    className="w-full py-5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl font-black text-sm tracking-widest uppercase shadow-xl shadow-emerald-900/40 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3 mt-4"
+                                >
+                                    {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Establish Secure Link"}
+                                </button>
+                            </motion.form>
+                        ) : (
+                            <motion.div
+                                key="signup"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="space-y-4 pt-2"
+                            >
+                                <AuthInput icon={<Building2 size={18} />} placeholder="Hospital Entity Name" />
+                                <AuthInput icon={<MapPin size={18} />} placeholder="Global Sector Coordinates" />
+                                <AuthInput icon={<User size={18} />} placeholder="Chief Medical Admin" />
+                                <AuthInput icon={<Phone size={18} />} placeholder="Emergency Sync Line" />
 
-                    <div className="grid grid-cols-4 gap-4">
-                        <SocialButton icon={<Chrome className="w-5 h-5" />} onClick={() => handleSocialLogin('google')} />
-                        <SocialButton icon={<Facebook className="w-5 h-5" />} onClick={() => handleSocialLogin('facebook')} />
-                        <SocialButton icon={<Twitter className="w-5 h-5" />} onClick={() => handleSocialLogin('x')} />
-                        <SocialButton icon={<Apple className="w-5 h-5" />} onClick={() => handleSocialLogin('apple')} />
+                                <button className="w-full py-5 bg-white text-slate-900 rounded-2xl font-black text-sm tracking-widest uppercase shadow-xl hover:bg-slate-100 transition-all mt-4">
+                                    Request Activation
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Social Auth */}
+                    <div className="mt-12">
+                        <div className="relative flex items-center justify-center mb-8">
+                            <div className="h-px bg-slate-100 w-full absolute" />
+                            <span className="bg-white px-4 text-[10px] font-black text-slate-400 tracking-[0.3em] uppercase z-10">Multi-Factor Sync</span>
+                        </div>
+
+                        <div className="grid grid-cols-4 gap-4">
+                            <SocialButton icon={<Chrome className="w-5 h-5" />} onClick={() => handleSocialLogin('google')} />
+                            <SocialButton icon={<Facebook className="w-5 h-5" />} onClick={() => handleSocialLogin('facebook')} />
+                            <SocialButton icon={<Twitter className="w-5 h-5" />} onClick={() => handleSocialLogin('x')} />
+                            <SocialButton icon={<Apple className="w-5 h-5" />} onClick={() => handleSocialLogin('apple')} />
+                        </div>
                     </div>
                 </div>
 
-                {/* Switcher */}
+                {/* Footer Footer */}
                 <div className="text-center mt-10">
-                    <button
-                        onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }}
-                        className="text-[11px] font-black text-emerald-600 hover:text-emerald-500 uppercase tracking-widest transition-colors"
-                    >
-                        {isLogin ? "Apply for Entity License" : "Return to Credentials"}
-                    </button>
+                    <p className="text-slate-500 text-sm font-medium">
+                        {isLogin ? "Entity not registered?" : "Already synchronized?"}{' '}
+                        <button
+                            onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }}
+                            className="text-emerald-400 font-bold hover:text-emerald-300 transition-colors ml-1"
+                        >
+                            {isLogin ? "Apply for License" : "Verify Credentials"}
+                        </button>
+                    </p>
+                    <div className="mt-10 flex flex-col items-center gap-2">
+                        <p className="text-[10px] font-black text-slate-600 tracking-[0.25em] uppercase">
+                            © 2026 VAROGRA QUANTUM HEALTHCARE • BIOMETRIC ENCRYPTION
+                        </p>
+                    </div>
                 </div>
-            </div>
-        </AuthLayout>
+            </motion.div>
+        </div>
     );
 };
 

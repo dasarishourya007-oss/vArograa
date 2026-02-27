@@ -157,21 +157,7 @@ const resources = {
             "closed": "Closed",
             "by_dr": "By Dr.",
             "no_digital_prescriptions_yet": "No digital prescriptions yet",
-            "v_arogra_smart_brain": "vArogra Smart Brain",
-            "upload_prescription": "Upload Prescription",
-            "commonly_used": "Commonly Used",
-            "fever": "Fever",
-            "cough": "Cough",
-            "cold": "Cold",
-            "diabetes": "Diabetes",
-            "hypertension": "Hypertension",
-            "stomach_ache": "Stomach Ache",
-            "skin_care": "Skin Care",
-            "checkout": "Checkout",
-            "pay_via_qr": "Pay via QR Code",
-            "cash_on_delivery": "Cash on Delivery",
-            "scan_to_pay": "Scan to Pay",
-            "items": "Items"
+            "v_arogra_smart_brain": "vArogra Smart Brain"
         }
     },
     te: {
@@ -328,21 +314,7 @@ const resources = {
             "closed": "మూసివేయబడింది",
             "by_dr": "డాక్టర్ ద్వారా",
             "no_digital_prescriptions_yet": "ఇంకా డిజిటల్ ప్రిస్క్రిప్షన్‌లు లేవు",
-            "v_arogra_smart_brain": "vArogra స్మార్ట్ మెదడు",
-            "upload_prescription": "ప్రిస్క్రిప్షన్ అప్‌లోడ్ చేయండి",
-            "commonly_used": "సాధారణంగా వాడేవి",
-            "fever": "జ్వరం",
-            "cough": "దగ్గు",
-            "cold": "జలుబు",
-            "diabetes": "డయాబెటిస్",
-            "hypertension": "బిపి (Hypertension)",
-            "stomach_ache": "కడుపు నొప్పి",
-            "skin_care": "చర్మ సంరక్షణ",
-            "checkout": "చెకౌట్",
-            "pay_via_qr": "QR కోడ్ ద్వారా చెల్లించండి",
-            "cash_on_delivery": "క్యాష్ ఆన్ డెలివరీ",
-            "scan_to_pay": "చెల్లించడానికి స్కాన్ చేయండి",
-            "items": "వస్తువులు"
+            "varogra_smart_brain": "vArogra స్మార్ట్ మెదడు"
         }
     },
     hi: {
@@ -499,21 +471,7 @@ const resources = {
             "closed": "बंद",
             "by_dr": "डॉ. द्वारा",
             "no_digital_prescriptions_yet": "अभी तक कोई डिजिटल प्रिस्क्रिप्शन नहीं",
-            "varogra_smart_brain": "vArogra स्मार्ट ब्रेन",
-            "upload_prescription": "प्रिस्क्रिप्शन अपलोड करें",
-            "commonly_used": "आमतौर पर इस्तेमाल होने वाला",
-            "fever": "बुखार",
-            "cough": "खांसी",
-            "cold": "जुकाम",
-            "diabetes": "मधुमेह",
-            "hypertension": "उच्च रक्तचाप",
-            "stomach_ache": "पेट दर्द",
-            "skin_care": "त्वचा की देखभाल",
-            "checkout": "चेकआउट",
-            "pay_via_qr": "QR कोड के माध्यम से भुगतान करें",
-            "cash_on_delivery": "कैश ऑन डिलीवरी",
-            "scan_to_pay": "भुगतान करने के लिए स्कैन करें",
-            "items": "वस्तुएं"
+            "varogra_smart_brain": "vArogra स्मार्ट ब्रेन"
         }
     }
 }

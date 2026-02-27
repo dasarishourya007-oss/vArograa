@@ -117,103 +117,116 @@ const LoginSelection = () => {
                 <div style={{ width: 40, height: 3, background: '#e2e8f0', borderRadius: 99, margin: '14px auto 0' }} />
             </motion.div>
 
-            {/* Cards Container */}
-            <div className="flex-1 w-full max-w-7xl mx-auto px-6 py-8">
-                <div className="grid lg:grid-cols-12 gap-8 items-start">
+            {/* Cards */}
+            <div style={{ flex: 1, padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 480, width: '100%', margin: '0 auto' }}>
 
-                    {/* Featured Patient Card */}
-                    <div className="lg:col-span-5">
+                {/* Patient – Large Featured Card */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1, duration: 0.5 }}
+                    whileHover={{ scale: 1.015 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate(patient.route)}
+                    style={{
+                        background: '#fff',
+                        borderRadius: 22,
+                        border: '2px solid #bbf7d0',
+                        boxShadow: '0 4px 24px #16a34a18',
+                        padding: '22px 22px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 18,
+                        cursor: 'pointer',
+                        position: 'relative',
+                        overflow: 'hidden',
+                    }}
+                >
+                    {/* Recommended badge */}
+                    <div style={{
+                        position: 'absolute', top: 14, right: 14,
+                        background: '#16a34a', color: '#fff',
+                        borderRadius: 99, padding: '4px 10px',
+                        fontSize: 11, fontWeight: 700,
+                        display: 'flex', alignItems: 'center', gap: 4,
+                    }}>
+                        <Star size={10} fill="#fff" /> Recommended
+                    </div>
+
+                    {/* Icon circle */}
+                    <div style={{
+                        width: 70, height: 70, borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                        boxShadow: '0 2px 12px #16a34a22',
+                    }}>
+                        {patient.svg}
+                    </div>
+
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 800, fontSize: 22, color: '#0f172a', marginBottom: 2 }}>Patient</div>
+                        <div style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>Personal health records</div>
+                    </div>
+
+                    {/* Arrow */}
+                    <div style={{
+                        width: 36, height: 36, borderRadius: '50%',
+                        background: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 2px 8px #16a34a33', flexShrink: 0,
+                    }}>
+                        <ArrowRight size={18} color="#fff" />
+                    </div>
+
+                    {/* Background shimmer */}
+                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #f0fdf4 0%, transparent 60%)', borderRadius: 22, pointerEvents: 'none', opacity: 0.5 }} />
+                </motion.div>
+
+                {/* Grid: Doctor | Hospital | Pharmacy */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                    {others.map((p, i) => (
                         <motion.div
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.1, duration: 0.5 }}
-                            whileHover={{ scale: 1.015 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() => navigate(patient.route)}
-                            className="bg-white rounded-[40px] border-2 border-emerald-100 p-8 shadow-xl shadow-emerald-500/5 cursor-pointer relative overflow-hidden h-full flex flex-col justify-center min-h-[320px] lg:min-h-[440px] group"
+                            key={p.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 + i * 0.08, duration: 0.45 }}
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => navigate(p.route)}
+                            style={{
+                                background: '#fff',
+                                borderRadius: 18,
+                                border: '1.5px solid #f1f5f9',
+                                boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
+                                padding: '18px 10px 14px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                cursor: 'pointer',
+                                position: 'relative',
+                                overflow: 'hidden',
+                            }}
                         >
-                            {/* Recommended badge */}
-                            <div className="absolute top-6 right-6 bg-emerald-500 text-white rounded-full px-4 py-1.5 text-xs font-black flex items-center gap-2 z-10">
-                                <Star size={12} fill="currentColor" /> RECOMMENDED
+                            {/* Icon */}
+                            <div style={{
+                                width: 54, height: 54, borderRadius: '50%',
+                                background: p.bgColor,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                marginBottom: 10,
+                            }}>
+                                {p.svg}
                             </div>
 
-                            {/* Icon circle */}
-                            <div className="w-24 h-24 rounded-[32px] bg-emerald-50 flex items-center justify-center mb-8 shadow-lg shadow-emerald-500/10 group-hover:scale-110 transition-transform duration-500">
-                                {patient.svg}
-                            </div>
+                            <div style={{ fontWeight: 800, fontSize: 14, color: '#0f172a', marginBottom: 2 }}>{p.title}</div>
+                            <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, marginBottom: 10 }}>{p.description}</div>
 
-                            <div>
-                                <h1 className="text-4xl font-black text-slate-900 mb-3 tracking-tight">Patient Portal</h1>
-                                <p className="text-lg text-slate-500 font-medium leading-relaxed max-w-sm">
-                                    Access your personal health records, book appointments, and manage medications.
-                                </p>
-                            </div>
+                            {/* Small arrow */}
+                            <ArrowRight size={16} color={p.color} />
 
-                            <div className="mt-auto pt-8 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <ShieldCheck className="text-emerald-500" size={20} />
-                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Secure Healthcare Link</span>
-                                </div>
-                                <div className="w-14 h-14 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white">
-                                    <ArrowRight size={24} />
-                                </div>
-                            </div>
-
-                            {/* Decorative background element */}
-                            <div className="absolute -bottom-12 -right-12 w-48 h-48 bg-emerald-50 rounded-full blur-3xl opacity-50 pointer-events-none" />
+                            {/* Bottom accent line */}
+                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: p.accentLine, borderRadius: '0 0 18px 18px' }} />
                         </motion.div>
-                    </div>
-
-                    {/* Other Portals Grid */}
-                    <div className="lg:col-span-7 grid md:grid-cols-2 lg:grid-cols-1 gap-6">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4">
-                            {others.map((p, i) => (
-                                <motion.div
-                                    key={p.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: 0.2 + i * 0.1, duration: 0.45 }}
-                                    whileHover={{ x: 10, scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
-                                    onClick={() => navigate(p.route)}
-                                    className="bg-white/60 backdrop-blur-md rounded-[32px] border border-white p-6 flex items-center gap-6 cursor-pointer shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all group lg:min-h-[120px]"
-                                >
-                                    <div
-                                        style={{ background: p.bgColor }}
-                                        className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-inner group-hover:rotate-12 transition-transform"
-                                    >
-                                        {p.svg}
-                                    </div>
-                                    <div className="flex-1">
-                                        <h3 className="text-xl font-black text-slate-900 mb-1">{p.title}</h3>
-                                        <p className="text-sm text-slate-400 font-bold uppercase tracking-wider">{p.description}</p>
-                                    </div>
-                                    <div
-                                        style={{ color: p.color }}
-                                        className="w-10 h-10 rounded-full border border-slate-100 flex items-center justify-center group-hover:bg-slate-900 group-hover:text-white group-hover:border-slate-900 transition-all"
-                                    >
-                                        <ArrowRight size={18} />
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-
-                        {/* Additional Info / CTA Section for Desktop */}
-                        <div className="hidden lg:flex bg-slate-900 rounded-[32px] p-8 text-white items-center justify-between overflow-hidden relative">
-                            <div className="relative z-10">
-                                <h4 className="text-xl font-black mb-2">Healthcare Command Center</h4>
-                                <p className="text-slate-400 text-sm font-medium max-w-[280px]">
-                                    Join thousands of providers using vArogra to digitize their medical workflow.
-                                </p>
-                            </div>
-                            <button className="relative z-10 px-6 py-3 bg-white text-slate-900 rounded-2xl font-black text-sm hover:bg-emerald-400 transition-colors uppercase tracking-widest">
-                                Contact Sales
-                            </button>
-                            {/* Decorative glow */}
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 blur-[60px]" />
-                        </div>
-                    </div>
-
+                    ))}
                 </div>
             </div>
 

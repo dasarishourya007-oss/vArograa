@@ -74,7 +74,7 @@ const UnifiedAuth = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 lg:p-8 font-sans selection:bg-blue-500/30 overflow-x-hidden">
+        <div className="min-h-screen bg-white flex items-center justify-center p-4 font-sans selection:bg-blue-500/30">
             {/* Background Glow */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ background: 'linear-gradient(160deg, #f0fdf4 0%, #f8fafc 40%, #eff6ff 100%)' }}>
                 <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/5 blur-[120px] rounded-full" />
@@ -82,204 +82,162 @@ const UnifiedAuth = () => {
             </div>
 
             <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="w-full max-w-[440px] lg:max-w-6xl z-10 grid lg:grid-cols-2 bg-white/40 backdrop-blur-3xl rounded-[48px] border border-white shadow-2xl shadow-blue-500/10 overflow-hidden"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="w-full max-w-[440px] z-10"
             >
-                {/* Left Side: Illustration / Info (Desktop Only) */}
-                <div className="hidden lg:flex flex-col p-16 bg-gradient-to-br from-blue-600 to-indigo-800 text-white relative overflow-hidden">
-                    <div className="relative z-10 h-full flex flex-col">
-                        <div className="flex items-center gap-3 mb-12">
-                            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center">
-                                <ShieldCheck className="text-white w-7 h-7" />
-                            </div>
-                            <span className="text-2xl font-black tracking-tighter">vArogra</span>
-                        </div>
-
-                        <div className="mt-auto">
-                            <h2 className="text-5xl font-black leading-tight mb-6">
-                                Your Secure <br />
-                                <span className="text-blue-200">Health Grid</span>
-                            </h2>
-                            <p className="text-blue-100/80 text-lg font-medium max-w-md leading-relaxed mb-8">
-                                Connect with top clinicians, manage prescriptions, and track your wellness journey in real-time.
-                            </p>
-
-                            <div className="grid grid-cols-2 gap-6">
-                                <div className="p-6 bg-white/10 backdrop-blur-sm rounded-3xl border border-white/10">
-                                    <div className="text-3xl font-black mb-1">10k+</div>
-                                    <div className="text-xs font-bold uppercase tracking-widest text-blue-200">Verified Doctors</div>
-                                </div>
-                                <div className="p-6 bg-white/10 backdrop-blur-sm rounded-3xl border border-white/10">
-                                    <div className="text-3xl font-black mb-1">24/7</div>
-                                    <div className="text-xs font-bold uppercase tracking-widest text-blue-200">Live Support</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Decorative Blobs */}
-                    <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-blue-400 blur-[100px] opacity-30" />
-                    <div className="absolute top-40 -right-20 w-60 h-60 bg-indigo-400 blur-[100px] opacity-20" />
+                {/* Brand Header */}
+                <div className="text-center mb-8">
+                    <motion.div
+                        whileHover={{ scale: 1.05 }}
+                        className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-2xl shadow-blue-500/20 mb-6 group cursor-pointer"
+                    >
+                        <ShieldCheck className="text-white w-9 h-9" />
+                    </motion.div>
+                    <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-3">vArogra</h1>
+                    <p className="text-slate-500 font-medium">
+                        {isLogin ? "Enter your credentials to access the command center." : "Initialize your secure health protocol."}
+                    </p>
                 </div>
 
-                {/* Right Side: Auth Form */}
-                <div className="p-8 lg:p-16 flex flex-col justify-center bg-white/80">
-                    {/* Brand Header (Mobile Only) */}
-                    <div className="text-center mb-10 lg:hidden">
-                        <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-xl shadow-blue-500/20 mb-4">
-                            <ShieldCheck className="text-white w-8 h-8" />
-                        </div>
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tight">vArogra</h1>
-                    </div>
+                {/* Main Card */}
+                <div className="bg-white/80 backdrop-blur-xl border border-slate-200 rounded-[32px] p-8 shadow-2xl relative overflow-hidden">
+                    {/* Error Toast */}
+                    <AnimatePresence>
+                        {errorMsg && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                                className="absolute top-4 left-4 right-4 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold py-2 px-4 rounded-xl text-center backdrop-blur-md"
+                            >
+                                {errorMsg}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
-                    <div className="mb-10">
-                        <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">
-                            {isLogin ? "Welcome Back" : "Create Account"}
-                        </h2>
-                        <p className="text-slate-500 font-medium text-sm">
-                            {isLogin ? "Log in to continue your secure session." : "Join the healthcare revolution today."}
-                        </p>
-                    </div>
+                    <AnimatePresence mode="wait">
+                        {isLogin ? (
+                            <motion.form
+                                key="login"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                onSubmit={handleAuth}
+                                className="space-y-5 pt-4"
+                            >
+                                <AuthInput
+                                    icon={<Mail size={18} />}
+                                    type="email"
+                                    placeholder="Authorized Email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                />
+                                <AuthInput
+                                    icon={<Lock size={18} />}
+                                    type="password"
+                                    placeholder="Security Code"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                />
 
-                    <div className="relative">
-                        {/* Error Toast */}
-                        <AnimatePresence>
-                            {errorMsg && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0 }}
-                                    className="mb-6 bg-red-50 border border-red-100 text-red-500 text-xs font-black py-3 px-4 rounded-2xl text-center"
+                                <div className="flex items-center justify-between text-xs px-1">
+                                    <label className="flex items-center gap-2 text-slate-500 cursor-pointer hover:text-slate-700 transition-colors">
+                                        <input type="checkbox" className="rounded border-slate-200 bg-slate-50 text-blue-600 focus:ring-blue-500/20" />
+                                        Keep session active
+                                    </label>
+                                    <button type="button" className="text-blue-600 font-bold hover:text-blue-700 transition-colors">Recover Access</button>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={isLoading}
+                                    className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
                                 >
-                                    {errorMsg}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        <AnimatePresence mode="wait">
-                            {isLogin ? (
-                                <motion.form
-                                    key="login"
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: 10 }}
-                                    onSubmit={handleAuth}
-                                    className="space-y-4"
-                                >
+                                    {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Establish Secure Link"}
+                                </button>
+                            </motion.form>
+                        ) : (
+                            <motion.form
+                                key="signup"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                onSubmit={handleAuth}
+                                className="space-y-4 pt-4"
+                            >
+                                <AuthInput
+                                    icon={<User size={18} />}
+                                    placeholder="Display Name"
+                                    value={signupData.name}
+                                    onChange={(e) => setSignupData({ ...signupData, name: e.target.value })}
+                                    required
+                                />
+                                <div className="grid grid-cols-2 gap-4">
                                     <AuthInput
-                                        icon={<Mail size={18} />}
+                                        icon={<Mail size={16} />}
                                         type="email"
-                                        placeholder="Email Address"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
+                                        placeholder="Email"
+                                        value={signupData.email}
+                                        onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
                                         required
                                     />
                                     <AuthInput
-                                        icon={<Lock size={18} />}
+                                        icon={<Lock size={16} />}
                                         type="password"
-                                        placeholder="Security Password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
+                                        placeholder="Password"
+                                        value={signupData.password}
+                                        onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
                                         required
                                     />
+                                </div>
+                                <div className="relative">
+                                    <AuthInput
+                                        icon={<CalendarIcon size={18} />}
+                                        placeholder="Birth Date"
+                                        value={signupData.birthDate}
+                                        readOnly
+                                        onClick={() => setShowCalendar(!showCalendar)}
+                                    />
+                                    {showCalendar && (
+                                        <div className="absolute top-full left-0 z-50 mt-2 p-4 bg-white border border-slate-200 rounded-2xl shadow-2xl">
+                                            <input
+                                                type="date"
+                                                className="bg-transparent text-slate-900 border-none outline-none h-10 w-40"
+                                                onChange={(e) => {
+                                                    setSignupData({ ...signupData, birthDate: e.target.value });
+                                                    setShowCalendar(false);
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                                <AuthInput
+                                    icon={<MapPin size={18} />}
+                                    placeholder="Operational Sector (Address)"
+                                    value={signupData.address}
+                                    onChange={(e) => setSignupData({ ...signupData, address: e.target.value })}
+                                    required
+                                />
 
-                                    <div className="flex items-center justify-between text-xs px-1 py-2">
-                                        <label className="flex items-center gap-2 text-slate-500 cursor-pointer text-[11px] font-bold uppercase tracking-wider">
-                                            <input type="checkbox" className="w-4 h-4 rounded-md border-slate-200 bg-slate-50 text-blue-600 focus:ring-blue-500/20" />
-                                            Remember Me
-                                        </label>
-                                        <button type="button" className="text-blue-600 font-black hover:text-blue-700 uppercase tracking-wider text-[11px]">Forgot Passkey?</button>
-                                    </div>
-
-                                    <button
-                                        type="submit"
-                                        disabled={isLoading}
-                                        className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-slate-900/10 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
-                                    >
-                                        {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Authorize Link"}
-                                    </button>
-                                </motion.form>
-                            ) : (
-                                <motion.form
-                                    key="signup"
-                                    initial={{ opacity: 0, x: 10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -10 }}
-                                    onSubmit={handleAuth}
-                                    className="space-y-4"
+                                <button
+                                    type="submit"
+                                    disabled={isLoading}
+                                    className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
                                 >
-                                    <AuthInput
-                                        icon={<User size={18} />}
-                                        placeholder="Full Name"
-                                        value={signupData.name}
-                                        onChange={(e) => setSignupData({ ...signupData, name: e.target.value })}
-                                        required
-                                    />
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <AuthInput
-                                            icon={<Mail size={16} />}
-                                            type="email"
-                                            placeholder="Email"
-                                            value={signupData.email}
-                                            onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
-                                            required
-                                        />
-                                        <AuthInput
-                                            icon={<Lock size={16} />}
-                                            type="password"
-                                            placeholder="Password"
-                                            value={signupData.password}
-                                            onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
-                                            required
-                                        />
-                                    </div>
-                                    <div className="relative">
-                                        <AuthInput
-                                            icon={<CalendarIcon size={18} />}
-                                            placeholder="Date of Birth"
-                                            value={signupData.birthDate}
-                                            readOnly
-                                            onClick={() => setShowCalendar(!showCalendar)}
-                                        />
-                                        {showCalendar && (
-                                            <div className="absolute top-full left-0 z-50 mt-2 p-4 bg-white border border-slate-200 rounded-2xl shadow-2xl">
-                                                <input
-                                                    type="date"
-                                                    className="bg-transparent text-slate-900 border-none outline-none h-10 w-40"
-                                                    onChange={(e) => {
-                                                        setSignupData({ ...signupData, birthDate: e.target.value });
-                                                        setShowCalendar(false);
-                                                    }}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                    <AuthInput
-                                        icon={<MapPin size={18} />}
-                                        placeholder="Address / Region"
-                                        value={signupData.address}
-                                        onChange={(e) => setSignupData({ ...signupData, address: e.target.value })}
-                                        required
-                                    />
-
-                                    <button
-                                        type="submit"
-                                        disabled={isLoading}
-                                        className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-emerald-500/10 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3"
-                                    >
-                                        {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Verify Identity"}
-                                    </button>
-                                </motion.form>
-                            )}
-                        </AnimatePresence>
-                    </div>
+                                    {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Initialize Identity"}
+                                </button>
+                            </motion.form>
+                        )}
+                    </AnimatePresence>
 
                     {/* Social Auth */}
-                    <div className="mt-10">
-                        <div className="relative flex items-center justify-center mb-10">
+                    <div className="mt-8">
+                        <div className="relative flex items-center justify-center mb-8">
                             <div className="h-px bg-slate-100 w-full absolute" />
-                            <span className="bg-white px-6 text-[10px] font-black text-slate-400 tracking-[0.15em] uppercase z-10">Instant Verification</span>
+                            <span className="bg-white px-4 text-[10px] font-black text-slate-400 tracking-widest uppercase z-10">Neural Login</span>
                         </div>
 
                         <div className="grid grid-cols-4 gap-4">
@@ -289,30 +247,27 @@ const UnifiedAuth = () => {
                             <SocialButton icon={<Apple className="w-5 h-5" />} onClick={() => handleSocialLogin('apple')} />
                         </div>
                     </div>
+                </div>
 
-                    {/* Footer Switcher */}
-                    <div className="text-center mt-10">
-                        <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">
-                            {isLogin ? "Need a new link?" : "Already Authorized?"}{' '}
-                            <button
-                                onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }}
-                                className="text-blue-600 font-black hover:underline cursor-pointer ml-1"
-                            >
-                                {isLogin ? "Start Setup" : "Return to Log"}
-                            </button>
+                {/* Footer Switcher */}
+                <div className="text-center mt-8">
+                    <p className="text-slate-500 text-sm font-medium">
+                        {isLogin ? "New to the grid?" : "Already verified?"}{' '}
+                        <button
+                            onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }}
+                            className="text-slate-900 font-bold hover:text-blue-600 transition-colors ml-1"
+                        >
+                            {isLogin ? "Request Access" : "Secure Sign In"}
+                        </button>
+                    </p>
+                    <div className="mt-8 flex flex-col items-center gap-2">
+                        <p className="text-[10px] font-black text-slate-600 tracking-[0.2em] uppercase">
+                            © 2026 VAROGRA QUANTUM HEALTHCARE • ENCRYPTED SESSION
                         </p>
+                        <div className="h-1 w-12 bg-blue-600/30 rounded-full" />
                     </div>
                 </div>
             </motion.div>
-
-            {/* Floating Back Button (Desktop) */}
-            <motion.button
-                onClick={() => navigate('/')}
-                whileHover={{ scale: 1.1, x: -5 }}
-                className="fixed top-8 left-8 w-12 h-12 bg-white text-slate-900 rounded-full shadow-lg items-center justify-center hidden lg:flex border border-slate-100"
-            >
-                <ArrowLeft size={20} />
-            </motion.button>
         </div>
     );
 };

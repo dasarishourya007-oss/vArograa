@@ -94,14 +94,24 @@ const MedicalStoreLogin = ({ isEmbedded = false }) => {
     };
 
     return (
-        <AuthLayout
-            title="Pharmacy Portal"
-            subtitle="Manage your medical inventory, sales, and prescriptions link."
-            showBack={true}
-            brandColor="#ea580c"
-            heroIcon={Store}
-        >
-            <div className="relative">
+        <div className={isEmbedded ? "" : "auth-wrapper"}>
+            <div className={isEmbedded ? "" : "auth-card p-6"}>
+                <button
+                    onClick={() => step === 1 ? navigate('/login') : setStep(1)}
+                    style={{ background: 'none', border: 'none', padding: '12px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b' }}
+                >
+                    <ArrowLeft size={20} />
+                    <span className="font-bold">Back</span>
+                </button>
+
+                <div style={{ textAlign: 'center', marginBottom: '32px', marginTop: '16px' }}>
+                    <div style={{ display: 'inline-flex', padding: '20px', backgroundColor: 'var(--brand-secondary)', borderRadius: '24px', color: 'var(--brand-primary)', marginBottom: '16px' }}>
+                        <Store size={32} />
+                    </div>
+                    <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>Pharmacy Portal</h1>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Medical Store Management</p>
+                </div>
+
                 <AnimatePresence mode="wait">
                     {step === 1 ? (
                         <motion.form
@@ -110,59 +120,61 @@ const MedicalStoreLogin = ({ isEmbedded = false }) => {
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -20 }}
                             onSubmit={handleInitialLogin}
-                            className="space-y-6"
+                            className="flex-col"
+                            style={{ gap: '20px' }}
                         >
                             {error && (
-                                <div className="bg-red-50 border border-red-100 text-red-500 text-xs font-black py-3 px-4 rounded-2xl text-center">
+                                <div style={{ color: '#ef4444', backgroundColor: '#fef2f2', padding: '12px', borderRadius: '12px', fontSize: '14px', textAlign: 'center', border: '1px solid #fee2e2', fontWeight: 'bold' }}>
                                     {error}
                                 </div>
                             )}
 
-                            <div className="space-y-4">
-                                <div className="group relative">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-600 transition-colors">
-                                        <Store size={18} />
-                                    </div>
+                            <div className="input-field flex-col">
+                                <label style={{ fontSize: '13px', fontWeight: '700', color: '#64748b', marginBottom: '8px', marginLeft: '4px' }}>Store Code</label>
+                                <div style={{ position: 'relative' }}>
+                                    <Store size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                                     <input
                                         type="text"
-                                        placeholder="Store Code (e.g., MSTR-123)"
+                                        placeholder="MSTR-XXXX"
+                                        required
                                         value={code}
                                         onChange={(e) => setCode(e.target.value.toUpperCase())}
-                                        required
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:border-orange-500/50 focus:bg-white transition-all shadow-sm group-hover:bg-slate-100/50"
-                                    />
-                                </div>
-
-                                <div className="group relative">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-600 transition-colors">
-                                        <Key size={18} />
-                                    </div>
-                                    <input
-                                        type="password"
-                                        placeholder="Security PIN"
-                                        value={pin}
-                                        onChange={(e) => setPin(e.target.value)}
-                                        required
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:border-orange-500/50 focus:bg-white transition-all shadow-sm group-hover:bg-slate-100/50"
+                                        style={{ width: '100%', padding: '16px 16px 16px 52px', borderRadius: '16px', border: '2px solid #e2e8f0', outline: 'none', fontSize: '16px', fontWeight: '600' }}
+                                        onFocus={(e) => e.target.style.borderColor = '#10b981'}
+                                        onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
                                     />
                                 </div>
                             </div>
 
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full h-14 bg-orange-600 hover:bg-orange-500 text-white rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-orange-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-                            >
-                                {loading ? <Loader2 className="animate-spin w-5 h-5" /> : "Continue to Verify"}
-                            </button>
+                            <div className="input-field flex-col">
+                                <label style={{ fontSize: '13px', fontWeight: '700', color: '#64748b', marginBottom: '8px', marginLeft: '4px' }}>Passkey / PIN</label>
+                                <div style={{ position: 'relative' }}>
+                                    <Key size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                                    <input
+                                        type="password"
+                                        placeholder="••••"
+                                        required
+                                        value={pin}
+                                        onChange={(e) => setPin(e.target.value)}
+                                        style={{ width: '100%', padding: '16px 16px 16px 52px', borderRadius: '16px', border: '2px solid #e2e8f0', outline: 'none', fontSize: '16px', fontWeight: '600' }}
+                                        onFocus={(e) => e.target.style.borderColor = '#10b981'}
+                                        onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                                    />
+                                </div>
+                            </div>
 
-                            <div className="text-center pt-4">
+                            <Button type="submit" size="block" disabled={loading}>
+                                {loading ? <Loader2 className="animate-spin text-white" /> : 'Continue to OTP'}
+                            </Button>
+
+                            <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                                <span style={{ color: '#64748b', fontSize: '14px' }}>New pharmacy? </span>
                                 <button
                                     type="button"
                                     onClick={() => navigate('/register/medical-store')}
-                                    className="text-[11px] font-black text-slate-400 hover:text-orange-600 uppercase tracking-widest transition-colors"
+                                    style={{ color: '#10b981', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px' }}
                                 >
-                                    Register New Medical Store
+                                    Register Medical Store
                                 </button>
                             </div>
                         </motion.form>
@@ -173,15 +185,18 @@ const MedicalStoreLogin = ({ isEmbedded = false }) => {
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -20 }}
                             onSubmit={handleVerifyOtp}
-                            className="space-y-8"
+                            className="flex-col"
+                            style={{ gap: '24px' }}
                         >
-                            <div className="text-center">
-                                <h2 className="text-xl font-black text-slate-900 mb-2">Device Verification</h2>
-                                <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-8">
-                                    Enter the code sent to your store app
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ color: '#10b981', marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
+                                    <ShieldCheck size={48} />
+                                </div>
+                                <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>Two-Factor Auth</h2>
+                                <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '24px' }}>
+                                    Please enter the security code sent to your registered store device.
                                 </p>
-
-                                <div className="flex justify-center gap-3">
+                                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
                                     {otp.map((digit, i) => (
                                         <input
                                             key={i}
@@ -189,41 +204,27 @@ const MedicalStoreLogin = ({ isEmbedded = false }) => {
                                             type="number"
                                             value={digit}
                                             onChange={(e) => handleOtpChange(i, e.target.value)}
-                                            className="w-14 h-16 bg-slate-50 border-2 border-slate-100 rounded-2xl text-center text-2xl font-black text-slate-900 focus:outline-none focus:border-orange-500/50 focus:bg-white transition-all"
+                                            style={{ width: '56px', height: '64px', borderRadius: '16px', border: '2px solid #e2e8f0', textAlign: 'center', fontSize: '24px', fontWeight: 'bold', color: '#1e293b', outline: 'none' }}
+                                            onFocus={(e) => e.target.style.borderColor = '#10b981'}
+                                            onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
                                         />
                                     ))}
                                 </div>
-
-                                {error && <p className="text-red-500 text-[10px] font-black uppercase tracking-widest mt-4">{error}</p>}
-
-                                <div className="mt-8 flex items-center justify-center gap-3">
-                                    <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                        Resend available in <span className="text-orange-500">0:59</span>
-                                    </p>
-                                </div>
+                                {error && <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '12px', fontWeight: 'bold' }}>{error}</p>}
                             </div>
 
-                            <button
-                                type="submit"
-                                disabled={loading || otp.some(v => v === '')}
-                                className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-slate-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-                            >
-                                {loading ? <Loader2 className="animate-spin w-5 h-5" /> : "Verify & Authorize"}
-                            </button>
+                            <Button type="submit" size="block" disabled={loading || otp.some(v => v === '')}>
+                                {loading ? <Loader2 className="animate-spin text-white" /> : 'Verify & Access Dashboard'}
+                            </Button>
 
-                            <button
-                                type="button"
-                                onClick={() => setStep(1)}
-                                className="w-full text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-[0.2em] transition-colors"
-                            >
-                                Use different credentials
-                            </button>
+                            <p style={{ textAlign: 'center', fontSize: '14px', color: '#64748b' }}>
+                                Resend code in <span style={{ color: '#10b981', fontWeight: 'bold' }}>0:59</span>
+                            </p>
                         </motion.form>
                     )}
                 </AnimatePresence>
             </div>
-        </AuthLayout>
+        </div>
     );
 };
 

@@ -5,10 +5,7 @@ import {
     AlertCircle, Send, Bot, Loader2, ShoppingBag,
     Search, Upload, Star, Navigation, Plus, FileText, Zap, DollarSign, ChevronRight,
     Bike, CheckCircle, Map, ArrowLeft, Phone, PhoneOff, MicOff, ShieldCheck,
-    Eye, Pill, Trash2, Edit2, Download, Stethoscope, Heart, Info, ShieldAlert,
-    Smartphone, ChevronLeft, RotateCcw, MessageCircle, Shield, Activity, Bell,
-    MoreVertical, Globe, Camera, CheckCircle2, ArrowRight, History, CreditCard,
-    Wallet, Banknote, Truck, ChevronRight as ChevronRightIcon, ShoppingCart, ShoppingBag as ShoppingBagIcon, X
+    Stethoscope, Heart, Baby, Eye, FlaskConical, Grid, Ear, Megaphone, Settings, Camera, X, Mic, Volume2, Square
 } from 'lucide-react';
 
 import { useTranslation } from 'react-i18next';
@@ -1170,325 +1167,305 @@ const AIAssistantTab = ({ onNavigate }) => {
 
 const StoreTab = () => {
     const { t } = useTranslation();
-    const { allMedicalStores, placeOrder } = useAuth();
-    const [view, setView] = useState('stores'); // 'stores', 'medicines', 'checkout'
-    const [selectedStore, setSelectedStore] = useState(null);
-    const [activeFilter, setActiveFilter] = useState('all');
-    const [cart, setCart] = useState([]);
-    const [prescription, setPrescription] = useState(null);
-    const [showQR, setShowQR] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState(null);
+    const { appointments, placeOrder, allMedicalStores: medicalStores } = useAuth();
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [storeSearch, setStoreSearch] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const [selectionMode, setSelectionMode] = useState(null); // 'manual' | 'auto'
+    const [checkoutStore, setCheckoutStore] = useState(null);
     const [activeOrder, setActiveOrder] = useState(null);
-    const fileInputRef = React.useRef(null);
 
-    const medicines = [
-        { id: 1, name: 'Paracetamol', price: 15, category: 'fever', desc: 'Fast relief from pain and fever' },
-        { id: 2, name: 'Dolo 650', price: 30, category: 'fever', desc: 'Standard paracetamol 650mg' },
-        { id: 3, name: 'Amoxicillin', price: 140, category: 'commonly_used', desc: 'Broad-spectrum antibiotic' },
-        { id: 4, name: 'Benadryl', price: 85, category: 'cough', desc: 'Effective cough suppression' },
-        { id: 5, name: 'Cetirizine', price: 20, category: 'cold', desc: 'Anti-allergic medication' },
-        { id: 6, name: 'Metformin', price: 45, category: 'diabetes', desc: 'Blood sugar management' },
-        { id: 7, name: 'Amlodipine', price: 60, category: 'hypertension', desc: 'Blood pressure control' },
-        { id: 8, name: 'Omeprazole', price: 35, category: 'stomach_ache', desc: 'Acidity relief' },
-        { id: 9, name: 'Vitamin C', price: 50, category: 'commonly_used', desc: 'Immunity booster' },
-        { id: 10, name: 'Gelusil', price: 40, category: 'stomach_ache', desc: 'Antacid for heartburn' },
-    ];
+    // AI Analysis State
+    const [showAIModal, setShowAIModal] = useState(false);
+    const [aiAnalysis, setAiAnalysis] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
 
-    const filters = [
-        { id: 'all', name: 'All' },
-        { id: 'commonly_used', name: t('commonly_used') },
-        { id: 'fever', name: t('fever') },
-        { id: 'cough', name: t('cough') },
-        { id: 'cold', name: t('cold') },
-        { id: 'diabetes', name: t('diabetes') },
-        { id: 'hypertension', name: t('hypertension') },
-        { id: 'stomach_ache', name: t('stomach_ache') },
-    ];
+    const prescriptions = (appointments || []).filter(a => a.status === 'Prescribed' && a.prescription);
 
-    const filteredMedicines = activeFilter === 'all' ? medicines : medicines.filter(m => m.category === activeFilter);
+    const filteredStores = (medicalStores || []).filter(s =>
+        (s.name || '').toLowerCase().includes(storeSearch.toLowerCase()) ||
+        (s.address || '').toLowerCase().includes(storeSearch.toLowerCase())
+    );
 
-    const addToCart = (med) => {
-        setCart(prev => {
-            const exists = prev.find(i => i.id === med.id);
-            if (exists) return prev.map(i => i.id === med.id ? { ...i, qty: i.qty + 1 } : i);
-            return [...prev, { ...med, qty: 1 }];
+    const initiateCheckout = (store) => {
+        setCheckoutStore(store);
+    };
+
+    const handleOrder = (storeName = t('the_selected_store')) => {
+        setCheckoutStore(null);
+        setShowSuccess(true);
+
+        // Save order to global state for Merchant Dashboard
+        const newOrder = placeOrder({
+            storeName,
+            storeId: checkoutStore?.id || 'ms1',
+            total: 493.50, // Simulated total from checkout
+            items: ['Amoxicillin', 'Paracetamol'] // Simulated items
         });
+
+        setTimeout(() => {
+            setShowSuccess(false);
+            setSelectionMode(null);
+            setActiveOrder(newOrder); // Use the global order object
+        }, 2000);
     };
 
-    const removeFromCart = (id) => {
-        setCart(prev => prev.filter(i => i.id !== id));
+
+    const handleAutoSelect = () => {
+        setUploading(true);
+        setSelectionMode('auto');
+        setTimeout(() => {
+            // Find store with highest priceScore (best for customer)
+            const cheapestStore = [...medicalStores].sort((a, b) => b.priceScore - a.priceScore)[0];
+            setUploading(false);
+            initiateCheckout(cheapestStore);
+        }, 2000);
     };
 
-    const totalAmount = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-
-    const handlePlaceOrder = (method) => {
-        setPaymentMethod(method);
-        if (method === 'qr') {
-            setShowQR(true);
-        } else {
-            completeOrder();
-        }
+    const handleUploadPrescription = () => {
+        setUploading(true);
+        setTimeout(() => {
+            setUploading(false);
+            setSelectionMode('manual');
+        }, 1500);
     };
 
-    const completeOrder = () => {
-        setShowQR(false);
-        const orderData = {
-            id: 'ORD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
-            storeName: selectedStore.name,
-            total: totalAmount + 25,
-            items: cart.map(i => i.name),
-            status: 'Confirmed',
-            timestamp: new Date().toISOString()
-        };
-        const newOrder = placeOrder(orderData);
-        setActiveOrder({ ...newOrder, ...orderData });
-        setView('tracking');
+    const handleAIScan = async () => {
+        setAiLoading(true);
+        setShowAIModal(true);
+        const result = await analyzePrescription('dummy_uri');
+        setAiAnalysis(result);
+        setAiLoading(false);
     };
 
-    if (view === 'tracking' && activeOrder) {
-        return <DeliveryTrackingView order={activeOrder} onComplete={() => { setView('stores'); setActiveOrder(null); setCart([]); }} />;
+    if (activeOrder) {
+        return <DeliveryTrackingView order={activeOrder} onComplete={() => setActiveOrder(null)} />;
+    }
+
+    if (checkoutStore) {
+        return <CheckoutView store={checkoutStore} onConfirm={handleOrder} onCancel={() => setCheckoutStore(null)} />;
     }
 
     return (
-        <div className="pb-32 min-h-screen bg-slate-50">
-            {/* Header */}
-            <div className="bg-white px-6 pt-12 pb-6 border-b border-slate-100 flex items-center justify-between sticky top-0 z-20">
-                <div className="flex items-center gap-3">
-                    {view !== 'stores' && (
-                        <button onClick={() => setView(view === 'checkout' ? 'medicines' : 'stores')} className="p-2 -ml-2">
-                            <ArrowLeft size={24} className="text-slate-900" />
-                        </button>
-                    )}
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-                        {view === 'stores' ? t('pharmacy_store') : selectedStore?.name}
-                    </h1>
+        <div style={{ paddingBottom: '100px', backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
+            {/* Header / Search */}
+            <div style={{ backgroundColor: '#fff', padding: '40px 20px 20px', borderBottom: '1px solid #eee' }}>
+                <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>{t('pharmacy_store')}</h1>
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    backgroundColor: '#f3f4f6',
+                    padding: '12px 16px',
+                    borderRadius: '12px'
+                }}>
+                    <Search size={20} color="#9ca3af" />
+                    <input
+                        type="text"
+                        placeholder={t('search_medicines_stores_placeholder')}
+                        value={storeSearch}
+                        onChange={(e) => setStoreSearch(e.target.value)}
+                        style={{ background: 'none', border: 'none', outline: 'none', width: '100%', fontSize: '14px' }}
+                    />
                 </div>
-                {cart.length > 0 && view === 'medicines' && (
-                    <button
-                        onClick={() => setView('checkout')}
-                        className="relative p-3 bg-p-600 text-white rounded-2xl shadow-lg shadow-p-200"
+            </div>
+
+            <div style={{ padding: '20px' }}>
+                {/* Selection Logic Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '32px' }}>
+                    <div
+                        onClick={handleAutoSelect}
+                        style={{
+                            background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                            borderRadius: '20px',
+                            padding: '16px',
+                            color: '#fff',
+                            boxShadow: '0 4px 12px rgba(79, 70, 229, 0.2)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
+                        }}
                     >
-                        <ShoppingBag size={20} />
-                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 border-2 border-white rounded-full text-[10px] font-bold flex items-center justify-center">
-                            {cart.length}
-                        </span>
-                    </button>
-                )}
-            </div>
-
-            <div className="p-6">
-                {view === 'stores' && (
-                    <div className="space-y-8">
-                        {/* Prescription Upload */}
-                        <div
-                            onClick={() => fileInputRef.current?.click()}
-                            className="p-8 rounded-[40px] bg-white border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-p-400 transition-colors group"
-                        >
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                onChange={(e) => setPrescription(e.target.files[0]?.name)}
-                                className="hidden"
-                            />
-                            <div className="w-16 h-16 rounded-3xl bg-p-50 flex items-center justify-center group-hover:bg-p-100 transition-colors">
-                                <Upload size={32} className="text-p-600" />
-                            </div>
-                            <div className="text-center">
-                                <h3 className="text-lg font-black text-slate-900">{prescription || t('upload_prescription')}</h3>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Tap to select from files</p>
-                            </div>
-                        </div>
-
-                        {/* Stores List */}
+                        <Zap size={24} fill="white" />
                         <div>
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-6 px-2">{t('nearby_medical_stores')}</h3>
-                            <div className="space-y-4">
-                                {(allMedicalStores || []).map(store => (
-                                    <motion.div
-                                        key={store.id}
-                                        whileTap={{ scale: 0.98 }}
-                                        onClick={() => { setSelectedStore(store); setView('medicines'); }}
-                                        className="bg-white p-4 rounded-[32px] border border-slate-100 shadow-sm flex gap-4 items-center"
-                                    >
-                                        <img src={store.image} alt={store.name} className="w-20 h-20 rounded-2xl object-cover" />
-                                        <div className="flex-1">
-                                            <h4 className="font-black text-slate-900">{store.name}</h4>
-                                            <p className="text-[11px] font-bold text-slate-400 mb-2">{store.address}</p>
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-[10px] font-black text-emerald-600 flex items-center gap-1">
-                                                    <Clock size={12} /> {store.deliveryTime}
-                                                </span>
-                                                <span className="text-[10px] font-bold text-slate-300">• {store.distance}</span>
-                                            </div>
-                                        </div>
-                                        <div className="p-3">
-                                            <ChevronRight size={20} className="text-slate-300" />
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </div>
+                            <p style={{ fontWeight: 'bold', fontSize: '14px' }}>{t('smart_select')}</p>
+                            <p style={{ fontSize: '10px', opacity: 0.8 }}>{t('choose_best_price_automatically')}</p>
                         </div>
+                    </div>
+
+                    <div
+                        onClick={handleAIScan}
+                        style={{
+                            background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
+                            borderRadius: '20px',
+                            padding: '16px',
+                            color: '#fff',
+                            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.2)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
+                        }}
+                    >
+                        <Bot size={24} color="#3b82f6" />
+                        <div>
+                            <p style={{ fontWeight: 'bold', fontSize: '14px' }}>{t('ai_analyzer')}</p>
+                            <p style={{ fontSize: '10px', opacity: 0.8 }}>{t('scan_explain_prescription')}</p>
+                        </div>
+                    </div>
+
+                    <div
+                        onClick={handleUploadPrescription}
+                        style={{
+                            backgroundColor: '#fff',
+                            borderRadius: '20px',
+                            padding: '16px',
+                            color: '#1f2937',
+                            border: '2px dashed #e5e7eb',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            gridColumn: 'span 2'
+                        }}
+                    >
+                        <Plus size={24} color="#3b82f6" />
+                        <div>
+                            <p style={{ fontWeight: 'bold', fontSize: '14px', color: '#1f2937' }}>{t('compare_stores')}</p>
+                            <p style={{ fontSize: '10px', color: '#9ca3af' }}>{t('select_store_manually')}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {uploading && (
+                    <div style={{ textAlign: 'center', padding: '20px', backgroundColor: '#e0f2fe', borderRadius: '16px', marginBottom: '24px' }}>
+                        <Loader2 className="animate-spin" style={{ margin: '0 auto', marginBottom: '8px' }} color="#3b82f6" />
+                        <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#0369a1' }}>{t('searching_best_prices')}</p>
                     </div>
                 )}
 
-                {view === 'medicines' && (
-                    <div className="space-y-8">
-                        {/* Filters */}
-                        <div className="flex overflow-x-auto no-scrollbar gap-2 -mx-6 px-6">
-                            {filters.map(f => (
-                                <button
-                                    key={f.id}
-                                    onClick={() => setActiveFilter(f.id)}
-                                    className={`px-5 py-2.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${activeFilter === f.id ? 'bg-p-600 text-white shadow-lg shadow-p-200' : 'bg-white text-slate-500 border border-slate-100'}`}
-                                >
-                                    {f.name}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Medicines List */}
-                        <div className="grid gap-4">
-                            {filteredMedicines.map(med => (
-                                <div key={med.id} className="bg-white p-5 rounded-[32px] border border-slate-100 shadow-sm flex flex-col gap-4">
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h4 className="text-lg font-black text-slate-900">{med.name}</h4>
-                                                <span className="px-2 py-0.5 bg-slate-100 rounded-md text-[9px] font-black uppercase text-slate-500 tracking-widest">{med.category}</span>
-                                            </div>
-                                            <p className="text-xs font-bold text-slate-400 leading-snug">{med.desc}</p>
-                                        </div>
-                                        <span className="text-lg font-black text-p-600">₹{med.price}</span>
-                                    </div>
-                                    <button
-                                        onClick={() => addToCart(med)}
-                                        className="w-full py-3 rounded-2xl bg-slate-900 text-white text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-                                    >
-                                        <Plus size={16} /> Add to Order
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
+                {/* Nearby Stores Section */}
+                <div style={{ marginBottom: '32px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h3 style={{ fontSize: '18px', fontWeight: 'bold' }}>{selectionMode === 'manual' ? t('choose_a_store') : t('nearby_medical_stores')}</h3>
+                        <span style={{ color: '#3b82f6', fontSize: '14px', fontWeight: '600' }}>{selectionMode === 'manual' ? t('select_one') : t('see_all')}</span>
                     </div>
-                )}
 
-                {view === 'checkout' && (
-                    <div className="space-y-8">
-                        {/* Cart Summary */}
-                        <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-6">{t('review_order')}</h3>
-                            <div className="space-y-4 mb-8">
-                                {cart.map(item => (
-                                    <div key={item.id} className="flex justify-between items-center">
-                                        <div>
-                                            <p className="font-bold text-slate-900 text-sm">{item.name}</p>
-                                            <p className="text-[10px] text-slate-400 font-bold">{item.qty} x ₹{item.price}</p>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <span className="font-black text-slate-900 text-sm">₹{item.price * item.qty}</span>
-                                            <button onClick={() => removeFromCart(item.id)} className="text-red-400 p-1">
-                                                <X size={16} />
-                                            </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {filteredStores.map(store => (
+                            <div key={store.id} style={{
+                                backgroundColor: '#fff',
+                                borderRadius: '20px',
+                                overflow: 'hidden',
+                                boxShadow: 'var(--shadow-sm)',
+                                border: selectionMode === 'manual' ? '2px solid #3b82f6' : '1px solid #eee',
+                                display: 'flex',
+                                position: 'relative',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                                onClick={() => selectionMode === 'manual' && initiateCheckout(store)}
+                            >
+                                <img src={store.image} alt={store.name} style={{ width: '100px', height: '100px', objectFit: 'cover' }} />
+                                <div style={{ padding: '12px', flex: 1 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <h4 style={{ fontWeight: 'bold', fontSize: '16px' }}>{store.name}</h4>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#fef3c7', padding: '2px 6px', borderRadius: '6px' }}>
+                                            <Star size={12} fill="#f59e0b" color="#f59e0b" />
+                                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#92400e' }}>{store.rating}</span>
                                         </div>
                                     </div>
-                                ))}
+                                    <p style={{ color: '#666', fontSize: '12px', marginBottom: '8px' }}>{store.address}</p>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#10b981' }}>{store.deliveryTime}</span>
+                                            <span style={{ fontSize: '11px', color: '#9ca3af' }}>• {store.distance}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#dcfce7', padding: '4px 8px', borderRadius: '8px' }}>
+                                            <DollarSign size={12} color="#15803d" />
+                                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#15803d' }}>{t('price_match')} {store.priceScore}%</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {!store.isOpen && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        backgroundColor: 'rgba(255,255,255,0.7)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        zIndex: 5
+                                    }}>
+                                        <span style={{ backgroundColor: '#ef4444', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>{t('closed')}</span>
+                                    </div>
+                                )}
+                                {selectionMode === 'manual' && (
+                                    <div style={{ padding: '0 12px', display: 'flex', alignItems: 'center' }}>
+                                        <ChevronRight size={24} color="#3b82f6" />
+                                    </div>
+                                )}
                             </div>
-                            <div className="pt-6 border-t border-slate-50 space-y-3">
-                                <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                    <span>Subtotal</span>
-                                    <span>₹{totalAmount}</span>
-                                </div>
-                                <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                    <span>Delivery Fee</span>
-                                    <span>₹25</span>
-                                </div>
-                                <div className="flex justify-between text-lg font-black text-slate-900 pt-3 border-t border-slate-50">
-                                    <span>Grand Total</span>
-                                    <span className="text-p-600">₹{totalAmount + 25}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Payment Options */}
-                        <div className="grid gap-4">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] px-2">Payment Method</h3>
-                            <button
-                                onClick={() => handlePlaceOrder('qr')}
-                                className="p-6 rounded-[32px] bg-white border border-slate-100 shadow-sm flex items-center gap-4 text-left active:scale-[0.98] transition-all"
-                            >
-                                <div className="w-12 h-12 rounded-2xl bg-p-50 flex items-center justify-center text-p-600">
-                                    <Smartphone size={24} />
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-sm font-black text-slate-900">Pay via QR Code</p>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Google Pay, PhonePe, UPI</p>
-                                </div>
-                                <ChevronRight className="text-slate-300" size={20} />
-                            </button>
-                            <button
-                                onClick={() => handlePlaceOrder('cod')}
-                                className="p-6 rounded-[32px] bg-white border border-slate-100 shadow-sm flex items-center gap-4 text-left active:scale-[0.98] transition-all border-l-4 border-l-emerald-500"
-                            >
-                                <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-                                    <DollarSign size={24} />
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-sm font-black text-slate-900">Cash on Delivery</p>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pay when you receive</p>
-                                </div>
-                                <ChevronRight className="text-slate-300" size={20} />
-                            </button>
-                        </div>
+                        ))}
                     </div>
-                )}
+                </div>
+
+                {/* My Active Prescriptions */}
+                <div>
+                    <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>{t('digital_prescriptions')}</h3>
+                    {prescriptions.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {prescriptions.map(appt => (
+                                <div key={appt.prescription.id} style={{ backgroundColor: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #eee' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                        <span style={{ fontWeight: 'bold', fontSize: '14px' }}>{appt.prescription.medicine}</span>
+                                        <span style={{ fontSize: '12px', color: '#10b981' }}>{t('order_now')}</span>
+                                    </div>
+                                    <p style={{ fontSize: '12px', color: '#666' }}>{t('by_dr')} {appt.doctorName}</p>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p style={{ color: '#9ca3af', fontSize: '14px' }}>{t('no_digital_prescriptions_yet')}</p>
+                    )}
+                </div>
             </div>
 
-            {/* QR Payment Modal */}
             <AnimatePresence>
-                {showQR && (
-                    <div className="fixed inset-0 z-[5000] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-md">
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-white rounded-[40px] p-8 w-full max-w-sm text-center"
-                        >
-                            <div className="w-20 h-20 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                                <Smartphone size={40} className="text-emerald-600" />
-                            </div>
-                            <h3 className="text-2xl font-black text-slate-900 mb-2">Scan to Pay</h3>
-                            <p className="text-slate-500 font-bold mb-8">Amount to pay: <span className="text-p-600">₹{totalAmount + 25}</span></p>
-
-                            {/* Mock QR Code */}
-                            <div className="relative w-48 h-48 bg-slate-100 rounded-3xl mx-auto mb-8 flex items-center justify-center border-2 border-dashed border-slate-200">
-                                <div className="grid grid-cols-4 gap-2 opacity-10">
-                                    {Array(16).fill(0).map((_, i) => <div key={i} className="w-8 h-8 bg-slate-900 rounded-sm" />)}
-                                </div>
-                                <div className="absolute font-black text-[10px] text-slate-400 uppercase tracking-widest text-center px-4">SCAN WITH ANY UPI APP</div>
-                            </div>
-
-                            <div className="flex flex-col gap-3">
-                                <button
-                                    onClick={completeOrder}
-                                    className="w-full py-4 rounded-2xl bg-p-600 text-white font-black shadow-xl shadow-p-200 active:scale-95 transition-all"
-                                >
-                                    I HAVE PAID
-                                </button>
-                                <button
-                                    onClick={() => setShowQR(false)}
-                                    className="w-full py-4 text-slate-400 font-bold text-sm"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
+                {showSuccess && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        style={{
+                            position: 'fixed',
+                            top: '20px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            backgroundColor: '#10b981',
+                            color: 'white',
+                            padding: '12px 24px',
+                            borderRadius: '12px',
+                            zIndex: 1000,
+                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        🚀 {t('order_placed_successfully')}
+                    </motion.div>
                 )}
             </AnimatePresence>
+
+            <AIAnalyzerModal
+                isOpen={showAIModal}
+                onClose={() => setShowAIModal(false)}
+                analysis={aiAnalysis}
+                loading={aiLoading}
+            />
         </div>
     );
 };
-
 
 const AIAnalyzerModal = ({ isOpen, onClose, analysis, loading }) => {
     const { t } = useTranslation();
