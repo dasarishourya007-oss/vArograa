@@ -21,12 +21,7 @@ export const AuthProvider = ({ children }) => {
         // Synchronous initial recovery for immediate session persistence
         return safeJsonParse('varogra_user', null);
     });
-    const [loading, setLoading] = useState(() => {
-        // If we have a cached user, we can assume authenticated until proven otherwise
-        // This prevents the blank screen flicker while waiting for Firebase
-        const cachedUser = localStorage.getItem('varogra_user');
-        return !cachedUser;
-    });
+    const [loading, setLoading] = useState(false);
 
     // Dynamic Data States
     const [allHospitals, setAllHospitals] = useState([]);
@@ -54,7 +49,14 @@ export const AuthProvider = ({ children }) => {
         let unsubAppointments = () => { };
         let unsubPrescriptions = () => { };
 
+        // Safety timeout: if Firebase auth never fires within 3s, unblock the UI
+        const loadingTimeout = setTimeout(() => {
+            if (isCancelled) return;
+            setLoading(false);
+        }, 3000);
+
         const unsubscribe = subscribeToAuthChanges(async (firebaseUser) => {
+            clearTimeout(loadingTimeout);
             if (isCancelled) return;
 
             unsubAppointments();
@@ -331,15 +333,23 @@ export const AuthProvider = ({ children }) => {
         }
 
         try {
-            const { loginUser, getUserProfile } = await import('../firebase/auth');
+            const { loginUser, getUserProfile, logoutUser } = await import('../firebase/auth');
             const userData = await loginUser(email, password);
 
             // Check status in Firestore profile
             const profile = await getUserProfile(userData.uid);
 
-            if (profile && profile.status === 'pending') {
+            if (profile && profile.status === 'PENDING_APPROVAL') {
                 await logoutUser(); // Immediately log them back out
-                return { success: false, message: 'Your account is pending approval by the Hospital Admin.' };
+                return { success: false, message: 'Your account is waiting for hospital approval.' };
+            }
+            if (profile && profile.status === 'REJECTED') {
+                await logoutUser();
+                return { success: false, message: 'Your request was rejected by the hospital.' };
+            }
+            if (!profile || profile.status !== 'APPROVED') {
+                await logoutUser();
+                return { success: false, message: 'Account not yet approved. Please contact your hospital administrator.' };
             }
 
             const fullUserData = { ...userData, ...profile, role: 'doctor' };
@@ -356,13 +366,34 @@ export const AuthProvider = ({ children }) => {
     const loginMedicalStore = async (code, pin) => {
         // Master Login Bypass
         if (code === '123' && pin === 'dsa') {
-            return { success: true, store: { name: 'Main Street Pharmacy', code: 'MSTR-1234', role: 'medical_store', id: 'demo-store-id', uid: 'demo-store-id' } };
+            return { success: true, store: { name: 'Main Street Pharmacy', code: 'MSTR-1234', role: 'medical_store', id: 'demo-store-id', uid: 'demo-store-id', status: 'APPROVED' } };
         }
 
+        // 1. Find the store in the already-listened allMedicalStores
         const store = allMedicalStores.find(s => s.code === code);
-        if (store) return { success: true, store: { ...store, role: 'medical_store' } };
+
+        if (store) {
+            // 2. CHECK APPROVAL STATUS
+            if (store.status === 'PENDING_APPROVAL') {
+                return { success: false, message: 'Medical store awaiting hospital approval' };
+            }
+            if (store.status === 'REJECTED') {
+                return { success: false, message: 'Medical store account has been rejected.' };
+            }
+
+            // 3. For medical stores using code/pin system (if applicable)
+            // If they have full firebase auth, we should use that instead, 
+            // but following the existing pattern:
+            const fullUserData = { ...store, role: 'medical_store' };
+            setUser(fullUserData);
+            localStorage.setItem('varogra_user', JSON.stringify(fullUserData));
+            localStorage.setItem('userRole', 'medical_store');
+
+            return { success: true, store: fullUserData, user: fullUserData };
+        }
+
         if (code.startsWith('MSTR')) {
-            return { success: true, store: { name: 'Demo Store', code, role: 'medical_store', id: 'demo-store' } };
+            return { success: true, store: { name: 'Demo Store', code, role: 'medical_store', id: 'demo-store', status: 'APPROVED' } };
         }
         return { success: false, message: 'Invalid Store Code' };
     };
@@ -376,10 +407,9 @@ export const AuthProvider = ({ children }) => {
             try {
                 const { listenToHospitals } = await import('../firebase/services');
                 unsubscribe = listenToHospitals((hospitals) => {
-                    if (hospitals && hospitals.length > 0) {
-                        setAllHospitals(hospitals);
-                        localStorage.setItem('varogra_hospitals', JSON.stringify(hospitals));
-                    }
+                    const finalHospitals = hospitals && hospitals.length > 0 ? hospitals : mockHospitals;
+                    setAllHospitals(finalHospitals);
+                    localStorage.setItem('varogra_hospitals', JSON.stringify(finalHospitals));
                 });
             } catch (error) {
                 console.error("Error setting up hospital listener:", error);
@@ -398,13 +428,33 @@ export const AuthProvider = ({ children }) => {
             try {
                 const { listenToDoctors } = await import('../firebase/services');
                 unsubscribe = listenToDoctors((doctors) => {
-                    if (doctors && doctors.length > 0) {
-                        setAllDoctors(doctors);
-                        localStorage.setItem('varogra_doctors', JSON.stringify(doctors));
-                    }
+                    setAllDoctors(doctors || []);
+                    localStorage.setItem('varogra_doctors', JSON.stringify(doctors || []));
                 });
             } catch (error) {
                 console.error("Error setting up doctor listener:", error);
+            }
+        };
+
+        setupListener();
+        return () => unsubscribe();
+    }, []);
+
+    // Use effect to listen to medical stores
+    useEffect(() => {
+        let unsubscribe = () => { };
+
+        const setupListener = async () => {
+            try {
+                const { listenToMedicalStores } = await import('../firebase/services');
+                unsubscribe = listenToMedicalStores((stores) => {
+                    if (stores && stores.length > 0) {
+                        setAllMedicalStores(stores);
+                        localStorage.setItem('varogra_medical_stores', JSON.stringify(stores));
+                    }
+                });
+            } catch (error) {
+                console.error("Error setting up medical store listener:", error);
             }
         };
 
@@ -556,7 +606,12 @@ export const AuthProvider = ({ children }) => {
             console.error("Firebase logout failed (possibly offline), but local session wiped:", error);
         });
     };
-    const completeLogin = (u) => { setUser(u); localStorage.setItem('varogra_user', JSON.stringify(u)); return true; };
+    const completeLogin = (u) => {
+        setUser(u);
+        localStorage.setItem('varogra_user', JSON.stringify(u));
+        if (u.role) localStorage.setItem('userRole', u.role);
+        return true;
+    };
     const approveDoctor = (did) => { return { success: true } };
     const checkDoctorStatus = (ph) => { const d = allDoctors.find(doc => doc.phone === ph); return d ? { found: true, status: d.status, code: d.code } : { found: false }; };
     const setupDoctorPassword = (ph, pw) => {

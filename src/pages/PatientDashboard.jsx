@@ -25,6 +25,7 @@ import { useAuth } from '../context/AuthContext';
 import ImageUpload from '../components/ImageUpload';
 import LocationPicker from '../components/LocationPicker';
 import HospitalCard from '../components/HospitalCard';
+import { AISOSButton, VitalsCard, AITriageHistory } from '../components/patient/vArograFeatures';
 
 
 // Carousel Component for Today's Reminders
@@ -183,11 +184,12 @@ const ReminderCarousel = ({ onNavigate }) => {
 };
 // TABS CONTENT
 const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => {
-    const { user, nearbyHospitals: authNearbyHospitals, loadingHospitals: authLoadingHospitals } = useAuth();
+    const { user, nearbyHospitals: authNearbyHospitals, loadingHospitals: authLoadingHospitals, allDoctors } = useAuth();
     const [hospitals, setHospitals] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [sortBy, setSortBy] = useState('distance'); // 'distance', 'cost', 'rating'
+    const [triageLogs, setTriageLogs] = useState([]);
     const { t } = useTranslation();
 
     // Re-sync with auth discovery state
@@ -286,6 +288,9 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
                     </div>
                 </div>
 
+                <VitalsCard patientId={user?.uid} />
+                <AITriageHistory logs={triageLogs} />
+
                 {searchTerm.length === 0 && (
                     <div className="mb-6">
                         <div className="flex justify-between items-end mb-4">
@@ -379,58 +384,63 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
                                     if (sortBy === 'rating') return b.rating - a.rating;
                                     return 0;
                                 })
-                                .map((hospital, index) => (
-                                    <motion.div
-                                        key={hospital.id}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        whileInView={{ opacity: 1, y: 0 }}
-                                        viewport={{ once: true, margin: "-50px" }}
-                                        transition={{ duration: 0.3, delay: index * 0.05 }}
-                                        className="mb-8"
-                                    >
-                                        {/* Hospital Section Header */}
-                                        <div className="flex items-center gap-3 mb-4 px-2">
-                                            <div className="w-10 h-10 rounded-xl bg-p-100 flex items-center justify-center text-p-600 shadow-sm">
-                                                <ShieldCheck size={20} strokeWidth={2.5} />
-                                            </div>
-                                            <div>
-                                                <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none uppercase">{hospital.name}</h3>
-                                                <span className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">{hospital.location} • {hospital.doctors?.length || 0} Specialisms</span>
-                                            </div>
-                                        </div>
+                                .map((hospital, index) => {
+                                    const hospitalLiveDoctors = (allDoctors || []).filter(d => d.hospitalId === hospital.id && d.status === 'APPROVED');
+                                    const displayDoctors = [...hospitalLiveDoctors, ...(hospital.doctors || [])];
 
-                                        <HospitalCard
-                                            hospital={hospital}
-                                            onClick={() => navigate(`/hospital/${hospital.id}`)}
-                                        />
-
-                                        {/* Doctors Grouped Under Hospital */}
-                                        {hospital.doctors && hospital.doctors.length > 0 && (
-                                            <div className="grid grid-cols-2 gap-3 mt-4">
-                                                {hospital.doctors.slice(0, 2).map((doctor) => (
-                                                    <div key={doctor.id} className="glass p-3 rounded-2xl border-slate-100 flex items-center gap-3 active:scale-95 transition-all cursor-pointer">
-                                                        <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden shrink-0">
-                                                            <img src={doctor.image || `https://ui-avatars.com/api/?name=${doctor.name}&background=random`} alt={doctor.name} className="w-full h-full object-cover" />
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <p className="text-[12px] font-black text-slate-900 truncate uppercase tracking-tight">Dr. {doctor.name.split(' ').pop()}</p>
-                                                            <p className="text-[10px] font-bold text-p-600 truncate uppercase">{doctor.specialty || doctor.specialization}</p>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {hospital.doctors.length > 2 && (
-                                                    <div
-                                                        onClick={() => navigate(`/hospital/${hospital.id}`)}
-                                                        className="glass p-3 rounded-2xl border-slate-100 flex items-center justify-center gap-2 bg-slate-50/50 cursor-pointer active:scale-95 transition-all"
-                                                    >
-                                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">+{hospital.doctors.length - 2} More</p>
-                                                        <ChevronRight size={14} className="text-slate-400" />
-                                                    </div>
-                                                )}
+                                    return (
+                                        <motion.div
+                                            key={hospital.id}
+                                            initial={{ opacity: 0, y: 20 }}
+                                            whileInView={{ opacity: 1, y: 0 }}
+                                            viewport={{ once: true, margin: "-50px" }}
+                                            transition={{ duration: 0.3, delay: index * 0.05 }}
+                                            className="mb-8"
+                                        >
+                                            {/* Hospital Section Header */}
+                                            <div className="flex items-center gap-3 mb-4 px-2">
+                                                <div className="w-10 h-10 rounded-xl bg-p-100 flex items-center justify-center text-p-600 shadow-sm">
+                                                    <ShieldCheck size={20} strokeWidth={2.5} />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none uppercase">{hospital.name}</h3>
+                                                    <span className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">{hospital.location || hospital.address} • {displayDoctors.length} Specialisms</span>
+                                                </div>
                                             </div>
-                                        )}
-                                    </motion.div>
-                                ))
+
+                                            <HospitalCard
+                                                hospital={hospital}
+                                                onClick={() => navigate(`/hospital/${hospital.id}`)}
+                                            />
+
+                                            {/* Doctors Grouped Under Hospital */}
+                                            {displayDoctors.length > 0 && (
+                                                <div className="grid grid-cols-2 gap-3 mt-4">
+                                                    {displayDoctors.slice(0, 2).map((doctor, dIdx) => (
+                                                        <div key={doctor.id || dIdx} className="glass p-3 rounded-2xl border-slate-100 flex items-center gap-3 active:scale-95 transition-all cursor-pointer">
+                                                            <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden shrink-0">
+                                                                <img src={doctor.image || `https://ui-avatars.com/api/?name=${doctor.name}&background=random`} alt={doctor.name} className="w-full h-full object-cover" />
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <p className="text-[12px] font-black text-slate-900 truncate uppercase tracking-tight">Dr. {doctor.name.split(' ').pop()}</p>
+                                                                <p className="text-[10px] font-bold text-p-600 truncate uppercase">{doctor.specialty || doctor.specialization}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    {displayDoctors.length > 2 && (
+                                                        <div
+                                                            onClick={() => navigate(`/hospital/${hospital.id}`)}
+                                                            className="glass p-3 rounded-2xl border-slate-100 flex items-center justify-center gap-2 bg-slate-50/50 cursor-pointer active:scale-95 transition-all"
+                                                        >
+                                                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">+{displayDoctors.length - 2} More</p>
+                                                            <ChevronRight size={14} className="text-slate-400" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </motion.div>
+                                    )
+                                })
                         ) : (
                             <div className="text-center py-20 px-8 card-premium glass border-dashed">
                                 <div className="bg-rose-50 w-24 h-24 rounded-[32px] flex items-center justify-center mx-auto mb-8 shadow-sm">
@@ -2251,6 +2261,8 @@ const PatientDashboard = () => {
                 confirmText={t('logout')}
                 cancelText={t('cancel')}
             />
+
+            <AISOSButton patientId={user?.uid} hospitalId={hospitals[0]?.id} />
         </div>
     );
 };

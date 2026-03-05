@@ -1,0 +1,127 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function getRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    // 1. Users Collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId) || getRole() == 'admin';
+    }
+
+    // 2. Patients Collection
+    match /patients/{patientId} {
+      allow read: if isSignedIn(); 
+      allow write: if isOwner(patientId) || getRole() == 'admin';
+    }
+
+    // 3. Doctors Collection
+    match /doctors/{doctorId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(doctorId) || getRole() == 'hospital_admin' || getRole() == 'admin';
+    }
+
+    // 4. Hospitals Collection
+    match /hospitals/{hospitalId} {
+      allow read: if isSignedIn();
+      allow write: if getRole() == 'hospital_admin' || getRole() == 'admin';
+    }
+
+    // 5. Pharmacies Collection
+    match /pharmacies/{pharmacyId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(pharmacyId) || getRole() == 'admin';
+    }
+
+    // 6. Appointments
+    match /appointments/{appointmentId} {
+      allow read: if isSignedIn() && (
+        isOwner(resource.data.patientId) || 
+        isOwner(resource.data.doctorId) || 
+        getRole() == 'hospital_admin'
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn(); // Add more granular checks if needed
+    }
+
+    // 7. Medical Records
+    match /medical_records/{recordId} {
+      allow read: if isSignedIn() && (
+        isOwner(resource.data.patientId) || 
+        getRole() == 'doctor'
+      );
+      allow create: if isSignedIn() && getRole() == 'doctor';
+      allow update: if isSignedIn() && getRole() == 'doctor' && isOwner(resource.data.doctorId);
+    }
+
+    // 8. Vitals
+    match /vitals/{vitalId} {
+      allow read: if isSignedIn() && (
+        isOwner(resource.data.patientId) || 
+        getRole() == 'doctor'
+      );
+      allow create: if isSignedIn() && isOwner(request.resource.data.patientId);
+    }
+
+    // 9. SOS Requests
+    match /sos_requests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && getRole() == 'patient';
+      allow update: if isSignedIn() && (getRole() == 'doctor' || getRole() == 'hospital_admin');
+    }
+
+    // 10. Medicine Orders
+    match /medicine_orders/{orderId} {
+      allow read: if isSignedIn() && (
+        isOwner(resource.data.patientId) || 
+        isOwner(resource.data.pharmacyId)
+      );
+      allow create: if isSignedIn() && getRole() == 'patient';
+      allow update: if isSignedIn() && isOwner(resource.data.pharmacyId);
+    }
+
+    // 11. Chat System
+    match /chat_sessions/{sessionId} {
+      allow read: if isSignedIn() && (
+        isOwner(resource.data.patientId) || 
+        isOwner(resource.data.doctorId)
+      );
+      allow create: if isSignedIn();
+      
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && (
+          isOwner(get(/databases/$(database)/documents/chat_sessions/$(sessionId)).data.patientId) || 
+          isOwner(get(/databases/$(database)/documents/chat_sessions/$(sessionId)).data.doctorId)
+        );
+        allow create: if isSignedIn();
+      }
+    }
+
+    // 12. AI Triage Logs
+    match /ai_triage_logs/{logId} {
+      allow read: if isSignedIn() && (
+        isOwner(resource.data.patientId) || 
+        getRole() == 'doctor'
+      );
+      allow create: if isSignedIn() && getRole() == 'patient';
+    }
+
+    // 13. Notifications
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && isOwner(resource.data.userId);
+      allow write: if isSignedIn(); // System can write
+    }
+  }
+}

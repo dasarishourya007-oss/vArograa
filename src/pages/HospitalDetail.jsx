@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, MapPin, Star, Phone, Clock,
@@ -11,7 +11,34 @@ import { useAuth } from '../context/AuthContext';
 const HospitalDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { allHospitals } = useAuth();
+    const [liveDoctors, setLiveDoctors] = useState([]);
+
+    useEffect(() => {
+        let isCancelled = false;
+        const fetchDoctors = async () => {
+            try {
+                const { collection, query, where, getDocs } = await import('firebase/firestore');
+                const { db } = await import('../firebase/config');
+                if (!db) return;
+
+                const q = query(collection(db, 'hospitals', id, 'doctors'), where('status', '==', 'APPROVED'));
+                const snapshot = await getDocs(q);
+
+                if (!isCancelled) {
+                    const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    // Use subcollection docs if found, else fall back to the context cache
+                    setLiveDoctors(docs.length > 0 ? docs : (allDoctors || []).filter(d => d.hospitalId === id && d.status === 'APPROVED'));
+                }
+            } catch (err) {
+                console.error("Subcollection fetch failed:", err);
+                if (!isCancelled) {
+                    setLiveDoctors((allDoctors || []).filter(d => d.hospitalId === id && d.status === 'APPROVED'));
+                }
+            }
+        };
+        fetchDoctors();
+        return () => { isCancelled = true; };
+    }, [id, allDoctors]);
 
     // Priority: 1. Live data from Context/Firestore, 2. Mock fallback
     const hospital = allHospitals.find(h => h.id === id) || mockHospitals.find(h => h.id === id);
@@ -144,25 +171,25 @@ const HospitalDetail = () => {
                     </div>
 
                     <div className="flex flex-col gap-4">
-                        {hospital.doctors?.map(doctor => (
+                        {[...liveDoctors, ...(hospital.doctors || [])].map((doctor, idx) => (
                             <div
-                                key={doctor.id}
+                                key={doctor.id || idx}
                                 onClick={(e) => { e.stopPropagation(); navigate(`/doctor/${doctor.id}`); }}
                                 className="flex items-center justify-between p-4 bg-white rounded-[24px] border border-border/30 shadow-md active:scale-95 transition-all cursor-pointer group"
                             >
                                 <div className="flex items-center gap-4">
                                     <div className="relative">
                                         <img src={doctor.image} alt={doctor.name} className="w-14 h-14 rounded-2xl object-cover shadow-sm" />
-                                        <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${doctor.status === 'Available' ? 'bg-success' : doctor.status === 'In Consultation' ? 'bg-orange-500' : 'bg-slate-400'}`} />
+                                        <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${doctor.status === 'Available' || doctor.status === 'APPROVED' ? 'bg-success' : doctor.status === 'In Consultation' ? 'bg-orange-500' : 'bg-slate-400'}`} />
                                     </div>
                                     <div className="flex flex-col">
                                         <h4 className="text-[15px] font-extrabold text-main tracking-tight leading-tight group-hover:text-p-600 transition-colors uppercase">{doctor.name}</h4>
-                                        <p className="text-[11px] font-bold text-muted uppercase tracking-wider">{doctor.specialty}</p>
+                                        <p className="text-[11px] font-bold text-muted uppercase tracking-wider">{doctor.specialty || doctor.specialization}</p>
                                     </div>
                                 </div>
                                 <div className="flex flex-col items-end gap-1.5">
-                                    <div className={`px-2 py-0.5 rounded-lg text-[9px] font-black tracking-widest ${doctor.status === 'Available' ? 'bg-emerald-50 text-emerald-600' : doctor.status === 'In Consultation' ? 'bg-orange-50 text-orange-600' : 'bg-slate-50 text-slate-500'}`}>
-                                        {doctor.status?.toUpperCase() || 'ABSENT'}
+                                    <div className={`px-2 py-0.5 rounded-lg text-[9px] font-black tracking-widest ${(doctor.status === 'Available' || doctor.status === 'APPROVED') ? 'bg-emerald-50 text-emerald-600' : doctor.status === 'In Consultation' ? 'bg-orange-50 text-orange-600' : 'bg-slate-50 text-slate-500'}`}>
+                                        {(doctor.status === 'APPROVED' ? 'AVAILABLE' : (doctor.status?.toUpperCase() || 'ABSENT'))}
                                     </div>
                                     <ChevronRight size={18} className="text-slate-300 group-hover:text-p-500 transition-colors" />
                                 </div>

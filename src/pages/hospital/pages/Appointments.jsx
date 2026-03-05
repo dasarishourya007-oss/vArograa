@@ -151,8 +151,8 @@ const Appointments = () => {
     useEffect(() => {
         // Fetch Doctors for assignment
         const fetchDoctors = async () => {
-            if (!db) return;
-            const q = query(collection(db, "doctors"), where("hospitalId", "==", hospitalId));
+            if (!db || !hospitalId) return;
+            const q = query(collection(db, "hospitals", hospitalId, "doctors"), where("status", "==", "APPROVED"));
             const snap = await getDocs(q);
             setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         };

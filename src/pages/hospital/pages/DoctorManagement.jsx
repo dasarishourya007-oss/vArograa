@@ -1,33 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import {
-    UserPlus,
     Search,
     Trash2,
     User,
     Mail,
     Stethoscope,
     ShieldCheck,
-    MoreHorizontal
+    ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { collection, query, where, onSnapshot, addDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../../firebase/config';
+import { useAuth } from '../../../context/AuthContext';
 
 const DoctorManagement = () => {
+    const { user } = useAuth();
     const [doctors, setDoctors] = useState([]);
-    const [isAdding, setIsAdding] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [newDoc, setNewDoc] = useState({
-        name: '',
-        email: '',
-        specialization: ''
-    });
 
-    const hospitalId = auth?.currentUser?.uid || 'demo-hospital-id';
+    const hospitalId = user?.uid || user?.id || 'demo-hospital-id';
 
     useEffect(() => {
-        if (!db) return;
-        const q = query(collection(db, "doctors"), where("hospitalId", "==", hospitalId));
+        if (!db || !hospitalId) return;
+        const q = query(collection(db, "hospitals", hospitalId, "doctors"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             setDoctors(docs);
@@ -35,46 +30,48 @@ const DoctorManagement = () => {
         return unsubscribe;
     }, [hospitalId]);
 
-    const handleAddDoctor = async (e) => {
-        e.preventDefault();
-        try {
-            await addDoc(collection(db, "doctors"), {
-                ...newDoc,
-                hospitalId,
-                role: 'doctor',
-                status: 'approved', // Direct adds by admin are pre-approved
-                createdAt: new Date().toISOString()
-            });
-            setNewDoc({ name: '', email: '', specialization: '' });
-            setIsAdding(false);
-            alert("Doctor added successfully to your network.");
-        } catch (error) {
-            console.error("Error adding doctor:", error);
-            alert("Failed to add doctor.");
-        }
-    };
-
     const handleDelete = async (id) => {
         if (window.confirm("Are you sure you want to remove this doctor?")) {
-            await deleteDoc(doc(db, "doctors", id));
+            await deleteDoc(doc(db, "hospitals", hospitalId, "doctors", id));
         }
     };
 
     const handleApprove = async (id) => {
         try {
-            await updateDoc(doc(db, "doctors", id), {
-                status: 'approved'
+            await updateDoc(doc(db, "hospitals", hospitalId, "doctors", id), {
+                status: 'APPROVED'
             });
+            await updateDoc(doc(db, "users", id), {
+                status: 'APPROVED'
+            });
+            alert("Doctor approved successfully.");
         } catch (error) {
             console.error("Error approving doctor:", error);
             alert("Failed to approve doctor.");
         }
     };
 
-    const pendingDoctors = doctors.filter(d => d.status === 'pending');
+    const handleReject = async (id) => {
+        if (window.confirm("Are you sure you want to reject this doctor?")) {
+            try {
+                await updateDoc(doc(db, "hospitals", hospitalId, "doctors", id), {
+                    status: 'REJECTED'
+                });
+                await updateDoc(doc(db, "users", id), {
+                    status: 'REJECTED'
+                });
+                alert("Doctor rejected.");
+            } catch (error) {
+                console.error("Error rejecting doctor:", error);
+                alert("Failed to reject doctor.");
+            }
+        }
+    };
 
-    // Default to approved if status is missing for backward compatibility
-    const activeDoctors = doctors.filter(d => d.status !== 'pending' && (
+    const pendingDoctors = doctors.filter(d => d.status === 'PENDING_APPROVAL');
+    const rejectedDoctors = doctors.filter(d => d.status === 'REJECTED');
+
+    const activeDoctors = doctors.filter(d => d.status === 'APPROVED' && (
         d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (d.specialization && d.specialization.toLowerCase().includes(searchTerm.toLowerCase()))
     ));
@@ -84,17 +81,15 @@ const DoctorManagement = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '3.5rem' }}>
                 <div>
                     <h2 style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1.5px', marginBottom: '0.5rem' }}>Medical Staff Directory</h2>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Manage your hospital's specialized medical personnel.</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Manage your hospital's specialized medical personnel.</p>
+                        {pendingDoctors.length > 0 && (
+                            <div className="pill" style={{ background: 'var(--critical)', color: 'white', border: 'none', fontWeight: '800' }}>
+                                {pendingDoctors.length} PENDING ACTION
+                            </div>
+                        )}
+                    </div>
                 </div>
-                <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setIsAdding(true)}
-                    className="btn-premium"
-                    style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px' }}
-                >
-                    <UserPlus size={20} /> Add Specialist
-                </motion.button>
             </div>
 
             {/* Pending Approvals Section */}
@@ -126,8 +121,46 @@ const DoctorManagement = () => {
                                     <div style={{ color: '#b45309', fontSize: '0.9rem', marginBottom: '1.5rem' }}>{docItem.email}</div>
 
                                     <div style={{ display: 'flex', gap: '10px' }}>
-                                        <button onClick={() => handleDelete(docItem.id)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: '1px solid #f87171', color: '#ef4444', fontWeight: 'bold', background: 'white' }}>Decline</button>
+                                        <button onClick={() => handleReject(docItem.id)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: '1px solid #f87171', color: '#ef4444', fontWeight: 'bold', background: 'white' }}>Reject</button>
                                         <button onClick={() => handleApprove(docItem.id)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: '#f59e0b', color: 'white', fontWeight: 'bold' }}>Approve</button>
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
+                    </div>
+                </div>
+            )}
+
+            {/* Rejected Doctors Section */}
+            {rejectedDoctors.length > 0 && (
+                <div style={{ marginBottom: '3rem' }}>
+                    <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '1.5rem', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <ShieldCheck size={24} /> Rejected Requests ({rejectedDoctors.length})
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                        <AnimatePresence>
+                            {rejectedDoctors.map((docItem, idx) => (
+                                <motion.div
+                                    key={docItem.id}
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.9 }}
+                                    className="card"
+                                    style={{
+                                        padding: '2rem',
+                                        border: '2px dashed #fca5a5',
+                                        background: '#fef2f2'
+                                    }}
+                                >
+                                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '4px', color: '#7f1d1d' }}>{docItem.name}</h3>
+                                    <div style={{ color: '#b91c1c', fontWeight: '700', fontSize: '0.85rem', marginBottom: '1rem', textTransform: 'uppercase' }}>
+                                        {docItem.specialty || docItem.specialization || 'General'}
+                                    </div>
+                                    <div style={{ color: '#991b1b', fontSize: '0.9rem', marginBottom: '4px' }}>Phone: {docItem.phone}</div>
+                                    <div style={{ color: '#991b1b', fontSize: '0.9rem', marginBottom: '1.5rem' }}>{docItem.email}</div>
+
+                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                        <button onClick={() => handleApprove(docItem.id)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: '#10b981', color: 'white', fontWeight: 'bold' }}>Re-Approve</button>
                                     </div>
                                 </motion.div>
                             ))}
@@ -208,71 +241,6 @@ const DoctorManagement = () => {
                     ))}
                 </AnimatePresence>
             </div>
-
-            {/* Modal for Adding Doctor */}
-            <AnimatePresence>
-                {isAdding && (
-                    <div style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        background: 'rgba(0,0,0,0.5)',
-                        backdropFilter: 'blur(10px)',
-                        zIndex: 1000,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                    }}>
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="card"
-                            style={{ width: '500px', padding: '3rem', position: 'relative' }}
-                        >
-                            <h3 style={{ fontSize: '1.8rem', fontWeight: '900', marginBottom: '2rem' }}>Add New Specialist</h3>
-                            <form onSubmit={handleAddDoctor}>
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '700', fontSize: '0.9rem' }}>Full Name</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={newDoc.name}
-                                        onChange={(e) => setNewDoc({ ...newDoc, name: e.target.value })}
-                                        style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-glass)', background: 'var(--bg-main)', color: 'var(--text-primary)' }}
-                                    />
-                                </div>
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '700', fontSize: '0.9rem' }}>Email Address</label>
-                                    <input
-                                        type="email"
-                                        required
-                                        value={newDoc.email}
-                                        onChange={(e) => setNewDoc({ ...newDoc, email: e.target.value })}
-                                        style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-glass)', background: 'var(--bg-main)', color: 'var(--text-primary)' }}
-                                    />
-                                </div>
-                                <div style={{ marginBottom: '2.5rem' }}>
-                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '700', fontSize: '0.9rem' }}>Specialization</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={newDoc.specialization}
-                                        onChange={(e) => setNewDoc({ ...newDoc, specialization: e.target.value })}
-                                        style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-glass)', background: 'var(--bg-main)', color: 'var(--text-primary)' }}
-                                    />
-                                </div>
-                                <div style={{ display: 'flex', gap: '1rem' }}>
-                                    <button type="button" onClick={() => setIsAdding(false)} className="btn-ghost" style={{ flex: 1 }}>Cancel</button>
-                                    <button type="submit" className="btn-premium" style={{ flex: 1 }}>Register Doctor</button>
-                                </div>
-                            </form>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
         </div>
     );
 };

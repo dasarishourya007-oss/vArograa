@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
     ArrowLeft, Stethoscope, Home, Video,
@@ -27,11 +27,44 @@ const BookAppointment = () => {
         mockHospitals.find(h => h.id === id);
 
     // Find doctors: try Firebase first, then mock hospital's embedded doctors
-    const firebaseDoctors = (allDoctors || []).filter(d => d.hospitalId === id);
-    const mockDoctors = mockHospitals.find(h => h.id === id)?.doctors || [];
+    const [firebaseDoctors, setFirebaseDoctors] = useState([]);
+
+    useEffect(() => {
+        let isCancelled = false;
+        const fetchDoctors = async () => {
+            try {
+                const { collection, query, where, getDocs } = await import('firebase/firestore');
+                const { db } = await import('../firebase/config');
+                if (!db) return;
+
+                const q = query(collection(db, 'hospitals', id, 'doctors'), where('status', '==', 'APPROVED'));
+                const snapshot = await getDocs(q);
+
+                if (!isCancelled) {
+                    const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setFirebaseDoctors(docs.length > 0 ? docs : (allDoctors || []).filter(d => d.hospitalId === id && d.status === 'APPROVED'));
+                }
+            } catch (err) {
+                console.error("Subcollection fetch failed:", err);
+                if (!isCancelled) {
+                    setFirebaseDoctors((allDoctors || []).filter(d => d.hospitalId === id && d.status === 'APPROVED'));
+                }
+            }
+        };
+        fetchDoctors();
+        return () => { isCancelled = true; };
+    }, [id, allDoctors]);
+
+    const mockDoctors = (mockHospitals.find(h => h.id === id)?.doctors || []);
     const doctorsList = firebaseDoctors.length > 0 ? firebaseDoctors : mockDoctors;
 
     const [selectedDoctor, setSelectedDoctor] = useState(initialDoctorId || doctorsList[0]?.id || null);
+
+    useEffect(() => {
+        if (!selectedDoctor && doctorsList.length > 0) {
+            setSelectedDoctor(initialDoctorId || doctorsList[0].id);
+        }
+    }, [doctorsList, selectedDoctor, initialDoctorId]);
     const [visitType, setVisitType] = useState(initialVisitType || 'hospital');
     const [selectedSymptoms, setSelectedSymptoms] = useState([]);
     const [selectedTime, setSelectedTime] = useState(null);

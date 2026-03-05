@@ -34,7 +34,12 @@ const MedicineSearch = () => {
     useEffect(() => {
         const fetchPharmacies = async () => {
             try {
-                const q = query(collection(db, "users"), where("role", "==", "medical_store"));
+                // If we're navigated from a specific hospital, we might want to filter by that
+                // For now, let's ensure we only show APPROVED stores globally or by hospitalId
+                const q = query(
+                    collection(db, "medical_stores"),
+                    where("status", "==", "APPROVED")
+                );
                 const snap = await getDocs(q);
                 const p = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setPharmacies(p);

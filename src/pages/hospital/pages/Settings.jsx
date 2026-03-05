@@ -33,11 +33,11 @@ const SettingsOption = ({ icon, title, desc, children, isOpen, onToggle, danger,
             }}
         >
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                <div style={{ 
-                    padding: '12px', 
-                    borderRadius: 'var(--radius-lg)', 
-                    background: danger ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-main)', 
-                    color: danger ? 'var(--critical)' : 'var(--brand-primary)' 
+                <div style={{
+                    padding: '12px',
+                    borderRadius: 'var(--radius-lg)',
+                    background: danger ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-main)',
+                    color: danger ? 'var(--critical)' : 'var(--brand-primary)'
                 }}>
                     {icon}
                 </div>
@@ -48,22 +48,22 @@ const SettingsOption = ({ icon, title, desc, children, isOpen, onToggle, danger,
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 {isSaved && !isOpen && (
-                    <motion.span 
-                        initial={{ opacity: 0 }} 
-                        animate={{ opacity: 1 }} 
+                    <motion.span
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
                         style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: '800', textTransform: 'uppercase' }}
                     >
                         Changes Saved
                     </motion.span>
                 )}
-                <ChevronRight 
-                    size={20} 
-                    color={danger ? 'var(--critical)' : 'var(--text-muted)'} 
-                    style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: '0.3s' }} 
+                <ChevronRight
+                    size={20}
+                    color={danger ? 'var(--critical)' : 'var(--text-muted)'}
+                    style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: '0.3s' }}
                 />
             </div>
         </motion.div>
-        
+
         <AnimatePresence>
             {isOpen && (
                 <motion.div
@@ -72,11 +72,11 @@ const SettingsOption = ({ icon, title, desc, children, isOpen, onToggle, danger,
                     exit={{ height: 0, opacity: 0 }}
                     style={{ overflow: 'hidden' }}
                 >
-                    <div style={{ 
-                        padding: '2rem', 
-                        background: 'var(--bg-main)', 
-                        border: '1px solid var(--border-glass)', 
-                        borderTop: 'none', 
+                    <div style={{
+                        padding: '2rem',
+                        background: 'var(--bg-main)',
+                        border: '1px solid var(--border-glass)',
+                        borderTop: 'none',
                         borderRadius: '0 0 var(--radius-lg) var(--radius-lg)',
                         marginBottom: '1rem'
                     }}>
@@ -140,12 +140,12 @@ const Settings = () => {
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <h3 style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '1px', marginBottom: '1rem', textTransform: 'uppercase' }}>Account Preferences</h3>
-                
+
                 {/* Profile Section */}
-                <SettingsOption 
-                    icon={<User size={22} />} 
-                    title="Profile Information" 
-                    desc="Update your name, avatar, and contact details." 
+                <SettingsOption
+                    icon={<User size={22} />}
+                    title="Profile Information"
+                    desc="Update your name, avatar, and contact details."
                     isOpen={openSection === 'profile'}
                     onToggle={() => handleToggle('profile')}
                     isSaved={savedStatus.profile}
@@ -154,19 +154,19 @@ const Settings = () => {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div>
                                 <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px', display: 'block' }}>Display Name</label>
-                                <input 
-                                    type="text" 
-                                    value={profile.name} 
-                                    onChange={(e) => setProfile({...profile, name: e.target.value})}
+                                <input
+                                    type="text"
+                                    value={profile.name}
+                                    onChange={(e) => setProfile({ ...profile, name: e.target.value })}
                                     style={{ width: '100%', padding: '12px', background: 'var(--bg-surface)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-lg)', color: 'var(--text-primary)' }}
                                 />
                             </div>
                             <div>
                                 <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px', display: 'block' }}>Email Address</label>
-                                <input 
-                                    type="email" 
-                                    value={profile.email} 
-                                    onChange={(e) => setProfile({...profile, email: e.target.value})}
+                                <input
+                                    type="email"
+                                    value={profile.email}
+                                    onChange={(e) => setProfile({ ...profile, email: e.target.value })}
                                     style={{ width: '100%', padding: '12px', background: 'var(--bg-surface)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-lg)', color: 'var(--text-primary)' }}
                                 />
                             </div>
@@ -177,11 +177,47 @@ const Settings = () => {
                     </div>
                 </SettingsOption>
 
+                {/* Hospital Identity Section */}
+                <SettingsOption
+                    icon={<Monitor size={22} />}
+                    title="Hospital Identity"
+                    desc="Unique identifiers used for doctor and provider onboarding."
+                    isOpen={openSection === 'identity'}
+                    onToggle={() => handleToggle('identity')}
+                >
+                    <div style={{ padding: '0.5rem' }}>
+                        <div style={{ background: 'var(--bg-surface)', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-glass)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                <div>
+                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Hospital Base ID</p>
+                                    <code style={{ fontSize: '1.1rem', color: 'var(--brand-primary)', fontWeight: '700', letterSpacing: '0.5px' }}>
+                                        {user?.hospital_code || profile?.hospital_code || user?.uid || 'HSP-12345'}
+                                    </code>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        const idToCopy = user?.hospital_code || profile?.hospital_code || user?.uid || 'HSP-12345';
+                                        navigator.clipboard.writeText(idToCopy);
+                                        alert('Hospital ID copied to clipboard!');
+                                    }}
+                                    className="btn-premium"
+                                    style={{ padding: '10px 20px', borderRadius: '12px', fontSize: '0.9rem' }}
+                                >
+                                    Copy ID
+                                </button>
+                            </div>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                                Share this ID with doctors so they can link their profiles to your hospital during registration.
+                            </p>
+                        </div>
+                    </div>
+                </SettingsOption>
+
                 {/* Appearance Section */}
-                <SettingsOption 
-                    icon={theme === 'dark' ? <Moon size={22} /> : <Sun size={22} />} 
-                    title="Appearance" 
-                    desc="Choose between light, dark, and system themes." 
+                <SettingsOption
+                    icon={theme === 'dark' ? <Moon size={22} /> : <Sun size={22} />}
+                    title="Appearance"
+                    desc="Choose between light, dark, and system themes."
                     isOpen={openSection === 'appearance'}
                     onToggle={() => handleToggle('appearance')}
                     isSaved={savedStatus.appearance}
@@ -219,10 +255,10 @@ const Settings = () => {
                 </SettingsOption>
 
                 {/* Notifications Section */}
-                <SettingsOption 
-                    icon={<Bell size={22} />} 
-                    title="Notifications" 
-                    desc="Control which alerts you receive through the dashboard." 
+                <SettingsOption
+                    icon={<Bell size={22} />}
+                    title="Notifications"
+                    desc="Control which alerts you receive through the dashboard."
                     isOpen={openSection === 'notifs'}
                     onToggle={() => handleToggle('notifs')}
                     isSaved={savedStatus.notifs}
@@ -251,9 +287,9 @@ const Settings = () => {
                                         justifyContent: notifs[n.id] ? 'flex-end' : 'flex-start'
                                     }}
                                 >
-                                    <motion.div 
+                                    <motion.div
                                         layout
-                                        style={{ width: '20px', height: '20px', background: 'white', borderRadius: '50%', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }} 
+                                        style={{ width: '20px', height: '20px', background: 'white', borderRadius: '50%', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}
                                     />
                                 </motion.div>
                             </div>
@@ -267,10 +303,10 @@ const Settings = () => {
                 <div style={{ margin: '1.5rem 0' }} />
 
                 <h3 style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '1px', marginBottom: '1rem', textTransform: 'uppercase' }}>Security & Auth</h3>
-                <SettingsOption 
-                    icon={<LogOut size={22} />} 
-                    title="Sign Out System" 
-                    desc="Disconnect your session and clear local security tokens." 
+                <SettingsOption
+                    icon={<LogOut size={22} />}
+                    title="Sign Out System"
+                    desc="Disconnect your session and clear local security tokens."
                     onToggle={logout}
                     danger
                 />

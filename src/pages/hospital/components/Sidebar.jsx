@@ -19,14 +19,36 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../../../firebase/config';
+
 const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
     const { logout, role } = useAuth();
+
+    const [pendingCount, setPendingCount] = useState(0);
+
+    React.useEffect(() => {
+        if (!role || role !== 'hospital') return;
+        const hospitalId = localStorage.getItem('varogra_hospital_id') || 'jPz6UEHW2NVRtMo49belygDhbRo1';
+
+        const q = query(collection(db, "hospitals", hospitalId, "doctors"), where("status", "==", "PENDING_APPROVAL"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setPendingCount(snapshot.size);
+        });
+        return unsubscribe;
+    }, [role]);
 
     const navItems = [
         { title: 'Dashboard', icon: <LayoutDashboard size={22} />, path: '/hospital' },
         { title: 'Availability', icon: <Users size={22} />, path: '/hospital/availability' },
         { title: 'Appointments', icon: <CalendarClock size={22} />, path: '/hospital/appointments' },
-        { title: 'Doctors', icon: <Users size={22} />, path: '/hospital/doctors' },
+        {
+            title: 'Doctors',
+            icon: <Users size={22} />,
+            path: '/hospital/doctors',
+            badge: pendingCount > 0 ? pendingCount : null
+        },
+        { title: 'Pharmacy', icon: <Search size={22} />, path: '/hospital/pharmacy' },
         { title: 'Consultations', icon: <MonitorPlay size={22} />, path: '/hospital/live' },
         { title: 'Blood Bank', icon: <Droplets size={22} />, path: '/hospital/blood-bank' },
         { title: 'Analytics', icon: <FileBarChart size={22} />, path: '/hospital/reports' },
@@ -118,7 +140,21 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                                                 {item.title}
                                             </motion.span>
                                         )}
-                                        {isActive && !isCollapsed && (
+                                        {item.badge && !isCollapsed && (
+                                            <div style={{
+                                                marginLeft: 'auto',
+                                                background: 'var(--critical)',
+                                                color: 'white',
+                                                fontSize: '0.7rem',
+                                                fontWeight: '800',
+                                                padding: '2px 8px',
+                                                borderRadius: '10px',
+                                                boxShadow: '0 0 10px rgba(239, 68, 68, 0.4)'
+                                            }}>
+                                                {item.badge}
+                                            </div>
+                                        )}
+                                        {isActive && !isCollapsed && !item.badge && (
                                             <motion.div
                                                 layoutId="activeGlow"
                                                 style={{

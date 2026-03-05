@@ -1,5 +1,19 @@
 export const hospitals = [
     {
+        id: 'jPz6UEHW2NVRtMo49belygDhbRo1',
+        name: 'vArogra Demo Hospital',
+        address: 'Main St, Healthcare City',
+        distance: '0.5 km',
+        rating: 5.0,
+        isOpen: true,
+        hasEmergency: true,
+        image: 'https://images.unsplash.com/photo-1512678080530-7760d81faba6?auto=format&fit=crop&q=80&w=500',
+        costRange: '₹200 - ₹50,000',
+        facilities: ['Demo Facility', '24/7 Support', 'Smart Health Records'],
+        bloodAvailability: { 'O+': 'Available', 'B+': 'Available' },
+        doctors: []
+    },
+    {
         id: 'h1',
         name: 'City Care Hospital',
         address: 'Madhapur, Hyderabad',

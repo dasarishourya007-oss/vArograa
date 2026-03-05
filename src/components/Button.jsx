@@ -1,6 +1,8 @@
 import React from 'react';
 import '../index.css';
 
+import { Loader2 } from 'lucide-react';
+
 const Button = ({
   children,
   onClick,
@@ -8,6 +10,7 @@ const Button = ({
   size = 'md', // sm, md, lg, block
   className = '',
   disabled = false,
+  loading = false,
   type = 'button'
 }) => {
   const baseStyles = {
@@ -63,9 +66,10 @@ const Button = ({
       type={type}
       className={className}
       style={style}
-      onClick={onClick}
-      disabled={disabled}
+      onClick={!loading ? onClick : null}
+      disabled={disabled || loading}
     >
+      {loading && <Loader2 className="animate-spin" size={20} />}
       {children}
     </button>
   );

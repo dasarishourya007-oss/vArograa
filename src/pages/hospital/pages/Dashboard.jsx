@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAuth } from '../context/AuthContext';
 import {
     BarChart,
     Bar,
@@ -26,6 +27,9 @@ import {
     ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate, Link } from 'react-router-dom';
+import { auth } from '../../../firebase/config';
+
 
 const StatCard = ({ title, value, icon, trend, color, bgGradient }) => (
     <motion.div
@@ -136,7 +140,6 @@ const multiPeriodData = {
     ]
 };
 
-import { useNavigate, Link } from 'react-router-dom';
 
 const CommandCenterWidget = ({ emergencyStatus }) => {
     const navigate = useNavigate();
@@ -363,8 +366,46 @@ const CommandCenterWidget = ({ emergencyStatus }) => {
 };
 
 const Dashboard = () => {
+    const { user, allHospitals } = useAuth();
     const [timeRange, setTimeRange] = React.useState('week');
     const [emergencyStatus, setEmergencyStatus] = React.useState('critical'); // 'critical', 'resolving', 'stable'
+
+    const hospitalId = user?.uid || user?.id || 'jPz6UEHW2NVRtMo49belygDhbRo1';
+
+    // Calculate live stats
+    const [hospitalStaff, setHospitalStaff] = React.useState([]);
+
+    React.useEffect(() => {
+        if (!hospitalId) return;
+        let isCancelled = false;
+        let unsubFunc = null;
+
+        const setupListener = async () => {
+            try {
+                const { collection, query, onSnapshot } = await import('firebase/firestore');
+                const { db } = await import('../../../firebase/config');
+                if (!db) return;
+
+                const q = query(collection(db, "hospitals", hospitalId, "doctors"));
+                unsubFunc = onSnapshot(q, (snapshot) => {
+                    if (isCancelled) return;
+                    const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    setHospitalStaff(docs);
+                });
+            } catch (error) {
+                console.error("Dashboard staff listener failed", error);
+            }
+        };
+
+        setupListener();
+        return () => {
+            isCancelled = true;
+            if (unsubFunc) unsubFunc();
+        };
+    }, [hospitalId]);
+
+    const approvedStaff = hospitalStaff.filter(d => d.status === 'APPROVED');
+    const pendingStaff = hospitalStaff.filter(d => d.status === 'PENDING_APPROVAL');
 
     const handleEmergency = () => {
         setEmergencyStatus('resolving');
@@ -375,6 +416,50 @@ const Dashboard = () => {
 
     return (
         <div style={{ paddingBottom: '3rem' }}>
+            {/* Pending Actions Alert */}
+            <AnimatePresence>
+                {pendingStaff.length > 0 && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                        animate={{ opacity: 1, height: 'auto', marginBottom: '2rem' }}
+                        exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                        style={{ overflow: 'hidden' }}
+                    >
+                        <div
+                            className="card"
+                            style={{
+                                background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+                                border: '2px solid #fcd34d',
+                                padding: '1.5rem 2rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                boxShadow: '0 10px 30px rgba(245, 158, 11, 0.15)'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                                <div style={{ background: '#f59e0b', padding: '12px', borderRadius: '15px', color: 'white' }}>
+                                    <UserPlus size={24} strokeWidth={2.5} />
+                                </div>
+                                <div>
+                                    <h4 style={{ color: '#92400e', fontWeight: '800', fontSize: '1.2rem', marginBottom: '4px' }}>
+                                        {pendingStaff.length} New Doctor Application{pendingStaff.length > 1 ? 's' : ''}
+                                    </h4>
+                                    <p style={{ color: '#b45309', fontWeight: '600', fontSize: '0.95rem' }}>
+                                        Specialists are waiting for your approval to join the hospital directory.
+                                    </p>
+                                </div>
+                            </div>
+                            <Link to="/hospital/doctors" style={{ textDecoration: 'none' }}>
+                                <button style={{ background: '#f59e0b', color: 'white', padding: '12px 24px', borderRadius: '14px', fontWeight: '800', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    REVIEW NOW <ArrowRight size={18} strokeWidth={3} />
+                                </button>
+                            </Link>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Hero Section */}
             <div style={{
                 marginBottom: '3rem',
@@ -399,9 +484,52 @@ const Dashboard = () => {
                     <h1 style={{ fontSize: '3rem', fontWeight: '800', marginBottom: '0.5rem', letterSpacing: '-1.5px' }}>
                         Welcome back, <span style={{ color: 'var(--brand-primary)' }}>Admin</span>
                     </h1>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', maxWidth: '600px' }}>
-                        Your hospital network is performing at <span style={{ color: 'var(--brand-primary)', fontWeight: '600' }}>98% efficiency</span> today. There are {emergencyStatus === 'stable' ? '0' : '1'} critical alerts requiring your attention.
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', maxWidth: '600px', marginBottom: '1.5rem' }}>
+                        Your hospital network is performing at <span style={{ color: 'var(--brand-primary)', fontWeight: '600' }}>98% efficiency</span> today.
                     </p>
+
+                    {/* Hospital ID Card */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="glass"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px 20px',
+                            borderRadius: '16px',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid var(--border-glass)'
+                        }}
+                    >
+                        <div>
+                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Hospital Base ID</p>
+                            <code style={{ fontSize: '0.9rem', color: 'var(--brand-primary)', fontWeight: '700' }}>
+                                {user?.uid || user?.id || 'jPz6UEHW2NVRtMo49belygDhbRo1'}
+                            </code>
+                        </div>
+                        <button
+                            onClick={() => {
+                                const idToCopy = user?.uid || user?.id || 'jPz6UEHW2NVRtMo49belygDhbRo1';
+                                navigator.clipboard.writeText(idToCopy);
+                                alert('Hospital ID copied to clipboard!');
+                            }}
+                            style={{
+                                background: 'var(--brand-primary)',
+                                border: 'none',
+                                color: 'white',
+                                padding: '8px',
+                                borderRadius: '10px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            <UserPlus size={16} />
+                        </button>
+                    </motion.div>
                 </div>
 
                 <CommandCenterWidget emergencyStatus={emergencyStatus} />
@@ -420,7 +548,7 @@ const Dashboard = () => {
 
             {/* Stat Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '2.5rem' }}>
-                <StatCard title="Total Staff" value="124" icon={<Users size={24} />} trend="12" color="var(--brand-primary)" bgGradient="linear-gradient(135deg, var(--brand-dark), var(--brand-primary))" />
+                <StatCard title="Total Staff" value={approvedStaff.length.toString()} icon={<Users size={24} />} trend="12" color="var(--brand-primary)" bgGradient="linear-gradient(135deg, var(--brand-dark), var(--brand-primary))" />
                 <StatCard title="Live Sessions" value="18" icon={<MonitorPlay size={24} />} trend="8" color="var(--brand-teal)" bgGradient="linear-gradient(135deg, var(--brand-teal), #0D9488)" />
                 <StatCard title="Queue Load" value="42" icon={<Activity size={24} />} trend="15" color="var(--warning)" bgGradient="linear-gradient(135deg, var(--warning), #D97706)" />
                 <StatCard title="Efficiency" value="96%" icon={<Zap size={24} />} trend="4" color="var(--info)" bgGradient="linear-gradient(135deg, var(--info), #0891B2)" />

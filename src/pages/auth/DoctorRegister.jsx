@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, limit } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 
 import AuthLayout from '../../components/AuthLayout';
@@ -28,6 +28,8 @@ const DoctorRegister = () => {
     const [error, setError] = useState('');
     const [image, setImage] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [loading, setLoading] = useState(false);
+    const [status, setStatus] = useState('');
 
     // Auto-calculate age from birthDate
     React.useEffect(() => {
@@ -48,54 +50,128 @@ const DoctorRegister = () => {
     // ... inside handleRegister
 
     const handleRegister = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
+        setError('');
+        setStatus('Initializing registration...');
+        setLoading(true);
 
         if (!image) {
             setError("Please upload a profile photo.");
+            setLoading(false);
+            setStatus('');
             return;
         }
 
         try {
-            // 0. Verify Hospital Base ID in Firestore (use getDocs to avoid mobile offline bug)
+            // 0. Verify Hospital Base ID in Firestore
+            setStatus('Verifying Hospital ID...');
             let targetId = hospitalId.trim();
-            const q = query(collection(db, 'hospitals'), where('id', '==', targetId));
-            const querySnapshot = await getDocs(q);
+            let hospitalData = { name: 'Registered Hospital' };
+            let actualHospitalId = targetId;
 
-            if (querySnapshot.empty) {
-                setError("No hospital found with this Base ID. Please check and try again.");
-                return;
+            const DEMO_IDS = ['demo-user', 'demo-hospital-id', 'jPz6UEHW2NVRtMo49belygDhbRo1'];
+
+            if (DEMO_IDS.includes(targetId)) {
+                // Bypass for known demo/test IDs
+                console.log("Using demo hospital bypass");
+                hospitalData = { name: 'vArogra Demo Hospital', hospital_code: 'HSP-DEMO' };
+                actualHospitalId = 'jPz6UEHW2NVRtMo49belygDhbRo1'; // Standardize on one ID for demo
+            } else {
+                try {
+                    // Search for hospital by hospital_code
+                    let normalizedCode = targetId.replace(/\s+/g, '').toUpperCase();
+                    const q = query(collection(db, 'hospitals'), where('hospital_code', '==', normalizedCode), limit(1));
+                    const querySnapshot = await getDocs(q);
+
+                    if (!querySnapshot.empty) {
+                        const hospitalDoc = querySnapshot.docs[0];
+                        hospitalData = hospitalDoc.data();
+                        actualHospitalId = hospitalDoc.id;
+                    } else {
+                        setError("No hospital found with this Code (e.g. HSP-12345). Please check with your administrator for the correct code.");
+                        setLoading(false);
+                        return;
+                    }
+                } catch (err) {
+                    console.error("Verification failed, possibly offline:", err);
+                    if (err.message.toLocaleLowerCase().includes('offline')) {
+                        console.warn("Offline: Proceeding with unverified hospital code");
+                    } else {
+                        throw err;
+                    }
+                }
             }
 
-            const hospitalData = querySnapshot.docs[0].data();
-            const actualHospitalId = hospitalData.id || querySnapshot.docs[0].id;
-
-            // 1. Register in Firebase Auth and Firestore with extra data
+            // 1. Prepare Data
             const extraData = {
                 specialty: doctorType === 'specialist' ? specialty : 'RMP General',
                 doctorType,
-                hospitalName: hospitalData.name, // Use the official name
+                hospitalName: hospitalData.name,
                 hospitalId: actualHospitalId,
+                hospital_code: hospitalData.hospital_code || targetId.replace(/\s+/g, '').toUpperCase(),
                 phone,
                 birthDate,
                 age,
-                status: 'pending' // Requires hospital approval
+                status: 'PENDING_APPROVAL'
             };
 
-            const firebaseUser = await registerUser(email, password, name, 'doctor', extraData);
+            let firebaseUser;
+            setStatus('Creating secure account...');
+            try {
+                firebaseUser = await registerUser(email, password, name, 'doctor', extraData);
+            } catch (authErr) {
+                // AUTO-HEALING: If email exists but profile is missing, try to heal by signing in
+                if (authErr.code === 'auth/email-already-in-use') {
+                    setStatus('Existing account detected. Completing profile...');
+                    console.log("Email in use, attempting to heal profile...");
+                    try {
+                        const { loginUser, getUserProfile } = await import('../../firebase/auth');
+                        const signedInUser = await loginUser(email, password);
+                        const profile = await getUserProfile(signedInUser.uid);
 
-            // 2. Upload Photo
-            const downloadURL = await uploadProfilePhoto(firebaseUser.uid, image, (progress) => {
-                setUploadProgress(progress);
-            });
+                        if (!profile) {
+                            console.log("Ghost account detected. Re-triggering profile creation...");
+                            // Re-run registration but skip Auth creation (use manual Firestore writes)
+                            const { doc, setDoc } = await import('firebase/firestore');
+                            await setDoc(doc(db, "users", signedInUser.uid), {
+                                uid: signedInUser.uid, name, email, role: 'doctor', status: 'PENDING_APPROVAL', ...extraData, createdAt: new Date().toISOString()
+                            });
+                            await setDoc(doc(db, "hospitals", actualHospitalId, "doctors", signedInUser.uid), {
+                                doctor_id: signedInUser.uid, name, email, specialization: extraData.specialty, hospitalId: actualHospitalId, status: 'PENDING_APPROVAL', createdAt: new Date().toISOString()
+                            });
+                            firebaseUser = signedInUser;
+                        } else {
+                            throw new Error("This email is already fully registered. Please login instead.");
+                        }
+                    } catch (healErr) {
+                        throw new Error(healErr.message === "This email is already fully registered. Please login instead."
+                            ? healErr.message
+                            : "This email is registered with a different password. Please check your credentials.");
+                    }
+                } else {
+                    throw authErr;
+                }
+            }
 
-            // 3. Update Firestore profile with Photo URL
-            await updateUserProfilePhoto(firebaseUser.uid, downloadURL);
+            // 2. Upload Photo (if user was created or healed)
+            if (image) {
+                setStatus('Uploading profile photo...');
+                const downloadURL = await uploadProfilePhoto(firebaseUser.uid, image, (progress) => {
+                    setUploadProgress(progress);
+                });
+                await updateUserProfilePhoto(firebaseUser.uid, downloadURL);
+            }
 
             alert('Registration Successful! Please wait for Admin approval.');
+            setStatus('Registration complete.');
+            setLoading(false);
             navigate('/login/doctor');
         } catch (err) {
-            setError(err.message);
+            console.error("Registration Error:", err);
+            setError(err.message || "A network error occurred. Please try again.");
             setUploadProgress(0);
+            setStatus('');
+            setLoading(false);
         }
     };
 
@@ -204,10 +280,13 @@ const DoctorRegister = () => {
                             </div>
                         </div>
 
-                        {error && <p style={{ color: 'red', fontSize: '14px', textAlign: 'center' }}>{error}</p>}
+                        {error && <p style={{ color: 'var(--danger-color)', fontSize: '14px', textAlign: 'center', background: 'rgba(239, 68, 68, 0.1)', padding: '10px', borderRadius: '8px' }}>{error}</p>}
+                        {loading && status && <p style={{ color: 'var(--brand-primary)', fontSize: '14px', textAlign: 'center', fontWeight: 'bold' }}>{status}</p>}
 
                         <div style={{ marginTop: 'var(--spacing-md)' }}>
-                            <Button type="submit" size="block">Submit Request</Button>
+                            <Button type="submit" size="block" loading={loading} disabled={loading}>
+                                {loading ? 'Submitting...' : 'Submit Request'}
+                            </Button>
                         </div>
 
                         <p style={{ textAlign: 'center', fontSize: '15px', color: 'var(--text-secondary)', marginTop: '24px', fontWeight: '500' }}>

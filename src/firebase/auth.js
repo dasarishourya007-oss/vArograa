@@ -9,9 +9,10 @@ import {
     OAuthProvider,
     FacebookAuthProvider,
     setPersistence,
-    browserLocalPersistence
+    browserLocalPersistence,
+    deleteUser
 } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./config";
 import { logLoginEvent } from "./logging";
 
@@ -38,52 +39,98 @@ export const registerUser = async (email, password, name, role = 'patient', extr
             email,
             displayName: name,
             role,
-            ...extraData,
-            photoURL: null
+            ...extraData
         };
     }
+
+    // 1. Doctor Validation: Check Hospital Code
+    if (role === 'doctor') {
+        const hCode = extraData.hospitalCode;
+        if (!hCode) throw new Error("Hospital Code is required for doctor registration.");
+
+        const hospitalsRef = collection(db, "hospitals");
+        const q = query(hospitalsRef, where("hospitalCode", "==", hCode));
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+            throw new Error("Invalid Hospital Code. Please contact your hospital administrator.");
+        }
+
+        // Link to the first matching hospital
+        extraData.hospitalId = querySnapshot.docs[0].id;
+    }
+
+    let user = null;
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
+        user = userCredential.user;
 
         // Update display name
         await updateProfile(user, { displayName: name });
 
-        // Sanitize extraData to remove raw File objects (like images)
-        const { image, ...firestoreData } = extraData;
+        // Initial status based on role
+        const status = (role === 'doctor' || role === 'pharmacist') ? 'pending' : 'active';
 
-        // Save extra info in Firestore
+        // 2. Create entry in 'users' collection (Identity Table)
         await setDoc(doc(db, "users", user.uid), {
             uid: user.uid,
             name,
             email,
+            phone: extraData.phone || '',
             role,
-            ...firestoreData,
-            createdAt: new Date().toISOString()
+            status,
+            createdAt: serverTimestamp()
         });
 
-        // If hospital/doctor/store, create entry in specific collection too
-        if (role === 'doctor') {
-            await setDoc(doc(db, "doctors", user.uid), {
-                id: user.uid,
+        // 3. Create role-specific profiles
+        if (role === 'patient') {
+            await setDoc(doc(db, "patients", user.uid), {
+                patientId: user.uid,
                 name,
-                email,
-                ...firestoreData,
-                createdAt: new Date().toISOString()
+                age: extraData.age || 0,
+                gender: extraData.gender || '',
+                bloodGroup: extraData.bloodGroup || '',
+                phone: extraData.phone || '',
+                address: extraData.address || '',
+                emergencyContact: extraData.emergencyContact || { name: '', phone: '', relation: '' },
+                createdAt: serverTimestamp()
             });
-        } else if (role === 'medical_store') {
+        } else if (role === 'doctor') {
+            await setDoc(doc(db, "doctors", user.uid), {
+                doctorId: user.uid,
+                name,
+                specialization: extraData.specialization || extraData.specialty || '',
+                hospitalId: extraData.hospitalId,
+                licenseNumber: extraData.licenseNumber || '',
+                experience: extraData.experience || 0,
+                phone: extraData.phone || '',
+                email: email,
+                availability: extraData.availability || {},
+                status: 'pending',
+                createdAt: serverTimestamp()
+            });
+        } else if (role === 'pharmacist' || role === 'medical_store') {
+            await setDoc(doc(db, "pharmacies", user.uid), {
+                pharmacyId: user.uid,
+                name: extraData.pharmacyName || name,
+                licenseNumber: extraData.licenseNumber || '',
+                location: extraData.location || '',
+                phone: extraData.phone || '',
+                ownerId: user.uid,
+                createdAt: serverTimestamp(),
+                status: 'pending'
+            });
+            // Legacy alias for medical_stores if needed by existing components
             await setDoc(doc(db, "medical_stores", user.uid), {
                 id: user.uid,
-                name,
-                email,
-                isOpen: true,
-                ...firestoreData,
-                createdAt: new Date().toISOString()
+                name: extraData.pharmacyName || name,
+                status: 'pending'
             });
         }
 
         return user;
     } catch (error) {
+        if (user) await deleteUser(user);
         throw error;
     }
 };

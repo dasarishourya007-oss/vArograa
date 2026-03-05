@@ -29,6 +29,7 @@ const MedicalStoreLogin = ({ isEmbedded = false }) => {
                 setLoading(false);
                 if (res && res.success) {
                     const userObj = { ...res.store, role: 'medical_store' };
+                    localStorage.setItem('userRole', 'medical_store');
                     completeLogin(userObj);
                     navigate('/dashboard/pharmacy');
                 }
@@ -84,6 +85,7 @@ const MedicalStoreLogin = ({ isEmbedded = false }) => {
         setTimeout(() => {
             if (otp.join('') === '1234') {
                 const userObj = { ...storeData, role: 'medical_store' };
+                localStorage.setItem('userRole', 'medical_store');
                 completeLogin(userObj);
                 navigate('/dashboard/pharmacy');
             } else {

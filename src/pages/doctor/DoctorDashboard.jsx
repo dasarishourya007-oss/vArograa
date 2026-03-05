@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { subscribeToAppointments, updateAppointmentStatus } from '../../firebase/services';
+import { SOSAlertPanel, PatientTriageInsight } from '../../components/doctor/vArograDoctorFeatures';
 
 const SummaryCard = ({ title, value, icon: Icon, color, trend }) => (
     <motion.div
@@ -78,6 +79,8 @@ const DoctorDashboard = () => {
                 <p style={{ color: 'var(--text-muted)' }}>Here's your schedule and patient overview for today.</p>
             </div>
 
+            <SOSAlertPanel />
+
             {/* Summary Grid */}
             <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
                 <SummaryCard
@@ -126,6 +129,11 @@ const DoctorDashboard = () => {
                             <div style={{ flex: 1 }}>
                                 <h4 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '4px' }}>{pendingPatients[0].patientName}</h4>
                                 <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Status: {pendingPatients[0].status} • Type: {pendingPatients[0].visitType}</p>
+
+                                <PatientTriageInsight
+                                    patientId={pendingPatients[0].patientId}
+                                    triageData={pendingPatients[0].triageData}
+                                />
                             </div>
                             <button
                                 onClick={() => navigate('/doctor/prescription', { state: { appointment: pendingPatients[0] } })}

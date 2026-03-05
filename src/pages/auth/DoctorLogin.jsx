@@ -12,26 +12,37 @@ const DoctorLogin = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     const handleLogin = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
+        setError('');
+        setIsLoading(true);
 
-        // Master Login Shortcut
-        if (email === '123' && password === 'dsa') {
+        try {
+            // Master Login Shortcut
+            if (email === '123' && password === 'dsa') {
+                localStorage.setItem('userRole', 'doctor');
+                const result = await loginDoctor(email, password);
+                if (result.success) {
+                    completeLogin(result.doctor);
+                    navigate('/dashboard/doctor');
+                    return;
+                }
+            }
+
+            localStorage.setItem('userRole', 'doctor');
             const result = await loginDoctor(email, password);
             if (result.success) {
-                completeLogin(result.doctor);
+                completeLogin(result.user || result.doctor);
                 navigate('/dashboard/doctor');
-                return;
+            } else {
+                setError(result.message || 'Login failed');
+                setIsLoading(false);
             }
-        }
-
-        const result = await loginDoctor(email, password);
-        if (result.success) {
-            completeLogin(result.user || result.doctor);
-            navigate('/dashboard/doctor');
-        } else {
-            setError(result.message || 'Login failed');
+        } catch (err) {
+            setError(err.message || 'An error occurred during login');
+            setIsLoading(false);
         }
     };
 
@@ -62,7 +73,7 @@ const DoctorLogin = () => {
                         </div>
 
                         <div style={{ marginTop: 'var(--spacing-md)' }}>
-                            <Button type="submit" size="block">Login</Button>
+                            <Button type="submit" size="block" loading={isLoading} disabled={isLoading}>Login</Button>
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginTop: '16px' }}>

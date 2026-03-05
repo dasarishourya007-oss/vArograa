@@ -206,6 +206,15 @@ body {
     animation: fade-in 0.4s ease forwards;
 }
 
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
 /* Auth Layout Classes */
 .auth-wrapper {
     min-height: 100vh;

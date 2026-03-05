@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Mail, Lock, Loader2, Eye, EyeOff,
     Building2, MapPin, User, Phone, CheckCircle2,
-    AlertCircle, Navigation, Copy, ShieldCheck, ArrowRight
+    AlertCircle, Navigation, Copy, ShieldCheck, ArrowRight, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
@@ -115,23 +115,25 @@ const HospitalLogin = ({ isEmbedded = false }) => {
             if (email === '123' && password === 'dsa') {
                 localStorage.setItem('userRole', 'hospital');
                 completeLogin({
-                    uid: 'demo-hospital-id',
-                    id: 'demo-hospital-id',
+                    uid: 'jPz6UEHW2NVRtMo49belygDhbRo1',
+                    id: 'jPz6UEHW2NVRtMo49belygDhbRo1',
                     email: 'hospital@demo.com',
                     role: 'hospital',
-                    name: 'City General Hospital'
+                    name: 'vArogra Demo Hospital'
                 });
                 navigate('/hospital');
                 return;
             }
 
             if (auth) {
-                const cred = await signInWithEmailAndPassword(auth, email, password);
+                // Set role BEFORE login to ensure AuthContext picks it up in the listener
                 localStorage.setItem('userRole', 'hospital');
+                const cred = await signInWithEmailAndPassword(auth, email, password);
                 completeLogin({ uid: cred.user.uid, email: cred.user.email, role: 'hospital' });
             }
             navigate('/hospital');
         } catch (err) {
+            // Revert role on failure if necessary, though it might not be needed as redirect won't happen
             setErrorMsg(
                 err.code === 'auth/invalid-credential' ? 'Invalid email or password.' :
                     err.code === 'auth/user-not-found' ? 'No hospital account found with this email.' :
@@ -185,16 +187,22 @@ const HospitalLogin = ({ isEmbedded = false }) => {
         );
         const saveToFirestore = (async () => {
             if (db && pendingUid) {
+                const hospitalCode = "HSP-" + Math.floor(10000 + Math.random() * 90000);
+                // Save the code to local state so the success screen can show it
+                setGeneratedOtp(hospitalCode); // Reusing this state hook for convenience on the success screen
+
                 await setDoc(doc(db, 'hospitals', pendingUid), {
                     id: pendingUid, name: hospitalName, address, adminName,
                     phone, email: regEmail, licenseNo: licenseNo || '',
                     role: 'hospital', isVerified: false,
+                    hospital_code: hospitalCode,
                     rating: 0, doctors: [], facilities: [],
                     isOpen: true, hasEmergency: false, createdAt: serverTimestamp(),
                 });
                 await setDoc(doc(db, 'users', pendingUid), {
                     uid: pendingUid, displayName: hospitalName, email: regEmail,
                     role: 'hospital', hospitalId: pendingUid,
+                    hospital_code: hospitalCode,
                     phone, createdAt: serverTimestamp(),
                 });
             }
@@ -224,7 +232,8 @@ const HospitalLogin = ({ isEmbedded = false }) => {
     };
 
     const handleCopyCode = () => {
-        navigator.clipboard.writeText(pendingUid);
+        // We temporarily stored the hospital code in generatedOtp for the success screen
+        navigator.clipboard.writeText(generatedOtp);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
@@ -248,7 +257,16 @@ const HospitalLogin = ({ isEmbedded = false }) => {
                 transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                 className="w-full max-w-[480px] z-10 py-6"
             >
-                {/* Brand Header */}
+                {!isEmbedded && (
+                    <button
+                        onClick={() => navigate('/login')}
+                        className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-semibold text-sm mb-6 transition-colors group"
+                    >
+                        <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+                        Back to Login
+                    </button>
+                )}
+
                 {!isEmbedded && (
                     <div className="text-center mb-8">
                         <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-3xl shadow-2xl shadow-emerald-500/20 mb-5">
@@ -440,7 +458,7 @@ const HospitalLogin = ({ isEmbedded = false }) => {
                                 <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-5">
                                     <p className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-2">Invite Your Doctors</p>
                                     <div className="flex items-center justify-between gap-3 bg-white rounded-xl px-4 py-3 border border-emerald-100">
-                                        <span className="text-lg font-black text-slate-900 tracking-widest truncate">{pendingUid}</span>
+                                        <span className="text-lg font-black text-slate-900 tracking-widest truncate">{generatedOtp}</span>
                                         <button onClick={handleCopyCode}
                                             className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-3 py-1.5 rounded-lg text-xs font-black transition-all active:scale-95">
                                             {copied ? <><CheckCircle2 size={13} /> Copied!</> : <><Copy size={13} /> Copy</>}

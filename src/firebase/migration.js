@@ -13,48 +13,46 @@ export const migrateDataToFirestore = async () => {
 
         // 1. Hospital
         await setDoc(doc(db, "hospitals", hospitalId), {
-            id: hospitalId,
+            hospitalId: hospitalId,
             name: "City General Hospital",
-            address: "123 Health Ave, Medical District",
-            adminName: "Hospital Admin",
+            hospitalCode: "CITY123", // Refined schema requirement
+            location: "123 Health Ave, Medical District",
             phone: "9876543210",
             email: "hospital@demo.com",
-            licenseNo: "LIC-12345",
-            role: 'hospital',
-            isVerified: true,
-            rating: 4.8,
-            doctors: [doctorId],
-            facilities: ["Emergency", "ICU", "Pharmacy", "Laboratory"],
-            isOpen: true,
-            hasEmergency: true,
-            createdAt: serverTimestamp()
+            adminId: "demo-admin-id",
+            createdAt: serverTimestamp(),
+            status: "active"
         });
 
-        // 2. Doctor
-        await setDoc(doc(db, "doctors", doctorId), {
-            id: doctorId,
+        // 2. Doctor (Single Source of Truth)
+        const doctorProfile = {
+            doctorId: doctorId,
             name: "Dr. Sarah Smith",
             email: "sarah.smith@demo.com",
-            specialty: "Cardiology",
-            doctorType: 'specialist',
-            hospitalName: "City General Hospital",
+            specialization: "Cardiology",
+            experience: 15,
             hospitalId: hospitalId,
-            phone: "8888888888",
-            birthDate: "1985-05-15",
-            age: "40",
+            licenseNumber: "DOC-8899",
+            phone: "9123456789",
             status: 'approved',
-            createdAt: serverTimestamp()
-        });
+            availability: {
+                available: ['09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '04:00 PM', '05:00 PM', '06:00 PM'],
+                busy: []
+            },
+            createdAt: new Date().toISOString()
+        };
 
-        // 3. Admin-Approved User Profiles (Linked to bypass credentials)
+        // Top-level doctors collection ONLY
+        await setDoc(doc(db, "doctors", doctorId), doctorProfile);
+
+        // 3. User Identity Profiles
         await setDoc(doc(db, "users", doctorId), {
             uid: doctorId,
             name: "Dr. Sarah Smith",
             email: "sarah.smith@demo.com",
             role: 'doctor',
-            hospitalId: hospitalId,
-            status: 'approved',
-            createdAt: serverTimestamp()
+            status: 'active',
+            createdAt: new Date().toISOString()
         });
 
         await setDoc(doc(db, "users", patientId), {
@@ -62,65 +60,109 @@ export const migrateDataToFirestore = async () => {
             name: "Alice Cooper",
             email: "alice@demo.com",
             role: 'patient',
-            address: "456 Oak Street, City View",
-            age: "28",
-            birthDate: "1997-08-20",
-            gender: "Female",
-            createdAt: serverTimestamp()
+            status: 'active',
+            createdAt: new Date().toISOString()
         });
 
-        await setDoc(doc(db, "medical_stores", storeId), {
-            id: storeId,
+        // 4. Patient Profile
+        await setDoc(doc(db, "patients", patientId), {
+            patientId: patientId,
+            name: "Alice Cooper",
+            age: 28,
+            gender: "Female",
+            bloodGroup: "O+",
+            phone: "9876544321",
+            address: "456 Patient lane, Riverside",
+            emergencyContact: { name: "Bob Cooper", phone: "9999988888", relation: "Brother" },
+            createdAt: new Date().toISOString()
+        });
+
+        // 5. Pharmacies
+        await setDoc(doc(db, "pharmacies", storeId), {
+            pharmacyId: storeId,
             name: "Main Street Pharmacy",
-            email: "pharmacy@demo.com",
+            licenseNumber: "RX88220",
+            location: "789 Main St, Downtown",
             phone: "7777777777",
-            address: "789 Main St, Downtown",
-            code: "MSTR-1234",
-            isOpen: true,
-            role: 'medical_store',
-            createdAt: serverTimestamp()
+            ownerId: "demo-owner-id",
+            createdAt: new Date().toISOString(),
+            status: 'active'
         });
 
         await setDoc(doc(db, "users", storeId), {
             uid: storeId,
             name: "Main Street Pharmacy",
             email: "pharmacy@demo.com",
-            role: 'medical_store',
+            role: 'pharmacist',
+            status: 'active',
             createdAt: serverTimestamp()
         });
 
-        // 4. Linked Activity
+        // 6. Appointments
         await setDoc(doc(db, "appointments", appointmentId), {
-            id: appointmentId,
-            hospitalId: hospitalId,
-            doctorId: doctorId,
-            patientId: patientId,
-            patientName: "Alice Cooper",
-            doctorName: "Dr. Sarah Smith",
-            hospitalName: "City General Hospital",
-            date: "2026-03-01",
-            time: "10:30 AM",
-            status: 'pending',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-
-        await setDoc(doc(db, "prescriptions", "demo-prescription-id"), {
-            id: "demo-prescription-id",
-            patientId: patientId,
-            doctorId: doctorId,
-            doctorName: "Dr. Sarah Smith",
-            hospitalName: "City General Hospital",
-            appointmentId: appointmentId,
-            diagnosis: "Regular Checkup",
-            medications: [
-                { name: "Vitamine C", dosage: "1 tab daily", duration: "30 days" },
-                { name: "Paracetamol", dosage: "If fever", duration: "5 days" }
-            ],
+            appointmentId,
+            patientId,
+            doctorId,
+            hospitalId,
+            appointmentTime: serverTimestamp(),
+            status: 'confirmed',
             createdAt: serverTimestamp()
         });
 
-        console.log("Master Migration complete!");
+        // Vitals
+        await setDoc(doc(db, "vitals", "demo-vital-id"), {
+            vitalId: "demo-vital-id",
+            patientId,
+            heartRate: 72,
+            bloodPressure: "120/80",
+            temperature: 98.6,
+            oxygenLevel: 98,
+            recordedAt: serverTimestamp()
+        });
+
+        // SOS Request
+        await setDoc(doc(db, "sos_requests", "demo-sos-id"), {
+            requestId: "demo-sos-id",
+            patientId,
+            location: { lat: 12.9716, lng: 77.5946, address: "MG Road, Bangalore" },
+            hospitalId: hospitalId,
+            status: "pending",
+            createdAt: serverTimestamp()
+        });
+
+        // AI Triage Log
+        await setDoc(doc(db, "ai_triage_logs", "demo-triage-id"), {
+            logId: "demo-triage-id",
+            patientId,
+            symptoms: ["Chest Pain", "Dizziness"],
+            aiResponse: "High risk detected. Recommending immediate consultation with a cardiologist.",
+            riskLevel: "high",
+            createdAt: serverTimestamp()
+        });
+
+        // Medicine Order
+        await setDoc(doc(db, "medicine_orders", "demo-order-id"), {
+            orderId: "demo-order-id",
+            patientId,
+            pharmacyId: storeId,
+            medicines: [{ name: "Paracetamol", quantity: 2, price: 25 }],
+            totalPrice: 50.0,
+            status: "pending",
+            createdAt: serverTimestamp()
+        });
+
+        // 7. Notifications
+        await setDoc(doc(db, "notifications", "demo-notif-id"), {
+            notificationId: "demo-notif-id",
+            userId: doctorId,
+            title: "Emergency SOS",
+            message: "Urgent SOS request from Alice Cooper",
+            type: "sos",
+            read: false,
+            createdAt: serverTimestamp()
+        });
+
+        console.log("Master Migration & Seeding complete!");
         return true;
     } catch (error) {
         console.error("Migration failed:", error);
