@@ -366,23 +366,23 @@ const PatientLogin = ({ isEmbedded = false }) => {
         try {
             let result;
             if (socialProvider && typeof socialProvider === 'string') {
+                // Store intended role locally so AuthContext can use it immediately
+                localStorage.setItem('userRole', 'patient');
                 result = await loginSocial(socialProvider);
             } else {
                 result = await loginPatient(email, password);
             }
 
+            // REDIRECT IMMEDIATELY - result.success means Auth succeeded
+            // Profile data will continue loading in the background
             if (result.success) {
                 navigate('/dashboard/patient');
             } else {
-                if (result.message === "ACCOUNT_NOT_FOUND") {
-                    setErrorMsg("Account not found. Please sign up first.");
-                } else {
-                    setErrorMsg(result.message || "Login failed. Please check your credentials.");
-                }
+                setErrorMsg(result.message || "Login failed.");
+                setIsLoading(false); // Only stop loading if it failed
             }
         } catch (error) {
             setErrorMsg("An unexpected error occurred.");
-        } finally {
             setIsLoading(false);
         }
     };

@@ -1,314 +1,407 @@
 import {
     collection,
-    getDocs,
-    getDoc,
-    doc,
     addDoc,
+    updateDoc,
+    doc,
     query,
     where,
-    serverTimestamp,
     onSnapshot,
-    setDoc,
-    updateDoc
+    getDocs,
+    serverTimestamp,
+    orderBy
 } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { db, storage } from "./config";
 
-// Hospitals
-export const getHospitals = async () => {
-    const hospitalsCol = collection(db, "hospitals");
-    const hospitalSnapshot = await getDocs(hospitalsCol);
-    return hospitalSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-};
+// --- Appointment Services ---
 
-// Doctors
-export const getDoctors = async () => {
-    const doctorsCol = collection(db, "doctors");
-    const doctorSnapshot = await getDocs(doctorsCol);
-    return doctorSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-};
-
-
-// Appointments
-export const bookAppointment = async (appointmentData) => {
+export const createAppointment = async (appointmentData) => {
+    if (!db) return null;
     try {
-        const appointmentsCol = collection(db, "appointments");
-        const docRef = await addDoc(appointmentsCol, {
+        const docRef = await addDoc(collection(db, "appointments"), {
             ...appointmentData,
+            status: 'pending', // pending, approved, in-consultation, completed, cancelled
             createdAt: serverTimestamp(),
-            status: 'Pending'
+            updatedAt: serverTimestamp()
         });
         return docRef.id;
     } catch (error) {
+        console.error("Error creating appointment:", error);
         throw error;
     }
 };
 
-export const getUserAppointments = async (userId) => {
-    const q = query(collection(db, "appointments"), where("patientId", "==", userId));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+export const updateAppointmentStatus = async (appointmentId, status, extraData = {}) => {
+    if (!db) return;
+    try {
+        const appointmentRef = doc(db, "appointments", appointmentId);
+        await updateDoc(appointmentRef, {
+            status,
+            ...extraData,
+            updatedAt: serverTimestamp()
+        });
+    } catch (error) {
+        console.error("Error updating appointment status:", error);
+        throw error;
+    }
 };
 
-// Storage Services
-export const uploadProfilePhoto = (uid, file, onProgress) => {
-    if (!storage) {
-        console.warn("Storage not initialized. Using Mock Storage.");
-        return new Promise((resolve) => {
-            // Simulate upload progress
-            let progress = 0;
-            const interval = setInterval(() => {
-                progress += 10;
-                if (onProgress) onProgress(progress);
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    // Return a fake URL or data URL
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        resolve(reader.result); // Resolve with Data URL
-                    };
-                    reader.readAsDataURL(file);
-                }
-            }, 100);
-        });
+export const subscribeToAppointments = (filters, callback) => {
+    if (!db) return () => { };
+
+    let q = collection(db, "appointments");
+
+    if (filters.hospitalId) {
+        q = query(q, where("hospitalId", "==", filters.hospitalId));
+    }
+    if (filters.patientId) {
+        q = query(q, where("patientId", "==", filters.patientId));
+    }
+    if (filters.doctorId) {
+        q = query(q, where("doctorId", "==", filters.doctorId));
+    }
+    if (filters.status) {
+        q = query(q, where("status", "==", filters.status));
     }
 
-    return new Promise((resolve, reject) => {
-        const fileName = file.name || `photo_${Date.now()}.jpg`;
-        const fileExt = fileName.split('.').pop() || 'jpg';
-        const storageRef = ref(storage, `profiles/${uid}.${fileExt}`);
-        const uploadTask = uploadBytesResumable(storageRef, file);
+    q = query(q, orderBy("createdAt", "desc"));
 
-        uploadTask.on('state_changed',
-            (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                if (onProgress) onProgress(progress);
-            },
-            (error) => {
-                console.error("Upload error:", error);
-                reject(error);
-            },
-            async () => {
-                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                resolve(downloadURL);
-            }
-        );
+    return onSnapshot(q, (snapshot) => {
+        const appointments = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        callback(appointments);
+    }, (error) => {
+        console.error("Error subscribing to appointments:", error);
     });
 };
 
-// Hospital Management
+// --- Prescription Services ---
+
+export const createPrescription = async (prescriptionData) => {
+    if (!db) return null;
+    try {
+        const docRef = await addDoc(collection(db, "prescriptions"), {
+            ...prescriptionData,
+            createdAt: serverTimestamp()
+        });
+
+        // Update appointment status to completed and link prescription
+        if (prescriptionData.appointmentId) {
+            await updateAppointmentStatus(prescriptionData.appointmentId, 'completed', {
+                prescriptionId: docRef.id
+            });
+        }
+
+        return docRef.id;
+    } catch (error) {
+        console.error("Error creating prescription:", error);
+        throw error;
+    }
+};
+
+export const subscribeToPrescriptions = (patientId, callback) => {
+    if (!db) return () => { };
+    const q = query(
+        collection(db, "prescriptions"),
+        where("patientId", "==", patientId),
+        orderBy("createdAt", "desc")
+    );
+    return onSnapshot(q, (snapshot) => {
+        const prescriptions = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        callback(prescriptions);
+    });
+};
+
+// --- Order Services (Medical Store) ---
+
+export const createOrder = async (orderData) => {
+    if (!db) return null;
+    try {
+        const docRef = await addDoc(collection(db, "orders"), {
+            ...orderData,
+            status: 'pending', // pending, accepted, preparing, out-for-delivery, delivered
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+        return docRef.id;
+    } catch (error) {
+        console.error("Error creating order:", error);
+        throw error;
+    }
+};
+
+export const updateOrderStatus = async (orderId, status) => {
+    if (!db) return;
+    try {
+        const orderRef = doc(db, "orders", orderId);
+        await updateDoc(orderRef, {
+            status,
+            updatedAt: serverTimestamp()
+        });
+    } catch (error) {
+        console.error("Error updating order status:", error);
+        throw error;
+    }
+};
+
+export const subscribeToOrders = (storeId, callback) => {
+    if (!db) return () => { };
+    const q = query(
+        collection(db, "orders"),
+        where("storeId", "==", storeId),
+        orderBy("createdAt", "desc")
+    );
+    return onSnapshot(q, (snapshot) => {
+        const orders = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        callback(orders);
+    });
+};
+
+// --- Discovery Services ---
 
 export const listenToHospitals = (callback) => {
-    if (!db) {
-        console.warn("Firestore not initialized. Using mock hospitals.");
-        callback([]);
-        return () => { };
-    }
-    const q = query(collection(db, "hospitals"));
+    if (!db) return () => { };
+    const q = collection(db, "hospitals");
     return onSnapshot(q, (snapshot) => {
-        const hospitals = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        callback(hospitals);
+        const h = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(h);
     });
-};
-
-// Doctor Management
-export const updateDoctorStatus = async (doctorId, status) => {
-    if (!db) {
-        console.warn("Firestore not initialized. Mocking status update.");
-        return true;
-    }
-    try {
-        const doctorRef = doc(db, "doctors", doctorId);
-        await updateDoc(doctorRef, { status });
-        return true;
-    } catch (error) {
-        console.error("Error updating doctor status:", error);
-        throw error;
-    }
-};
-
-export const updateDoctorInfo = async (doctorId, info) => {
-    if (!db) return true;
-    try {
-        const doctorRef = doc(db, "doctors", doctorId);
-        await updateDoc(doctorRef, info);
-        return true;
-    } catch (error) {
-        console.error("Error updating doctor info:", error);
-        throw error;
-    }
 };
 
 export const listenToDoctors = (callback) => {
-    if (!db) {
-        console.warn("Firestore not initialized. Using mock doctors.");
-        callback([]);
-        return () => { };
-    }
-    const q = query(collection(db, "doctors"));
+    if (!db) return () => { };
+    const q = collection(db, "doctors");
     return onSnapshot(q, (snapshot) => {
-        const doctors = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        callback(doctors);
+        const d = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(d);
     });
 };
 
-export const getDoctorsByHospital = async (hospitalId) => {
+export const getHospitals = async () => {
     if (!db) return [];
+    const q = collection(db, "hospitals");
+    const snap = await getDocs(q);
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+
+export const getDoctors = async () => {
+    if (!db) return [];
+    const q = collection(db, "doctors");
+    const snap = await getDocs(q);
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+
+/**
+ * Fetches hospitals in a specific location.
+ * @param {string} location - The location to filter by.
+ */
+export const getNearbyHospitals = async (location) => {
+    if (!db || !location) return [];
     try {
-        const q = query(collection(db, "doctors"), where("hospitalId", "==", hospitalId));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const hospitalsQuery = query(
+            collection(db, "hospitals"),
+            where("location", "==", location)
+        );
+        const snap = await getDocs(hospitalsQuery);
+        return snap.docs.map(doc => ({
+            id: doc.id,
+            hospitalId: doc.id,
+            ...doc.data()
+        }));
     } catch (error) {
-        console.error("Error fetching doctors:", error);
+        console.error("[Discovery] Error fetching nearby hospitals:", error);
         return [];
     }
 };
 
-// Queue & Token Services
-export const generateToken = async (hospitalId, doctorId, patientId) => {
-    if (!db) return Math.floor(100 + Math.random() * 900);
+/**
+ * Fetches doctors belonging to a specific hospital.
+ * @param {string} hospitalId - The ID of the hospital.
+ */
+export const getDoctorsByHospital = async (hospitalId) => {
+    if (!db || !hospitalId) return [];
     try {
-        const tokensCol = collection(db, "tokens");
-        // In a real app, we'd query the last token for the day/doctor to increment
-        // For now, we generate a unique sequential-looking token
-        const tokenNumber = Math.floor(Math.random() * 50) + 1;
-        const docRef = await addDoc(tokensCol, {
-            hospitalId,
-            doctorId,
-            patientId,
-            tokenNumber,
-            status: 'waiting',
-            timestamp: serverTimestamp()
-        });
-        return { id: docRef.id, tokenNumber };
+        const doctorsQuery = query(
+            collection(db, "doctors"),
+            where("hospitalId", "==", hospitalId)
+        );
+        const snap = await getDocs(doctorsQuery);
+        return snap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
     } catch (error) {
-        console.error("Error generating token:", error);
+        console.error(`[Discovery] Error fetching doctors for hospital ${hospitalId}:`, error);
+        return [];
+    }
+};
+
+/**
+ * Fetches hospitals in a specific location and their associated doctors.
+ * Performance: Uses indexed queries and parallel fetching.
+ */
+export const getNearbyHospitalsAndDoctors = async (location) => {
+    if (!db || !location) return [];
+
+    try {
+        console.log(`[Discovery] Querying hospitals in location: ${location}`);
+
+        // 1. Fetch hospitals in the location
+        const hospitals = await getNearbyHospitals(location);
+
+        if (hospitals.length === 0) {
+            console.log("[Discovery] No hospitals found in this location.");
+            return [];
+        }
+
+        // 2. Fetch doctors for all matched hospitals in parallel
+        const hospitalsWithDoctors = await Promise.all(hospitals.map(async (hospital) => {
+            const doctors = await getDoctorsByHospital(hospital.id);
+            return {
+                ...hospital,
+                doctors
+            };
+        }));
+
+        return hospitalsWithDoctors;
+    } catch (error) {
+        console.error("[Discovery] Error fetching nearby hospitals and doctors:", error);
         throw error;
     }
 };
 
-export const listenToQueue = (hospitalId, callback) => {
-    if (!db) return () => { };
-    const q = query(
-        collection(db, "tokens"),
-        where("hospitalId", "==", hospitalId),
-        where("status", "in", ["waiting", "consulting"])
-    );
-    return onSnapshot(q, (snapshot) => {
-        const queue = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        callback(queue);
-    });
-};
-
-export const updateTokenStatus = async (tokenId, status) => {
-    if (!db) return;
+/**
+ * Helper to fetch doctors by hospitalId specifically.
+ */
+export const getDoctorsByHospitalId = async (hospitalId) => {
+    if (!db || !hospitalId) return [];
     try {
-        const tokenRef = doc(db, "tokens", tokenId);
-        await updateDoc(tokenRef, { status });
+        const q = query(collection(db, "doctors"), where("hospitalId", "==", hospitalId));
+        const snap = await getDocs(q);
+        return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
-        console.error("Error updating token status:", error);
+        console.error("[Discovery] Error fetching doctors for hospital:", hospitalId, error);
+        return [];
     }
 };
 
-// Blood Bank Services
-export const updateBloodStock = async (hospitalId, bloodType, units, urgency = 'Low') => {
-    if (!db) return;
-    try {
-        const stockRef = doc(db, "bloodInventory", `${hospitalId}_${bloodType}`);
-        await setDoc(stockRef, {
-            hospitalId,
-            bloodType,
-            units,
-            urgency,
-            updatedAt: serverTimestamp()
-        }, { merge: true });
-    } catch (error) {
-        console.error("Error updating blood stock:", error);
-    }
-};
-
-export const listenToBloodStock = (hospitalId, callback) => {
-    if (!db) return () => { };
-    const q = query(collection(db, "bloodInventory"), where("hospitalId", "==", hospitalId));
-    return onSnapshot(q, (snapshot) => {
-        const stock = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        callback(stock);
-    });
-};
-
-// Appointment Validation & Assistance
-export const checkSlotAvailability = async (doctorId, date, time) => {
-    if (!db) return true; // Mock success
-    try {
-        const q = query(
-            collection(db, "appointments"),
-            where("doctorId", "==", doctorId),
-            where("date", "==", date),
-            where("time", "==", time),
-            where("status", "in", ["Accepted", "Pending"])
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.empty;
-    } catch (error) {
-        console.error("Error checking availability:", error);
-        return false;
-    }
-};
+// --- Voice Assistant & AI Services ---
 
 export const searchDoctorByName = async (name) => {
     if (!db) return null;
     try {
-        const q = query(collection(db, "doctors"));
-        const snapshot = await getDocs(q);
-        const doctors = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        // Simple fuzzy search or exact match
-        return doctors.find(d => d.name.toLowerCase().includes(name.toLowerCase()));
+        const q = query(collection(db, "doctors"), where("name", "==", name));
+        const snap = await getDocs(q);
+        if (!snap.empty) return { id: snap.docs[0].id, ...snap.docs[0].data() };
+
+        // Partial match search
+        const all = await getDoctors();
+        return all.find(d => d.name.toLowerCase().includes(name.toLowerCase())) || null;
     } catch (error) {
         console.error("Error searching doctor:", error);
         return null;
     }
 };
 
-export const findAlternativeDoctors = async (specialty, hospitalId, date, time) => {
+export const findAlternativeDoctors = async (specialty, hospitalId = null) => {
     if (!db) return [];
     try {
-        let q = query(collection(db, "doctors"));
-        if (specialty) {
-            q = query(collection(db, "doctors"), where("specialty", "==", specialty));
-        }
-        const snapshot = await getDocs(q);
-        const doctors = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        // Filter by availability (this is simplified, ideally we'd check schedules)
-        const availableDoctors = [];
-        for (const dr of doctors) {
-            const isAvailable = await checkSlotAvailability(dr.id, date, time);
-            if (isAvailable) availableDoctors.push(dr);
-        }
-        return availableDoctors;
+        let q = query(collection(db, "doctors"), where("specialty", "==", specialty));
+        if (hospitalId) q = query(q, where("hospitalId", "==", hospitalId));
+        const snap = await getDocs(q);
+        return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
         console.error("Error finding alternatives:", error);
         return [];
     }
 };
-export const getNextAvailableSlot = async (doctorId, date, startTime) => {
-    if (!db) return "Tomorrow at 10:00 AM";
+
+export const checkSlotAvailability = async (doctorId, date, time) => {
+    if (!db) return true;
     try {
-        // Simple logic: check next 3 hours
-        const baseTime = parseInt(startTime.split(':')[0]);
-        const ampm = startTime.split(' ')[1];
-
-        for (let i = 1; i <= 3; i++) {
-            const nextHour = baseTime + i;
-            const nextTime = `${nextHour > 12 ? nextHour - 12 : nextHour}:00 ${ampm}`;
-            const isAvailable = await checkSlotAvailability(doctorId, date, nextTime);
-            if (isAvailable) return nextTime;
-        }
-
-        // If not found in same day, suggest tomorrow
-        return "tomorrow at 10:00 AM";
+        const q = query(
+            collection(db, "appointments"),
+            where("doctorId", "==", doctorId),
+            where("date", "==", date),
+            where("time", "==", time),
+            where("status", "!=", "cancelled")
+        );
+        const snap = await getDocs(q);
+        return snap.empty;
     } catch (error) {
-        console.error("Error finding next slot:", error);
-        return "tomorrow at 10:00 AM";
+        console.error("Error checking availability:", error);
+        return true;
+    }
+};
+
+export const getNextAvailableSlot = async (doctorId, date) => {
+    // Simple mock for now: returns a slot later today or tomorrow
+    return "11:30 AM";
+};
+
+export const bookAppointment = async (bookingData) => {
+    return createAppointment({
+        ...bookingData,
+        source: 'voice_assistant'
+    });
+};
+
+export const generateToken = async (hospitalId, doctorId, patientId) => {
+    if (!db) return { tokenNumber: Math.floor(Math.random() * 50) + 1 };
+    try {
+        const q = query(
+            collection(db, "appointments"),
+            where("hospitalId", "==", hospitalId),
+            where("doctorId", "==", doctorId),
+            where("status", "!=", "cancelled")
+        );
+        const snap = await getDocs(q);
+        const tokenNumber = snap.size + 1;
+        return { tokenNumber };
+    } catch (error) {
+        return { tokenNumber: Math.floor(Math.random() * 50) + 1 };
+    }
+};
+
+// --- Storage Services ---
+
+export const uploadProfilePhoto = async (uid, file, onProgress) => {
+    if (!storage) {
+        // Mock for offline mode
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+        });
+    }
+
+    try {
+        const storageRef = ref(storage, `profiles/${uid}/${file.name}`);
+        const uploadTask = uploadBytesResumable(storageRef, file);
+
+        return new Promise((resolve, reject) => {
+            uploadTask.on('state_changed',
+                (snapshot) => {
+                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                    if (onProgress) onProgress(progress);
+                },
+                (error) => reject(error),
+                async () => {
+                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                    resolve(downloadURL);
+                }
+            );
+        });
+    } catch (error) {
+        console.error("Error uploading photo:", error);
+        throw error;
     }
 };

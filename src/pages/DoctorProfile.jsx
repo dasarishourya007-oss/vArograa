@@ -9,6 +9,7 @@ import {
 import { motion } from 'framer-motion';
 import Button from '../components/Button';
 import { hospitals } from '../utils/mockData';
+import { useAuth } from '../context/AuthContext';
 
 const DoctorProfile = () => {
     const { id } = useParams();
@@ -102,22 +103,29 @@ const DoctorProfile = () => {
                         <div className="w-10 h-10 rounded-2xl bg-p-50 flex items-center justify-center mb-1">
                             <Award size={20} className="text-p-600" />
                         </div>
-                        <span className="text-base font-black text-main">{doctor.experience}+</span>
+                        <span className="text-sm font-black text-main">{doctor.experience}+</span>
                         <span className="text-[10px] font-bold text-muted uppercase tracking-wide">Years</span>
                     </div>
                     <div className="flex flex-col items-center gap-1 flex-1 border-r border-border/50">
                         <div className="w-10 h-10 rounded-2xl bg-orange-50 flex items-center justify-center mb-1">
                             <Star size={20} className="text-orange-500" fill="currentColor" />
                         </div>
-                        <span className="text-base font-black text-main">{doctor.rating}</span>
+                        <span className="text-sm font-black text-main">{doctor.rating}</span>
                         <span className="text-[10px] font-bold text-muted uppercase tracking-wide">Rating</span>
                     </div>
-                    <div className="flex flex-col items-center gap-1 flex-1">
+                    <div className="flex flex-col items-center gap-1 flex-1 border-r border-border/50">
                         <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center mb-1">
                             <MessageCircle size={20} className="text-emerald-500" />
                         </div>
-                        <span className="text-base font-black text-main">{doctor.reviewsCount || 0}</span>
+                        <span className="text-sm font-black text-main">{doctor.reviewsCount || 0}</span>
                         <span className="text-[10px] font-bold text-muted uppercase tracking-wide">Reviews</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1 flex-1">
+                        <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center mb-1">
+                            <Clock size={20} className="text-blue-500" />
+                        </div>
+                        <span className="text-sm font-black text-main">{doctor.consultingTime || '15 mins'}</span>
+                        <span className="text-[10px] font-bold text-muted uppercase tracking-wide">Wait</span>
                     </div>
                 </div>
             </div>
@@ -225,22 +233,38 @@ const DoctorProfile = () => {
             </div>
 
             {/* Floating Booking Island */}
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-[420px] p-2 pr-3 rounded-[32px] glass shadow-2xl z-[100] border-white/60 flex items-center gap-3 backdrop-blur-xl">
-                <button
-                    onClick={() => navigate(`/book-appointment/${mainHospital.id}?doctor=${doctor.id}&type=online`)}
-                    className="flex-1 h-14 rounded-[24px] flex flex-col items-center justify-center gap-0.5 bg-p-50 hover:bg-p-100 transition-colors active:scale-95"
-                >
-                    <span className="text-[13px] font-black text-p-600">Video Consult</span>
-                    <span className="text-[10px] font-bold text-p-400">₹{doctor.fees.online}</span>
-                </button>
-                <button
-                    onClick={() => navigate(`/book-appointment/${mainHospital.id}?doctor=${doctor.id}&type=hospital`)}
-                    className="flex-[1.5] h-14 rounded-[24px] flex flex-col items-center justify-center gap-0.5 btn-primary shadow-lg shadow-p-600/20 active:scale-95 border-none"
-                >
-                    <span className="text-[13px] font-black text-white">Book Visit</span>
-                    <span className="text-[10px] font-bold text-white/80">₹{doctor.fees.offline} at Hospital</span>
-                </button>
-            </div>
+            {doctor.fees && mainHospital && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-32px)] max-w-[430px] p-2 rounded-[32px] glass shadow-2xl z-[100] border-white/60 flex items-center gap-2 backdrop-blur-xl">
+                    <button
+                        onClick={() => navigate(`/book-appointment/${mainHospital.id}?doctor=${doctor.id}&type=home`)}
+                        className="flex-1 h-14 rounded-[24px] flex flex-col items-center justify-center gap-0.5 bg-emerald-50 hover:bg-emerald-100 transition-colors active:scale-95"
+                    >
+                        <span className="text-[11px] font-black text-emerald-700">🏠 Home</span>
+                        <span className="text-[10px] font-bold text-emerald-500">Visit</span>
+                    </button>
+                    <button
+                        onClick={() => navigate(`/book-appointment/${mainHospital.id}?doctor=${doctor.id}&type=online`)}
+                        className="flex-1 h-14 rounded-[24px] flex flex-col items-center justify-center gap-0.5 bg-p-50 hover:bg-p-100 transition-colors active:scale-95"
+                    >
+                        <span className="text-[11px] font-black text-p-600">📹 Online</span>
+                        <span className="text-[10px] font-bold text-p-400">₹{doctor.fees.online}</span>
+                    </button>
+                    <button
+                        onClick={() => navigate(`/book-appointment/${mainHospital.id}?doctor=${doctor.id}&type=hospital`)}
+                        className="flex-[1.3] h-14 rounded-[24px] flex flex-col items-center justify-center gap-0.5 btn-primary shadow-lg shadow-p-600/20 active:scale-95 border-none"
+                    >
+                        <span className="text-[11px] font-black text-white">🏥 Hospital</span>
+                        <span className="text-[10px] font-bold text-white/80">₹{doctor.fees.offline}</span>
+                    </button>
+                </div>
+            )}
+            {doctor.fees && !mainHospital && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-[420px] p-2 rounded-[32px] glass shadow-2xl z-[100] border-white/60 flex items-center gap-3 backdrop-blur-xl">
+                    <button onClick={() => navigate(-1)} className="flex-1 h-14 rounded-[24px] flex items-center justify-center gap-2 btn-primary border-none">
+                        <span className="text-[13px] font-black text-white">Go Back</span>
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

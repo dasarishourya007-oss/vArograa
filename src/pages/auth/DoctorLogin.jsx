@@ -9,16 +9,16 @@ const DoctorLogin = () => {
     const navigate = useNavigate();
     const { loginDoctor, completeLogin } = useAuth(); // We will create this
 
-    const [code, setCode] = useState('');
-    const [pin, setPin] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [error, setError] = useState('');
 
     const handleLogin = async (e) => {
         e.preventDefault();
 
         // Master Login Shortcut
-        if (code === '123' && pin === 'dsa') {
-            const result = await loginDoctor(code, pin);
+        if (email === '123' && password === 'dsa') {
+            const result = await loginDoctor(email, password);
             if (result.success) {
                 completeLogin(result.doctor);
                 navigate('/dashboard/doctor');
@@ -26,9 +26,9 @@ const DoctorLogin = () => {
             }
         }
 
-        const result = await loginDoctor(code.toUpperCase(), pin);
+        const result = await loginDoctor(email, password);
         if (result.success) {
-            completeLogin(result.user || result.doctor); // Ensuring user/doctor object is passed
+            completeLogin(result.user || result.doctor);
             navigate('/dashboard/doctor');
         } else {
             setError(result.message || 'Login failed');
@@ -42,22 +42,23 @@ const DoctorLogin = () => {
                     <form onSubmit={handleLogin} className="flex-col" style={{ gap: 'var(--spacing-md)' }}>
                         {error && <div style={{ color: 'var(--danger-color)', marginBottom: '10px' }}>{error}</div>}
                         <Input
-                            label="Doctor ID"
-                            placeholder="DOC-XXXX"
-                            value={code}
-                            onChange={(e) => setCode(e.target.value)}
+                            label="Email Address"
+                            type="text"
+                            placeholder="doctor@example.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
                             required
                         />
                         <Input
-                            label="Passkey"
+                            label="Password"
                             type="password"
-                            placeholder="****"
-                            value={pin}
-                            onChange={(e) => setPin(e.target.value)}
+                            placeholder="••••••••"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
                             required
                         />
                         <div style={{ textAlign: 'right', marginTop: '4px' }}>
-                            <span onClick={() => navigate('/recovery/doctor')} style={{ fontSize: '12px', color: '#3b82f6', cursor: 'pointer' }}>Forgot Passkey?</span>
+                            <span onClick={() => navigate('/recovery/doctor')} style={{ fontSize: '12px', color: '#3b82f6', cursor: 'pointer' }}>Forgot Password?</span>
                         </div>
 
                         <div style={{ marginTop: 'var(--spacing-md)' }}>

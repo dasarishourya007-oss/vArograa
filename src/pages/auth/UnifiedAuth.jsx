@@ -40,9 +40,15 @@ const UnifiedAuth = () => {
         setIsLoading(true);
         try {
             const result = await loginSocial(provider, 'patient');
-            if (result.success) navigate('/dashboard/patient');
-            else setErrorMsg(result.message || `${provider} login failed.`);
+            console.log(`[UnifiedAuth] ${provider} login result:`, result);
+            if (result.success) {
+                console.log("[UnifiedAuth] Navigation triggered to /dashboard/patient");
+                navigate('/dashboard/patient');
+            } else {
+                setErrorMsg(result.message || `${provider} login failed.`);
+            }
         } catch (err) {
+            console.error("[UnifiedAuth] Social login error:", err);
             setErrorMsg("Social login failed.");
         } finally {
             setIsLoading(false);
@@ -58,10 +64,14 @@ const UnifiedAuth = () => {
             if (isLogin) {
                 result = await loginPatient(email, password);
             } else {
-                result = await registerPatient(signupData);
+                result = await registerPatient({
+                    ...signupData,
+                    location: signupData.address // Map address to location for discovery
+                });
             }
 
             if (result.success) {
+                console.log("[UnifiedAuth] Auth success. Navigation triggered to /dashboard/patient");
                 navigate('/dashboard/patient');
             } else {
                 setErrorMsg(result.message || (isLogin ? "Login failed" : "Registration failed"));

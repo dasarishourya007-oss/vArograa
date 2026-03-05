@@ -43,6 +43,8 @@ const HospitalAnalytics = lazy(() => import('./pages/hospital/pages/Analytics'))
 const HospitalRecords = lazy(() => import('./pages/hospital/pages/PatientRecords'));
 const HospitalBeds = lazy(() => import('./pages/hospital/pages/BedManagement'));
 const HospitalSettings = lazy(() => import('./pages/hospital/pages/Settings'));
+const HospitalDoctors = lazy(() => import('./pages/hospital/pages/DoctorManagement'));
+
 
 // Doctor Dashboard Imports (Lazy)
 const DoctorPortalLayout = lazy(() => import('./pages/doctor/components/Layout'));
@@ -176,7 +178,9 @@ function App() {
           <Route path="records" element={<HospitalRecords />} />
           <Route path="beds" element={<HospitalBeds />} />
           <Route path="settings" element={<HospitalSettings />} />
+          <Route path="doctors" element={<HospitalDoctors />} />
         </Route>
+
 
         {/* New Doctor Dashboard Routes (Scoped) */}
         <Route path="/dashboard/doctor" element={

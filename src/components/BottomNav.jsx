@@ -59,15 +59,6 @@ const BottomNav = ({ activeTab, onTabChange, onVoiceAssistant }) => {
                     <Megaphone size={22} />
                 </motion.button>
 
-                {/* Medicine Search Button */}
-                <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => onTabChange('medicine')}
-                    className={`flex items-center justify-center transition-colors ${activeTab === 'medicine' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                    <Search size={22} />
-                </motion.button>
 
                 {/* SOS Button */}
                 <div className="relative">

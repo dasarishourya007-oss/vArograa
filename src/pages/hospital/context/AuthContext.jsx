@@ -40,16 +40,20 @@ export const AuthProvider = ({ children }) => {
         user,
         role,
         login: () => Promise.resolve(), // Mock for demo
-        logout: async () => {
-            try {
-                await signOut(auth);
-                localStorage.removeItem('varogra_user');
-                localStorage.removeItem('userRole');
-                setUser(null);
-                window.location.href = '/login'; // Force redirect to selection
-            } catch (error) {
-                console.error("vArogra: Logout Error:", error);
-            }
+        logout: () => {
+            // 1. Instantly trigger soft navigation away from protected routes
+            setUser(null);
+
+            // 2. Clear persistent UI state synchronously
+            localStorage.removeItem('varogra_user');
+            localStorage.removeItem('userRole');
+
+            // 3. Fire-and-forget Firebase signout
+            // Do not await, to prevent local network hangs from trapping the user
+            signOut(auth).catch(error => {
+                console.error("vArogra: Firebase Logout Error (ignored for UI):", error);
+            });
+            window.location.href = '/login';
         },
         isAdmin: role === 'Admin',
         isDoctor: role === 'Doctor',

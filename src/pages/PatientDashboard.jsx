@@ -5,7 +5,7 @@ import {
     AlertCircle, Send, Bot, Loader2, ShoppingBag,
     Search, Upload, Star, Navigation, Plus, FileText, Zap, DollarSign, ChevronRight,
     Bike, CheckCircle, Map, ArrowLeft, Phone, PhoneOff, MicOff, ShieldCheck,
-    Stethoscope, Heart, Baby, Eye, FlaskConical, Grid, Ear, Megaphone, Settings, Camera, X, Mic, Volume2, Square
+    Stethoscope, Heart, Baby, Eye, FlaskConical, Grid, Ear, Megaphone, Settings, Camera, X, Mic, Volume2, Square, Sun
 } from 'lucide-react';
 
 import { useTranslation } from 'react-i18next';
@@ -25,20 +25,47 @@ import { useAuth } from '../context/AuthContext';
 import ImageUpload from '../components/ImageUpload';
 import LocationPicker from '../components/LocationPicker';
 import HospitalCard from '../components/HospitalCard';
-import MedicineSearch from './MedicineSearch';
+
 
 // Carousel Component for Today's Reminders
 const ReminderCarousel = ({ onNavigate }) => {
     const { t } = useTranslation();
-    const { allHospitals, appointments, bloodRequests, orders, allMedicalStores: medicalStores } = useAuth();
+    const { appointments, orders, medicalCamps, campRegistrations } = useAuth();
     const [currentIndex, setCurrentIndex] = useState(0);
 
-    const activeAppt = appointments
-        .filter(a => a.status === 'Accepted' || a.status === 'Confirmed')
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+    const now = new Date();
+    // Reset to start of day for comparison
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const urgentBlood = bloodRequests[0];
-    const activeOrder = orders.filter(o => o.status !== 'Delivered')[0];
+    // 1. Upcoming Appointments
+    const activeAppt = appointments
+        .filter(a => {
+            if (a.status !== 'approved' && a.status !== 'Confirmed' && a.status !== 'Accepted') return false;
+            // Ensure the appointment is today or in the future
+            if (!a.timestamp) return true; // fallback
+            const apptDate = new Date(a.timestamp);
+            return apptDate >= today;
+        })
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))[0];
+
+    // 2. Active Orders
+    const activeOrder = orders
+        .filter(o => o.status !== 'Delivered')
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0]; // Most recent active
+
+    // 3. Registered Upcoming Camps
+    // Match registrations with camps to get details, then filter by date
+    const registeredCamps = campRegistrations.map(reg => {
+        const camp = medicalCamps.find(c => c.id === reg.campId);
+        return camp;
+    }).filter(c => {
+        if (!c) return false;
+        if (!c.timestamp) return true; // fallback
+        const campDate = new Date(c.timestamp);
+        return campDate >= today;
+    });
+
+    const upcomingCamp = registeredCamps.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))[0];
 
     const slides = [
         activeAppt && {
@@ -53,21 +80,9 @@ const ReminderCarousel = ({ onNavigate }) => {
             title: `Dr. ${activeAppt?.doctorName || t('specialist')}`,
             desc: `${activeAppt?.time || ''} • ${activeAppt?.hospitalName || ''}`
         },
-        urgentBlood && {
-            type: 'blood',
-            icon: <Heart size={24} className="text-white animate-pulse" />,
-            color: 'bg-rose-500',
-            glow: 'shadow-rose-500/20',
-            tag: t('urgent_blood_needed'),
-            tagColor: 'text-rose-500',
-            bg: 'bg-white',
-            borderColor: 'border-rose-100',
-            title: t('donate_blood'),
-            desc: `${urgentBlood?.hospitalName || ''} • ${urgentBlood?.bloodType || urgentBlood?.bloodGroup || 'O+'}`
-        },
         activeOrder && {
             type: 'store',
-            icon: <ShoppingBag size={24} className="text-white animate-pulse" />,
+            icon: <Package size={24} className="text-white animate-pulse" />,
             color: 'bg-emerald-500',
             glow: 'shadow-emerald-500/20',
             tag: t('active_delivery'),
@@ -76,6 +91,18 @@ const ReminderCarousel = ({ onNavigate }) => {
             borderColor: 'border-emerald-100',
             title: t('track_order'),
             desc: `${activeOrder?.storeName || ''} • ${activeOrder?.status || ''}`
+        },
+        upcomingCamp && {
+            type: 'camps', // or wherever camps should navigate to
+            icon: <MapPin size={24} className="text-white animate-pulse" />,
+            color: 'bg-blue-500',
+            glow: 'shadow-blue-500/20',
+            tag: t('upcoming_camp') || 'UPCOMING CAMP',
+            tagColor: 'text-blue-500',
+            bg: 'bg-white',
+            borderColor: 'border-blue-100',
+            title: upcomingCamp.title || upcomingCamp.hospitalName || 'Health Camp',
+            desc: `${upcomingCamp.date || ''} • ${upcomingCamp.location || ''}`
         }
     ].filter(Boolean);
 
@@ -88,9 +115,19 @@ const ReminderCarousel = ({ onNavigate }) => {
     }, [slides.length]);
 
     if (slides.length === 0) return (
-        <div className="p-8 text-center glass rounded-[32px] border-dashed border-slate-200">
-            <p className="text-sm font-bold text-muted">No urgent reminders for today</p>
-        </div>
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-6 text-center rounded-[32px] bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-emerald-100/50 flex flex-col items-center justify-center gap-3 shadow-sm"
+        >
+            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-emerald-500 mb-1">
+                <Sun size={24} className="text-emerald-500" strokeWidth={2.5} />
+            </div>
+            <h4 className="text-[16px] font-black text-slate-800 tracking-tight">Have a great day!</h4>
+            <p className="text-[13px] font-bold text-slate-500 max-w-[200px] leading-snug">
+                You have no upcoming medical activities today.
+            </p>
+        </motion.div>
     );
 
     return (
@@ -146,35 +183,19 @@ const ReminderCarousel = ({ onNavigate }) => {
 };
 // TABS CONTENT
 const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => {
-    const { user, allHospitals: authHospitals } = useAuth();
+    const { user, nearbyHospitals: authNearbyHospitals, loadingHospitals: authLoadingHospitals } = useAuth();
     const [hospitals, setHospitals] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [sortBy, setSortBy] = useState('distance'); // 'distance', 'cost', 'rating'
-    const [isLoading, setIsLoading] = useState(true);
     const { t } = useTranslation();
 
+    // Re-sync with auth discovery state
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                // Priority to hospitals synced in AuthContext (Real-time)
-                if (authHospitals && authHospitals.length > 0) {
-                    setHospitals(authHospitals);
-                    setIsLoading(false);
-                    return;
-                }
+        setHospitals(authNearbyHospitals || []);
+    }, [authNearbyHospitals]);
 
-                const data = await getHospitals();
-                setHospitals(data.length > 0 ? data : mockHospitals);
-            } catch (err) {
-                console.error("Firestore error:", err);
-                setHospitals(mockHospitals);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchData();
-    }, [authHospitals]);
+    const isLoading = authLoadingHospitals;
 
     const handleCategorySelect = (catId) => {
         if (selectedCategory === catId) setSelectedCategory(null);
@@ -365,25 +386,68 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
                                         whileInView={{ opacity: 1, y: 0 }}
                                         viewport={{ once: true, margin: "-50px" }}
                                         transition={{ duration: 0.3, delay: index * 0.05 }}
+                                        className="mb-8"
                                     >
+                                        {/* Hospital Section Header */}
+                                        <div className="flex items-center gap-3 mb-4 px-2">
+                                            <div className="w-10 h-10 rounded-xl bg-p-100 flex items-center justify-center text-p-600 shadow-sm">
+                                                <ShieldCheck size={20} strokeWidth={2.5} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none uppercase">{hospital.name}</h3>
+                                                <span className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">{hospital.location} • {hospital.doctors?.length || 0} Specialisms</span>
+                                            </div>
+                                        </div>
+
                                         <HospitalCard
                                             hospital={hospital}
                                             onClick={() => navigate(`/hospital/${hospital.id}`)}
                                         />
+
+                                        {/* Doctors Grouped Under Hospital */}
+                                        {hospital.doctors && hospital.doctors.length > 0 && (
+                                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                                {hospital.doctors.slice(0, 2).map((doctor) => (
+                                                    <div key={doctor.id} className="glass p-3 rounded-2xl border-slate-100 flex items-center gap-3 active:scale-95 transition-all cursor-pointer">
+                                                        <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden shrink-0">
+                                                            <img src={doctor.image || `https://ui-avatars.com/api/?name=${doctor.name}&background=random`} alt={doctor.name} className="w-full h-full object-cover" />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="text-[12px] font-black text-slate-900 truncate uppercase tracking-tight">Dr. {doctor.name.split(' ').pop()}</p>
+                                                            <p className="text-[10px] font-bold text-p-600 truncate uppercase">{doctor.specialty || doctor.specialization}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {hospital.doctors.length > 2 && (
+                                                    <div
+                                                        onClick={() => navigate(`/hospital/${hospital.id}`)}
+                                                        className="glass p-3 rounded-2xl border-slate-100 flex items-center justify-center gap-2 bg-slate-50/50 cursor-pointer active:scale-95 transition-all"
+                                                    >
+                                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">+{hospital.doctors.length - 2} More</p>
+                                                        <ChevronRight size={14} className="text-slate-400" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </motion.div>
                                 ))
                         ) : (
-                            <div className="text-center py-16 px-6 card-premium glass border-dashed">
-                                <div className="bg-p-100 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm">
-                                    <Search size={32} className="text-p-600" strokeWidth={2.5} />
+                            <div className="text-center py-20 px-8 card-premium glass border-dashed">
+                                <div className="bg-rose-50 w-24 h-24 rounded-[32px] flex items-center justify-center mx-auto mb-8 shadow-sm">
+                                    <MapPin size={40} className="text-rose-500" strokeWidth={2} />
                                 </div>
-                                <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '4px' }}>{t('found_no_hospitals')}</h4>
-                                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>{t('try_different_category')}</p>
+                                <h4 style={{ fontSize: '20px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px', letterSpacing: '-0.5px' }}>
+                                    No hospitals available in your area.
+                                </h4>
+                                <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '24px', maxWidth: '280px', margin: '0 auto 32px', fontWeight: '500' }}>
+                                    We couldn't find any vArogra-linked hospitals in {user?.location || 'your area'}. Try updating your location in profile.
+                                </p>
                                 <button
-                                    onClick={() => { setSelectedCategory(null); setSearchTerm(''); }}
-                                    className="px-8 py-3.5 btn-primary rounded-2xl text-sm border-none cursor-pointer"
+                                    onClick={() => navigate('/profile')}
+                                    className="px-8 py-4 btn-primary rounded-2xl text-sm font-bold border-none transition-all active:scale-95 flex items-center gap-2 mx-auto"
                                 >
-                                    {t('reset_discovery')}
+                                    <Settings size={18} />
+                                    Update My Location
                                 </button>
                             </div>
                         )}
@@ -759,6 +823,7 @@ const DeliveryTrackingView = ({ order, onComplete }) => {
 const UpdatesTab = ({ onNavigate }) => {
     const { t } = useTranslation();
     const { appointments, announcements, medicalCamps, registerForCamp } = useAuth();
+    const [activeSubTab, setActiveSubTab] = useState('schedule');
     const [filter, setFilter] = useState('all');
 
     const handleRegister = (id) => {
@@ -776,118 +841,202 @@ const UpdatesTab = ({ onNavigate }) => {
         ? combinedFeed
         : combinedFeed.filter(item => (filter === 'announcements' ? item.feedType === 'announcement' : item.feedType === 'camp'));
 
+    // Featured appointment (first one for demo purposes)
+    const featuredAppt = appointments?.[0];
+    const isDataLoading = !appointments || appointments.length === 0;
+
+    const upcomingBookings = [
+        { id: 1, title: "MRI Scan", date: "Oct 24, 10:00 AM", status: "Confirmed", icon: <Package size={20} /> },
+        { id: 2, title: "Blood Work", date: "Oct 26, 08:30 AM", status: "Pending", icon: <Heart size={20} /> }
+    ];
+
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f8fafc', position: 'relative' }}>
-            <header className="sticky top-0 z-50 bg-white/60 backdrop-blur-xl border-b border-slate-100/50 px-6 pt-12 pb-6">
-                <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/20">
-                        <Megaphone className="text-white" size={28} />
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-black text-slate-900 tracking-tight">Schedule & Feed</h1>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Medical Updates • Appointments</p>
-                    </div>
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: '100vh',
+            backgroundColor: '#0A0E1A',
+            color: 'white',
+            fontFamily: 'Outfit, sans-serif'
+        }}>
+            {/* Header Tabs */}
+            <header className="sticky top-0 z-50 bg-[#0A0E1A]/80 backdrop-blur-xl border-b border-white/5 px-6 pt-12 pb-4">
+                <div className="flex justify-center gap-12">
+                    <button
+                        onClick={() => setActiveSubTab('schedule')}
+                        className={`text-sm font-black uppercase tracking-widest pb-2 transition-all border-b-2 ${activeSubTab === 'schedule' ? 'text-blue-500 border-blue-500' : 'text-slate-500 border-transparent'}`}
+                    >
+                        My Schedule
+                    </button>
+                    <button
+                        onClick={() => setActiveSubTab('feed')}
+                        className={`text-sm font-black uppercase tracking-widest pb-2 transition-all border-b-2 ${activeSubTab === 'feed' ? 'text-blue-500 border-blue-500' : 'text-slate-500 border-transparent'}`}
+                    >
+                        Health Feed
+                    </button>
                 </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-40">
-                <div className="p-6 space-y-10">
-                    {/* Schedule Section */}
-                    <section>
-                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-6 px-2">Confirmed Bookings</h3>
-                        <motion.div layout className="space-y-6">
-                            <AnimatePresence mode="popLayout">
-                                {(appointments || []).length > 0 ? (
-                                    appointments.map(appt => (
-                                        <motion.div
-                                            key={appt.id}
-                                            layout
-                                            initial={{ opacity: 0, y: 20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            exit={{ opacity: 0, scale: 0.95 }}
-                                            className="bg-white p-6 rounded-[32px] border border-slate-50 shadow-sm hover:shadow-md transition-all group"
-                                        >
-                                            <div className="flex justify-between items-start mb-4">
-                                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${appt.status === 'Accepted' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
-                                                    {appt.status || 'Verified'}
-                                                </span>
-                                                <span className="text-[10px] font-bold text-slate-300">ID: {appt.id?.slice(-8).toUpperCase()}</span>
+            <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
+                <AnimatePresence mode="wait">
+                    {activeSubTab === 'schedule' ? (
+                        <motion.div
+                            key="schedule"
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 10 }}
+                            className="p-6 space-y-8"
+                        >
+                            {/* Featured Active Card or Skeleton */}
+                            {isDataLoading ? (
+                                <motion.div className="bg-[#111827] rounded-[32px] p-6 border border-white/10 shadow-2xl animate-pulse">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="flex-1 space-y-3">
+                                            <div className="w-24 h-4 bg-white/10 rounded-full" />
+                                            <div className="w-48 h-8 bg-white/10 rounded-full" />
+                                            <div className="w-32 h-4 bg-white/10 rounded-full" />
+                                        </div>
+                                        <div className="w-20 h-20 rounded-2xl bg-white/5" />
+                                    </div>
+                                    <div className="flex gap-3 mb-8">
+                                        <div className="flex-1 h-12 rounded-2xl bg-white/5" />
+                                        <div className="flex-1 h-12 rounded-2xl bg-white/5" />
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        {[1, 2, 3].map(i => <div key={i} className="h-20 rounded-2xl bg-white/5" />)}
+                                    </div>
+                                </motion.div>
+                            ) : (
+                                <motion.div
+                                    initial={{ y: 20 }}
+                                    animate={{ y: 0 }}
+                                    className="bg-[#111827] rounded-[32px] p-6 border border-white/10 shadow-2xl relative overflow-hidden"
+                                >
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 text-blue-400 mb-1">
+                                                <Clock size={16} fill="currentColor" className="fill-blue-400/20" />
+                                                <span className="text-[13px] font-bold">{featuredAppt.date}, {featuredAppt.time}</span>
                                             </div>
-                                            <h4 className="font-black text-slate-800 text-lg group-hover:text-blue-600 transition-colors">Dr. {appt.doctorName}</h4>
-                                            <p className="text-xs font-bold text-slate-400 mb-6">{appt.hospitalName}</p>
+                                            <h2 className="text-2xl font-black tracking-tight mb-1">Dr. {featuredAppt.doctorName}</h2>
+                                            <p className="text-slate-400 text-sm font-medium">{featuredAppt.specialty || "General Consultation"}</p>
+                                        </div>
+                                        <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-white/10 shrink-0">
+                                            <img src={featuredAppt.image || "https://images.unsplash.com/photo-1559839734-2b71f1536785?auto=format&fit=crop&q=80&w=100"} alt="Doctor" className="w-full h-full object-cover" />
+                                        </div>
+                                    </div>
 
-                                            <div className="grid grid-cols-2 gap-4 pt-6 border-t border-slate-50">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400"><Calendar size={14} /></div>
-                                                    <span className="text-[11px] font-black text-slate-800">{appt.date}</span>
+                                    <div className="flex gap-3 mb-8">
+                                        <button className="flex-1 py-3.5 rounded-2xl bg-white/5 border border-white/10 text-[13px] font-black uppercase tracking-wider text-blue-400 hover:bg-white/10 transition-all">
+                                            Reschedule
+                                        </button>
+                                        <button className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white text-[13px] font-black uppercase tracking-wider shadow-lg shadow-blue-600/20 hover:bg-blue-500 transition-all">
+                                            Details
+                                        </button>
+                                    </div>
+
+                                    <div className="pt-6 border-t border-white/5">
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <CountdownBox value="03" label="Hours" />
+                                            <CountdownBox value="45" label="Mins" />
+                                            <CountdownBox value="12" label="Secs" />
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {/* Upcoming Bookings List */}
+                            <section>
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xl font-black tracking-tight">Upcoming Bookings</h3>
+                                    <button className="text-blue-500 text-[11px] font-black uppercase tracking-widest">View All</button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    {isDataLoading ? (
+                                        [1, 2].map(i => (
+                                            <div key={i} className="bg-[#111827] p-5 rounded-[28px] border border-white/5 h-20 animate-pulse" />
+                                        ))
+                                    ) : (
+                                        upcomingBookings.map((booking, idx) => (
+                                            <motion.div
+                                                key={booking.id}
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: idx * 0.1 }}
+                                                className="bg-[#111827] p-5 rounded-[28px] border border-white/5 flex items-center justify-between group hover:border-blue-500/30 transition-all"
+                                            >
+                                                <div className="flex items-center gap-5">
+                                                    <div className="w-12 h-12 rounded-2xl bg-[#1A2234] flex items-center justify-center text-blue-400 shadow-inner group-hover:scale-110 transition-transform">
+                                                        {booking.icon}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-black text-[16px] tracking-tight">{booking.title}</h4>
+                                                        <p className="text-slate-500 text-[11px] font-bold mt-0.5">{booking.date}</p>
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400"><Clock size={14} /></div>
-                                                    <span className="text-[11px] font-black text-slate-800">{appt.time}</span>
+                                                <div className={`px-4 py-1.5 rounded-full text-[10px] font-black flex items-center gap-2 border ${booking.status === 'Confirmed'
+                                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                                    : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                                                    }`}>
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${booking.status === 'Confirmed' ? 'bg-emerald-400 animate-pulse' : 'bg-orange-400'}`} />
+                                                    {booking.status}
                                                 </div>
-                                            </div>
-                                            {appt.status === 'Accepted' && <AppointmentCountdown targetTime={appt.time} />}
-                                        </motion.div>
-                                    ))
-                                ) : (
-                                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-10 flex flex-col items-center justify-center opacity-40 text-center grayscale">
-                                        <Calendar size={48} className="mb-4 text-slate-300" />
-                                        <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Schedule is Empty</p>
-                                        <button onClick={() => onNavigate('home')} className="mt-4 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:underline">Book an Appointment</button>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
+                                            </motion.div>
+                                        ))
+                                    )}
+                                </div>
+                            </section>
                         </motion.div>
-                    </section>
-
-                    {/* Feed Section */}
-                    <section>
-                        <div className="flex items-center justify-between mb-6 px-2">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Health Intelligence</h3>
-                            <div className="flex gap-2">
+                    ) : (
+                        <motion.div
+                            key="feed"
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -10 }}
+                            className="p-6 space-y-10"
+                        >
+                            {/* Feed Filters */}
+                            <div className="flex gap-2 pb-2 overflow-x-auto no-scrollbar">
                                 {['all', 'announcements', 'camps'].map(f => (
                                     <button
                                         key={f}
                                         onClick={() => setFilter(f)}
-                                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${filter === f ? 'bg-slate-900 text-white shadow-lg' : 'bg-white border border-slate-100 text-slate-400'}`}
+                                        className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap ${filter === f ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-[#111827] border-white/5 text-slate-400'}`}
                                     >
                                         {f}
                                     </button>
                                 ))}
                             </div>
-                        </div>
 
-                        <motion.div layout className="space-y-6">
-                            <AnimatePresence mode="popLayout">
+                            <div className="space-y-6">
                                 {(filteredFeed || []).length > 0 ? (
-                                    filteredFeed.map(item => (
+                                    filteredFeed.map((item, idx) => (
                                         <motion.div
                                             key={item.id}
-                                            layout
-                                            initial={{ opacity: 0, y: 30 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            exit={{ opacity: 0, scale: 0.98 }}
-                                            transition={{ type: "spring", stiffness: 200, damping: 25 }}
-                                            className={`p-8 rounded-[40px] border shadow-sm transition-all hover:shadow-md ${item.feedType === 'camp' ? 'bg-emerald-50/30 border-emerald-100/50' : 'bg-white border-slate-100'}`}
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ delay: idx * 0.05 }}
+                                            className={`p-8 rounded-[40px] border shadow-sm ${item.feedType === 'camp' ? 'bg-[#0F1D1A]/50 border-emerald-500/10' : 'bg-[#111827] border-white/5'}`}
                                         >
                                             <div className="flex justify-between items-start mb-6">
-                                                <div className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest ${item.feedType === 'camp' ? 'bg-emerald-500 text-white shadow-emerald-500/10' : 'bg-blue-600 text-white shadow-blue-600/10'}`}>
+                                                <div className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest ${item.feedType === 'camp' ? 'bg-emerald-500 text-white' : 'bg-blue-600 text-white'}`}>
                                                     {item.feedType === 'camp' ? 'Public Health Event' : item.type || 'Official Update'}
                                                 </div>
-                                                <span className="text-[10px] font-bold text-slate-300">{item.timestamp ? new Date(item.timestamp).toLocaleDateString() : 'Active Now'}</span>
+                                                <span className="text-[10px] font-bold text-slate-500">{item.timestamp ? new Date(item.timestamp).toLocaleDateString() : 'Active Now'}</span>
                                             </div>
-                                            <h4 className="text-xl font-black text-slate-900 mb-2 tracking-tight">{item.title}</h4>
-                                            <p className="text-sm font-bold text-slate-500 leading-relaxed mb-8">{item.description || item.services}</p>
+                                            <h4 className="text-xl font-black text-white mb-2 tracking-tight">{item.title}</h4>
+                                            <p className="text-sm font-bold text-slate-400 leading-relaxed mb-8">{item.description || item.services}</p>
 
-                                            <div className="flex flex-wrap gap-4 p-4 bg-white/40 rounded-3xl border border-white mb-6">
+                                            <div className="flex flex-wrap gap-4 p-4 bg-white/5 rounded-3xl border border-white/5 mb-6">
                                                 <div className="flex items-center gap-2">
                                                     <MapPin size={14} className="text-slate-400" />
-                                                    <span className="text-[11px] font-black text-slate-700">{item.location}</span>
+                                                    <span className="text-[11px] font-black text-slate-300">{item.location}</span>
                                                 </div>
                                                 {item.feedType === 'camp' && (
                                                     <div className="flex items-center gap-2">
                                                         <Calendar size={14} className="text-slate-400" />
-                                                        <span className="text-[11px] font-black text-slate-700">{item.date}</span>
+                                                        <span className="text-[11px] font-black text-slate-300">{item.date}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -903,19 +1052,28 @@ const UpdatesTab = ({ onNavigate }) => {
                                         </motion.div>
                                     ))
                                 ) : (
-                                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-20 flex flex-col items-center justify-center opacity-30 text-center grayscale">
-                                        <Megaphone size={48} className="mb-4 text-slate-300" />
-                                        <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No Active Broadcasts</p>
-                                    </motion.div>
+                                    <div className="py-20 flex flex-col items-center justify-center opacity-30 text-center">
+                                        <Megaphone size={48} className="mb-4 text-slate-600" />
+                                        <p className="text-sm font-black text-slate-500 uppercase tracking-widest">No Active Broadcasts</p>
+                                    </div>
                                 )}
-                            </AnimatePresence>
+                            </div>
                         </motion.div>
-                    </section>
-                </div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );
 };
+
+const CountdownBox = ({ value, label }) => (
+    <div className="flex flex-col items-center">
+        <div className="w-full bg-[#1A2234] border border-white/5 rounded-2xl py-4 flex flex-col items-center justify-center shadow-inner">
+            <span className="text-3xl font-black tracking-tighter text-white">{value}</span>
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 mt-1">{label}</span>
+        </div>
+    </div>
+);
 
 const AIAssistantTab = ({ onNavigate }) => {
     const { t } = useTranslation();
@@ -1412,22 +1570,48 @@ const StoreTab = () => {
                 </div>
 
                 {/* My Active Prescriptions */}
-                <div>
-                    <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>{t('digital_prescriptions')}</h3>
+                <div className="mb-10">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-xl font-black text-main tracking-tight">{t('digital_prescriptions')}</h3>
+                        <button onClick={() => onNavigate('history')} className="text-[10px] font-black text-p-600 uppercase tracking-widest hover:underline">View History</button>
+                    </div>
                     {prescriptions.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {prescriptions.map(appt => (
-                                <div key={appt.prescription.id} style={{ backgroundColor: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #eee' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                        <span style={{ fontWeight: 'bold', fontSize: '14px' }}>{appt.prescription.medicine}</span>
-                                        <span style={{ fontSize: '12px', color: '#10b981' }}>{t('order_now')}</span>
+                        <div className="space-y-4">
+                            {prescriptions.map(px => (
+                                <motion.div
+                                    key={px.id}
+                                    whileHover={{ scale: 1.01 }}
+                                    className="p-6 rounded-[32px] bg-white border border-slate-100 shadow-sm flex items-center gap-6 group"
+                                >
+                                    <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 group-hover:bg-emerald-500 group-hover:text-white transition-all">
+                                        <Package size={24} />
                                     </div>
-                                    <p style={{ fontSize: '12px', color: '#666' }}>{t('by_dr')} {appt.doctorName}</p>
-                                </div>
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-start mb-1">
+                                            <h4 className="font-black text-main text-base line-clamp-1">{px.medicine || 'Prescribed Meds'}</h4>
+                                            <span className="text-[9px] font-bold text-slate-300 ml-2">{px.createdAt ? new Date(px.createdAt?.seconds * 1000).toLocaleDateString() : 'Just Now'}</span>
+                                        </div>
+                                        <p className="text-xs font-bold text-muted mb-2">Dr. {px.doctorName}</p>
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg uppercase tracking-widest border border-emerald-100">
+                                                {px.dosage || 'Regular Dosage'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => onNavigate('pharmacy')}
+                                        className="h-10 px-4 rounded-xl bg-p-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-p-600/20 active:scale-95 transition-all"
+                                    >
+                                        Order
+                                    </button>
+                                </motion.div>
                             ))}
                         </div>
                     ) : (
-                        <p style={{ color: '#9ca3af', fontSize: '14px' }}>{t('no_digital_prescriptions_yet')}</p>
+                        <div className="p-10 rounded-[40px] border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-center">
+                            <Package size={32} className="text-slate-200 mb-4" />
+                            <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">No Active Prescriptions</p>
+                        </div>
                     )}
                 </div>
             </div>
@@ -1835,7 +2019,7 @@ const ProfileTab = ({ user, logout }) => {
 
 const PatientDashboard = () => {
     const navigate = useNavigate();
-    const { user, logout, loading } = useAuth();
+    const { user, logout, loading, appointments } = useAuth();
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState('home');
     const [notif, setNotif] = useState(null);
@@ -1846,6 +2030,45 @@ const PatientDashboard = () => {
     const [showPayment, setShowPayment] = useState(false);
     const [showDetails, setShowDetails] = useState(false);
     const [activeVoiceBooking, setActiveVoiceBooking] = useState(null);
+
+    // 5-Minute Reminder Logic
+    useEffect(() => {
+        if (!appointments || appointments.length === 0) return;
+
+        const checkReminders = () => {
+            const now = new Date();
+            appointments.forEach(appt => {
+                if (appt.status === 'approved' || appt.status === 'Confirmed' || appt.status === 'pending') {
+                    try {
+                        // Very basic time parsing for "HH:MM AM/PM"
+                        const [timeStr, period] = appt.time.split(' ');
+                        const [hoursStr, minutesStr] = timeStr.split(':');
+                        let hours = parseInt(hoursStr);
+                        let minutes = parseInt(minutesStr);
+
+                        if (period === 'PM' && hours < 12) hours += 12;
+                        if (period === 'AM' && hours === 12) hours = 0;
+
+                        const apptDate = new Date();
+                        apptDate.setHours(hours, minutes, 0, 0);
+
+                        const diffMinutes = Math.floor((apptDate - now) / (1000 * 60));
+
+                        if (diffMinutes === 5) {
+                            setNotif(`🔔 Reminder: Your appointment with ${appt.doctorName} starts in 5 minutes!`);
+                            // Persistent for 10 seconds
+                            setTimeout(() => setNotif(null), 10000);
+                        }
+                    } catch (e) {
+                        console.error("Reminder parsing failed:", e);
+                    }
+                }
+            });
+        };
+
+        const interval = setInterval(checkReminders, 60000); // Check every minute
+        return () => clearInterval(interval);
+    }, [appointments]);
 
     const handleVoiceAssistant = () => {
         console.log("SOS Voice Assistant Triggered");
@@ -2005,7 +2228,7 @@ const PatientDashboard = () => {
                         {activeTab === 'updates' && <UpdatesTab onNavigate={setActiveTab} />}
                         {activeTab === 'store' && <StoreTab />}
                         {activeTab === 'profile' && <ProfileTab user={user} logout={() => setShowLogoutConfirm(true)} />}
-                        {activeTab === 'medicine' && <MedicineSearch />}
+
                     </SafeErrorBoundary>
                 </motion.div>
             </AnimatePresence>

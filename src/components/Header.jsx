@@ -121,12 +121,20 @@ const Header = ({ variant = 'default', searchValue, onSearchChange, currentLocat
         );
     }
 
+    const handleLogout = () => {
+        setShowLogoutConfirm(false);
+        logout();
+    };
+
     return (
         <div className="flex justify-between items-center p-5 bg-white border-b border-border/50">
             <img src="/logo.jpg" alt="vArogra Logo" style={{ height: '32px', width: 'auto' }} />
             <div className="flex items-center gap-3">
                 <button className="p-1 rounded-2xl bg-p-50">
                     <UserCircle size={28} color="var(--p-600)" />
+                </button>
+                <button onClick={() => setShowLogoutConfirm(true)} className="p-1 rounded-2xl hover:bg-red-50 text-red-500 transition-colors">
+                    <LogOut size={28} />
                 </button>
             </div>
             <ConfirmModal

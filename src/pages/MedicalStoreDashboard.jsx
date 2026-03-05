@@ -10,6 +10,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import ConfirmModal from '../components/ConfirmModal';
+import { subscribeToOrders, updateOrderStatus } from '../firebase/services';
 
 const billInputStyle = { width: '100%', padding: '16px 20px', borderRadius: '14px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', color: 'var(--text-primary)', outline: 'none', fontSize: '15px', transition: 'all 0.3s' };
 
@@ -324,7 +325,7 @@ const RevenueChart = ({ data = [40, 60, 45, 90, 65, 80, 50], labels = ['Mon', 'T
 };
 
 const MedicalStoreDashboard = () => {
-    const { user, loading, orders, updateOrderStatus, updateProfile, logout, placeOrder } = useAuth();
+    const { user, loading, updateProfile, logout } = useAuth();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('overview');
     const [chartFilter, setChartFilter] = useState('W');
@@ -333,6 +334,16 @@ const MedicalStoreDashboard = () => {
     const [checkoutSuccess, setCheckoutSuccess] = useState(false);
     const [availableItems, setAvailableItems] = useState({});
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const [realOrders, setRealOrders] = useState([]);
+
+    useEffect(() => {
+        if (!user) return;
+        const storeId = user.uid || user.id;
+        const unsub = subscribeToOrders(storeId, (data) => {
+            setRealOrders(data);
+        });
+        return () => unsub();
+    }, [user]);
 
     // Inventory Management State
     const [inventorySearch, setInventorySearch] = useState('');
@@ -535,7 +546,7 @@ const MedicalStoreDashboard = () => {
         );
     }
 
-    const myOrders = (orders || []).filter(o => o.storeName === user?.name || o.storeId === user?.id);
+    const myOrders = realOrders;
 
     // Global Search Logic
     const searchResults = {
@@ -657,6 +668,24 @@ const MedicalStoreDashboard = () => {
     const isAllAvailable = (order) => {
         const items = order.items || ['Amoxicillin 500mg', 'Paracetamol 650mg'];
         return items.every((_, i) => availableItems[order.id]?.[i]);
+    };
+
+    const handleStatusUpdate = async (orderId, newStatus) => {
+        try {
+            await updateOrderStatus(orderId, newStatus);
+            // real-time listener will update the list
+        } catch (error) {
+            console.error("Status update failed:", error);
+            alert("Failed to update status.");
+        }
+    };
+
+    const callDeliveryAgent = (orderId) => {
+        alert(`Requesting delivery partner for Order ${orderId.slice(0, 8)}...`);
+        setTimeout(() => {
+            alert(`Partner Assigned! Agent 'Rajesh' is picking up the order.`);
+            handleStatusUpdate(orderId, 'Preparing');
+        }, 2000);
     };
 
     const handleCheckout = async () => {
@@ -1128,7 +1157,7 @@ const MedicalStoreDashboard = () => {
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {myOrders.slice(0, 3).map((order) => (
+                                                    {myOrders.slice(0, 5).map((order) => (
                                                         <tr key={order.id}>
                                                             <td style={{ ...tdStyle, paddingLeft: 0 }}>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1139,7 +1168,9 @@ const MedicalStoreDashboard = () => {
                                                                 </div>
                                                             </td>
                                                             <td style={tdStyle}>
-                                                                {Array.isArray(order.items) ? order.items.join(', ') : (order.medication || 'Check Order')}
+                                                                <div style={{ fontSize: '12px', color: '#64748b', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                    {Array.isArray(order.items) ? order.items.join(', ') : (order.medication || 'Check Order')}
+                                                                </div>
                                                             </td>
                                                             <td style={tdStyle}>
                                                                 <StatusBadge status={order.status} />
@@ -1237,10 +1268,16 @@ const MedicalStoreDashboard = () => {
                                         {myOrders.filter(o => filter === 'all' || o.status.toLowerCase() === filter).map(order => (
                                             <div key={order.id} style={{ padding: '24px', backgroundColor: '#f8fafc', borderRadius: '20px', border: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                 <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                                                    <div style={{ width: '48px', height: '48px', backgroundColor: 'white', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}><Truck size={24} /></div>
+                                                    <div style={{ width: '48px', height: '48px', backgroundColor: 'white', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}><ShoppingBag size={24} /></div>
                                                     <div>
-                                                        <p style={{ fontWeight: '800', fontSize: '16px' }}>{order.id}</p>
-                                                        <p style={{ fontSize: '13px', color: '#64748b' }}>{order.userName} • {order.address || 'Standard Delivery'}</p>
+                                                        <p style={{ fontWeight: '800', fontSize: '16px' }}>Order #{order.id.slice(-6).toUpperCase()}</p>
+                                                        <p style={{ fontSize: '13px', color: '#64748b' }}>{order.userName || order.patientName} • {Array.isArray(order.items) ? order.items.length : 1} Items</p>
+                                                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                                                            {order.status === 'pending' && <button onClick={() => handleStatusUpdate(order.id, 'Confirmed')} style={{ padding: '6px 12px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontSize: '11px', fontWeight: '800', cursor: 'pointer' }}>ACCEPT</button>}
+                                                            {order.status === 'Confirmed' && <button onClick={() => callDeliveryAgent(order.id)} style={{ padding: '6px 12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '11px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}><Truck size={12} /> CALL AGENT</button>}
+                                                            {order.status === 'Preparing' && <button onClick={() => handleStatusUpdate(order.id, 'Out for delivery')} style={{ padding: '6px 12px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '8px', fontSize: '11px', fontWeight: '800', cursor: 'pointer' }}>DISPATCH</button>}
+                                                            {order.status === 'Out for delivery' && <button onClick={() => handleStatusUpdate(order.id, 'Delivered')} style={{ padding: '6px 12px', backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: '8px', fontSize: '11px', fontWeight: '800', cursor: 'pointer' }}>COMPLETE</button>}
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div style={{ textAlign: 'right' }}>

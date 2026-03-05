@@ -100,139 +100,48 @@ export const registerMedicalStore = (email, password, name, extraData) =>
 export const loginUser = async (email, password) => {
     if (!auth) {
         console.warn("Auth not initialized. Simulating login.");
-        return {
-            uid: 'demo-user-123',
-            email,
-            displayName: 'Demo User',
-            role: 'patient',
-            photoURL: null
-        };
+        return { uid: 'demo-user-123', email, displayName: 'Demo User', role: 'patient' };
     }
     try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-
-        // Try to get Firestore profile, but don't block login if it fails
-        let userProfile = null;
-        try {
-            userProfile = await getUserProfile(user.uid);
-        } catch (firestoreError) {
-            console.warn("Could not fetch user profile from Firestore (possibly offline). Continuing with Auth data.", firestoreError.message);
-        }
-
-        // If no profile found but auth succeeded, allow login with basic data
-        // (Don't block login just because Firestore is temporarily unreachable)
-        const userData = {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-            role: 'patient',
-            ...(userProfile || {})
-        };
-
-        // Log login event (fire-and-forget, don't block login)
-        logLoginEvent(userData).catch(err => console.warn("Login logging failed:", err.message));
-
-        return userData;
+        return userCredential.user;
     } catch (error) {
         throw error;
     }
 };
 
-// Social Logins
-export const signInWithGoogle = async (requestedRole = 'patient') => {
+// Social Logins - All these resolve IMMEDIATELY after popup succeeds
+export const signInWithGoogle = async () => {
     try {
         const result = await signInWithPopup(auth, googleProvider);
-        const user = result.user;
-
-        // Try to get Firestore profile, but don't block login if offline
-        let userProfile = null;
-        try {
-            userProfile = await getUserProfile(user.uid);
-        } catch (firestoreError) {
-            console.warn("Could not fetch Google user profile from Firestore.", firestoreError.message);
-        }
-
-        const userData = {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-            role: userProfile?.role || requestedRole,
-            ...(userProfile || {})
-        };
-        logLoginEvent(userData).catch(err => console.warn("Login logging failed:", err.message));
-        return userData;
+        return result.user;
     } catch (error) {
         throw error;
     }
 };
 
-export const signInWithApple = async (requestedRole = 'patient') => {
+export const signInWithApple = async () => {
     try {
         const result = await signInWithPopup(auth, appleProvider);
-        const user = result.user;
-        let userProfile = null;
-        try {
-            userProfile = await getUserProfile(user.uid);
-        } catch (firestoreError) {
-            console.warn("Could not fetch Apple user profile from Firestore.", firestoreError.message);
-        }
-        return {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-            role: userProfile?.role || requestedRole,
-            ...(userProfile || {})
-        };
+        return result.user;
     } catch (error) {
         throw error;
     }
 };
 
-export const signInWithX = async (requestedRole = 'patient') => {
+export const signInWithX = async () => {
     try {
         const result = await signInWithPopup(auth, xProvider);
-        const user = result.user;
-        let userProfile = null;
-        try {
-            userProfile = await getUserProfile(user.uid);
-        } catch (firestoreError) {
-            console.warn("Could not fetch X user profile from Firestore.", firestoreError.message);
-        }
-        return {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-            role: userProfile?.role || requestedRole,
-            ...(userProfile || {})
-        };
+        return result.user;
     } catch (error) {
         throw error;
     }
 };
 
-export const signInWithFacebook = async (requestedRole = 'patient') => {
+export const signInWithFacebook = async () => {
     try {
         const result = await signInWithPopup(auth, facebookProvider);
-        const user = result.user;
-        let userProfile = null;
-        try {
-            userProfile = await getUserProfile(user.uid);
-        } catch (firestoreError) {
-            console.warn("Could not fetch Facebook user profile from Firestore.", firestoreError.message);
-        }
-        return {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-            role: userProfile?.role || requestedRole,
-            ...(userProfile || {})
-        };
+        return result.user;
     } catch (error) {
         throw error;
     }

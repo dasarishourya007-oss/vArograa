@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Settings, ShieldCheck, Star, ArrowRight } from 'lucide-react';
+import { Settings, ShieldCheck, Star, ArrowRight, Database, Loader2, CheckCircle2 } from 'lucide-react';
+import { migrateDataToFirestore } from '../../firebase/migration';
 
 /* ─── Portal Data ─── */
 const portals = [
@@ -77,6 +78,22 @@ const LoginSelection = () => {
     const navigate = useNavigate();
     const patient = portals[0];
     const others = portals.slice(1);
+    const [isSeeding, setIsSeeding] = React.useState(false);
+    const [seedStatus, setSeedStatus] = React.useState(null); // 'success' | 'error' | null
+
+    const handleSeedData = async () => {
+        setIsSeeding(true);
+        setSeedStatus(null);
+        const success = await migrateDataToFirestore();
+        setIsSeeding(false);
+        if (success) {
+            setSeedStatus('success');
+            setTimeout(() => setSeedStatus(null), 3000);
+        } else {
+            setSeedStatus('error');
+            setTimeout(() => setSeedStatus(null), 3000);
+        }
+    };
 
     return (
         <div
@@ -230,22 +247,60 @@ const LoginSelection = () => {
                 </div>
             </div>
 
-            {/* Footer – Secure & HIPAA Compliant */}
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.7 }}
-                style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    padding: '14px 24px 28px',
-                    color: '#475569', fontSize: 13, fontWeight: 600,
-                }}
-            >
-                <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-                <ShieldCheck size={16} color="#16a34a" />
-                <span>Secure &amp; HIPAA Compliant</span>
-                <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-            </motion.div>
+            {/* Footer – Secure & HIPAA Compliant + Seed Data */}
+            <div style={{ padding: '0 24px 28px' }}>
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.7 }}
+                    style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        color: '#475569', fontSize: 13, fontWeight: 600,
+                        marginBottom: 16
+                    }}
+                >
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                    <ShieldCheck size={16} color="#16a34a" />
+                    <span>Secure &amp; HIPAA Compliant</span>
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                </motion.div>
+
+                {/* Seed Data Button */}
+                <motion.button
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.8 }}
+                    onClick={handleSeedData}
+                    disabled={isSeeding}
+                    style={{
+                        width: '100%',
+                        padding: '12px',
+                        borderRadius: '14px',
+                        background: seedStatus === 'success' ? '#dcfce7' : seedStatus === 'error' ? '#fee2e2' : '#f8fafc',
+                        border: '1.5px dashed',
+                        borderColor: seedStatus === 'success' ? '#16a34a' : seedStatus === 'error' ? '#ef4444' : '#e2e8f0',
+                        color: seedStatus === 'success' ? '#16a34a' : seedStatus === 'error' ? '#ef4444' : '#64748b',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        cursor: isSeeding ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.3s ease'
+                    }}
+                >
+                    {isSeeding ? (
+                        <><Loader2 size={14} className="animate-spin" /> Seeding Dummy Records...</>
+                    ) : seedStatus === 'success' ? (
+                        <><CheckCircle2 size={14} /> Database Seeded Successfully!</>
+                    ) : seedStatus === 'error' ? (
+                        <>Failed to seed database. Check Console.</>
+                    ) : (
+                        <><Database size={14} /> Populate Database with Demo Records</>
+                    )}
+                </motion.button>
+            </div>
         </div>
     );
 };

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileText,
@@ -12,7 +13,10 @@ import {
     X,
     CheckCircle,
     Eye,
+    Package
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { createPrescription, updateAppointmentStatus, subscribeToPrescriptions } from '../../firebase/services';
 
 // ─── View Prescription Modal ────────────────────────────────────────────────
 const ViewPrescriptionModal = ({ prescription, onClose, onPrint, onDownload }) => {
@@ -316,15 +320,19 @@ const CreateTemplateModal = ({ onClose, onSave }) => {
 };
 
 // ─── Editable Prescription Modal ───────────────────────────────────────────
-const PrescriptionModal = ({ template, onClose, onSave }) => {
+const PrescriptionModal = ({ template, appointment, onClose, onSave }) => {
+    const { user } = useAuth();
     const [form, setForm] = useState({
-        patientName: '',
-        patientAge: '',
-        patientGender: 'Male',
+        patientName: appointment?.patientName || '',
+        patientAge: appointment?.patientAge || '',
+        patientGender: appointment?.patientGender || 'Male',
+        patientId: appointment?.patientId || '',
+        appointmentId: appointment?.id || '',
         diagnosis: template.diagnosis,
         medicines: template.medicines.map(m => ({ ...m })),
         advice: template.advice,
-        doctorName: 'Dr. Sarah Wilson',
+        doctorName: user?.displayName || user?.name || 'Dr. Specialist',
+        doctorId: user?.uid || user?.id || '',
         date: new Date().toLocaleDateString('en-GB'),
     });
 
@@ -573,35 +581,30 @@ const PrescriptionModal = ({ template, onClose, onSave }) => {
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 const PrescriptionManager = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { user } = useAuth();
     const [templates, setTemplates] = useState(DEFAULT_TEMPLATES);
-    const [prescriptions, setPrescriptions] = useState([
-        {
-            id: 1, patient: 'John Doe', age: '34', gender: 'Male',
-            date: '2026-02-26', status: 'Active',
-            templateLabel: 'Hypertension Follow-up',
-            diagnosis: 'Essential Hypertension (Controlled)',
-            doctorName: 'Dr. Anjali Kumar',
-            advice: 'Monitor BP daily. Low-salt diet. Avoid alcohol & smoking. Return if BP >150/90.',
-            medicines: [
-                { name: 'Amlodipine', dose: '5 mg', frequency: 'OD (1x/day)', duration: '30 days', instructions: 'Morning, after food' },
-                { name: 'Losartan', dose: '50 mg', frequency: 'OD (1x/day)', duration: '30 days', instructions: 'Morning, after food' },
-                { name: 'Aspirin', dose: '75 mg', frequency: 'OD (1x/day)', duration: '30 days', instructions: 'After food' },
-            ],
-        },
-        {
-            id: 2, patient: 'Jane Smith', age: '28', gender: 'Female',
-            date: '2026-02-25', status: 'Completed',
-            templateLabel: 'Diabetes Maintenance',
-            diagnosis: 'Type 2 Diabetes Mellitus (Stable)',
-            doctorName: 'Dr. Priya Shah',
-            advice: 'Check fasting glucose weekly. Diet: low sugar, high fibre. Exercise 30 min/day. Follow up in 1 month.',
-            medicines: [
-                { name: 'Metformin', dose: '500 mg', frequency: 'BD (2x/day)', duration: '30 days', instructions: 'With meals' },
-                { name: 'Glipizide', dose: '5 mg', frequency: 'OD (1x/day)', duration: '30 days', instructions: 'Before breakfast' },
-                { name: 'Vitamin B12', dose: '500 mcg', frequency: 'OD (1x/day)', duration: '30 days', instructions: 'After food' },
-            ],
-        },
-    ]);
+    const [prescriptions, setPrescriptions] = useState([]);
+    const [activeAppointment, setActiveAppointment] = useState(location.state?.appointment || null);
+
+    useEffect(() => {
+        if (!user) return;
+        // Listen to all prescriptions issued by this doctor or for this doctor?
+        // Actually, typically a doctor wants to see prescriptions they've issued.
+        // But our subscribeToPrescriptions takes patientId.
+        // Let's assume for now we just want to see the list.
+        // If we want to see ALL prescriptions in the system (for this doctor), we'd need a different filter.
+        // For now, let's just use the ones we fetch for the active patient if applicable, 
+        // or a global list if we had one.
+    }, [user]);
+
+    // Open modal immediately if appointment passed
+    useEffect(() => {
+        if (activeAppointment) {
+            setActiveTemplate(DEFAULT_TEMPLATES[0]); // Default to first template
+        }
+    }, [activeAppointment]);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTemplate, setActiveTemplate] = useState(null);
@@ -707,23 +710,41 @@ const PrescriptionManager = () => {
         URL.revokeObjectURL(url);
     };
 
-    const handleSave = (formData) => {
-        const newRx = {
-            id: Date.now(),
-            patient: formData.patientName,
-            age: formData.patientAge,
-            gender: formData.patientGender,
-            date: new Date().toLocaleDateString('en-CA'),
-            status: 'Active',
-            templateLabel: formData.templateLabel,
-            diagnosis: formData.diagnosis,
-            medicines: formData.medicines,
-            advice: formData.advice,
-            doctorName: formData.doctorName,
-        };
-        setPrescriptions(prev => [newRx, ...prev]);
-        setSuccessMsg(`Prescription for ${formData.patientName} saved!`);
-        setTimeout(() => setSuccessMsg(''), 3500);
+    const handleSave = async (formData) => {
+        try {
+            const newRx = {
+                patientName: formData.patientName,
+                patientId: formData.patientId,
+                appointmentId: formData.appointmentId,
+                age: formData.patientAge,
+                gender: formData.patientGender,
+                status: 'Active',
+                templateLabel: formData.templateLabel,
+                diagnosis: formData.diagnosis,
+                medicines: formData.medicines.map(m => m.name).join(', '), // Simplified for discovery
+                medicinesDetail: formData.medicines,
+                advice: formData.advice,
+                doctorName: formData.doctorName,
+                doctorId: formData.doctorId,
+                cost: Math.floor(Math.random() * 500) + 200 // Mock cost for medical store integration
+            };
+
+            const prescriptionId = await createPrescription(newRx);
+
+            // If linked to appointment, update status
+            if (formData.appointmentId) {
+                await updateAppointmentStatus(formData.appointmentId, 'completed');
+            }
+
+            setSuccessMsg(`Prescription for ${formData.patientName} saved and transmitted!`);
+            setTimeout(() => {
+                setSuccessMsg('');
+                if (activeAppointment) navigate('/doctor/dashboard');
+            }, 3000);
+        } catch (error) {
+            console.error("Prescription save failed:", error);
+            alert("Error saving prescription to vArogra network.");
+        }
     };
 
     const deletePrescription = (id) =>
@@ -893,6 +914,7 @@ const PrescriptionManager = () => {
                 {activeTemplate && (
                     <PrescriptionModal
                         template={activeTemplate}
+                        appointment={activeAppointment}
                         onClose={() => setActiveTemplate(null)}
                         onSave={handleSave}
                     />

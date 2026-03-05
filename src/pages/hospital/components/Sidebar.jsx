@@ -26,6 +26,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
         { title: 'Dashboard', icon: <LayoutDashboard size={22} />, path: '/hospital' },
         { title: 'Availability', icon: <Users size={22} />, path: '/hospital/availability' },
         { title: 'Appointments', icon: <CalendarClock size={22} />, path: '/hospital/appointments' },
+        { title: 'Doctors', icon: <Users size={22} />, path: '/hospital/doctors' },
         { title: 'Consultations', icon: <MonitorPlay size={22} />, path: '/hospital/live' },
         { title: 'Blood Bank', icon: <Droplets size={22} />, path: '/hospital/blood-bank' },
         { title: 'Analytics', icon: <FileBarChart size={22} />, path: '/hospital/reports' },

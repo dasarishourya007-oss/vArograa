@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { db } from '../../firebase/config';
+
 import AuthLayout from '../../components/AuthLayout';
 import Input from '../../components/Input';
 import Button from '../../components/Button';
@@ -17,8 +20,8 @@ const DoctorRegister = () => {
     const [name, setName] = useState('');
     const [specialty, setSpecialty] = useState('');
     const [doctorType, setDoctorType] = useState('specialist'); // 'specialist' | 'rmp'
-    const [hospitalCode, setHospitalCode] = useState('');
-    const [hospitalName, setHospitalName] = useState('');
+
+    const [hospitalId, setHospitalId] = useState('');
     const [phone, setPhone] = useState('');
     const [birthDate, setBirthDate] = useState('');
     const [age, setAge] = useState('');
@@ -42,6 +45,8 @@ const DoctorRegister = () => {
         }
     }, [birthDate]);
 
+    // ... inside handleRegister
+
     const handleRegister = async (e) => {
         e.preventDefault();
 
@@ -51,8 +56,32 @@ const DoctorRegister = () => {
         }
 
         try {
-            // 1. Register in Firebase Auth and Firestore
-            const firebaseUser = await registerUser(email, password, name, 'doctor');
+            // 0. Verify Hospital Base ID in Firestore (use getDocs to avoid mobile offline bug)
+            let targetId = hospitalId.trim();
+            const q = query(collection(db, 'hospitals'), where('id', '==', targetId));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                setError("No hospital found with this Base ID. Please check and try again.");
+                return;
+            }
+
+            const hospitalData = querySnapshot.docs[0].data();
+            const actualHospitalId = hospitalData.id || querySnapshot.docs[0].id;
+
+            // 1. Register in Firebase Auth and Firestore with extra data
+            const extraData = {
+                specialty: doctorType === 'specialist' ? specialty : 'RMP General',
+                doctorType,
+                hospitalName: hospitalData.name, // Use the official name
+                hospitalId: actualHospitalId,
+                phone,
+                birthDate,
+                age,
+                status: 'pending' // Requires hospital approval
+            };
+
+            const firebaseUser = await registerUser(email, password, name, 'doctor', extraData);
 
             // 2. Upload Photo
             const downloadURL = await uploadProfilePhoto(firebaseUser.uid, image, (progress) => {
@@ -146,19 +175,14 @@ const DoctorRegister = () => {
                             required
                         />
                         <Input
-                            label="Hospital Name (Must match Code)"
-                            placeholder="City Care Hospital"
-                            value={hospitalName}
-                            onChange={(e) => setHospitalName(e.target.value)}
+                            label="Hospital Base ID"
+                            type="text"
+                            placeholder="Enter the ID provided by your hospital"
+                            value={hospitalId}
+                            onChange={(e) => setHospitalId(e.target.value)}
                             required
                         />
-                        <Input
-                            label="Hospital Code to Join"
-                            placeholder="HOSP-XXXX"
-                            value={hospitalCode}
-                            onChange={(e) => setHospitalCode(e.target.value)}
-                            required
-                        />
+
                         <div style={{ display: 'flex', gap: '12px' }}>
                             <div style={{ flex: 2 }}>
                                 <Input

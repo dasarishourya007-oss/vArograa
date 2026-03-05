@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     UserPlus,
     Search,
@@ -10,10 +10,13 @@ import {
     CalendarCheck,
     Activity,
     CheckCircle,
-    AlertTriangle
+    AlertTriangle,
+    UserCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAppointments } from '../context/AppointmentContext';
+import { subscribeToAppointments, updateAppointmentStatus } from '../../../firebase/services';
+import { db, auth } from '../../../firebase/config';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
 const HistoricalItem = ({ item, idx }) => (
     <motion.div
@@ -34,128 +37,174 @@ const HistoricalItem = ({ item, idx }) => (
             <CheckCircle size={18} />
         </div>
         <div style={{ flex: 1 }}>
-            <h5 style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--text-primary)' }}>{item.name}</h5>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.doctor} • Completed at {item.completedAt}</p>
+            <h5 style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--text-primary)' }}>{item.patientName || item.name}</h5>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.doctorName || item.doctor} • Completed at {new Date(item.updatedAt?.seconds * 1000).toLocaleTimeString()}</p>
         </div>
         <div style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-muted)', background: 'var(--bg-main)', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-glass)' }}>
-            {item.token}
+            DONE
         </div>
     </motion.div>
 );
 
-const QueueItem = ({ item, idx, onReschedule, onBook, isEmergency }) => (
-    <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: idx * 0.1 }}
-        whileHover={{ x: 5, background: 'rgba(59, 130, 246, 0.05)' }}
-        style={{
-            display: 'flex',
-            alignItems: 'center',
-            padding: '1.25rem 2rem',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border-glass)',
-            marginBottom: '1rem',
-            background: 'var(--bg-surface)',
-            transition: 'var(--transition)'
-        }}
-    >
-        <div style={{
-            minWidth: '60px',
-            height: '60px',
-            background: 'linear-gradient(135deg, var(--brand-dark), var(--brand-primary))',
-            color: 'white',
-            borderRadius: 'var(--radius-lg)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: '800',
-            fontSize: '1.1rem',
-            marginRight: '2rem',
-            boxShadow: 'var(--shadow-md)'
-        }}>
-            {item.token}
-        </div>
-        <div style={{ flex: 1 }}>
-            <h4 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '4px', color: 'var(--text-primary)' }}>{item.name}</h4>
-            <div style={{ display: 'flex', gap: '15px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <CalendarCheck size={14} /> {item.doctor}
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <Clock size={14} /> {item.time}
-                </span>
+const QueueItem = ({ item, idx, doctors, onAssign, isEmergency }) => {
+    const [selectedDoc, setSelectedDoc] = useState('');
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: idx * 0.1 }}
+            whileHover={{ x: 5, background: 'rgba(59, 130, 246, 0.05)' }}
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '1.25rem 2rem',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--border-glass)',
+                marginBottom: '1rem',
+                background: 'var(--bg-surface)',
+                transition: 'var(--transition)'
+            }}
+        >
+            <div style={{
+                minWidth: '60px',
+                height: '60px',
+                background: 'linear-gradient(135deg, var(--brand-dark), var(--brand-primary))',
+                color: 'white',
+                borderRadius: 'var(--radius-lg)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: '800',
+                fontSize: '1.1rem',
+                marginRight: '2rem',
+                boxShadow: 'var(--shadow-md)'
+            }}>
+                {idx + 1}
             </div>
-        </div>
-        <div style={{ textAlign: 'right', marginRight: '2.5rem' }}>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '1px' }}>Est. Arrival</p>
-            <p style={{ fontWeight: '800', color: 'var(--warning)', fontSize: '1.1rem' }}>{item.est}</p>
-        </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-            <motion.button
-                title="Not now, book later"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => onReschedule(item.name)}
-                className="btn-ghost"
-                style={{ padding: '10px', borderRadius: '10px' }}
-            >
-                <ArrowUpRight size={20} />
-            </motion.button>
-            <motion.button
-                title="Book Appointment"
-                whileHover={!isEmergency ? { scale: 1.05 } : {}}
-                whileTap={!isEmergency ? { scale: 0.95 } : {}}
-                onClick={() => !isEmergency && onBook(item.name)}
-                className="btn-premium"
-                disabled={isEmergency}
-                style={{ padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isEmergency ? 'not-allowed' : 'pointer' }}
-            >
-                <ArrowRight size={20} />
-            </motion.button>
-        </div>
-    </motion.div>
-);
+            <div style={{ flex: 1 }}>
+                <h4 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '4px', color: 'var(--text-primary)' }}>{item.patientName || item.name}</h4>
+                <div style={{ display: 'flex', gap: '15px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Clock size={14} /> {item.time || 'ASAP'}
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--brand-primary)', fontWeight: '700' }}>
+                        {item.type || 'General'} Appointment
+                    </span>
+                </div>
+            </div>
+
+            <div style={{ marginRight: '1.5rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <select
+                    value={selectedDoc}
+                    onChange={(e) => setSelectedDoc(e.target.value)}
+                    style={{
+                        padding: '8px 12px',
+                        borderRadius: '10px',
+                        background: 'var(--bg-main)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border-glass)',
+                        fontSize: '0.85rem'
+                    }}
+                >
+                    <option value="">Assign Doctor...</option>
+                    {doctors.map(doc => (
+                        <option key={doc.id} value={doc.id}>{doc.name} ({doc.specialization})</option>
+                    ))}
+                </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+                <motion.button
+                    title="Approve & Dispatch"
+                    whileHover={!isEmergency && selectedDoc ? { scale: 1.05 } : {}}
+                    whileTap={!isEmergency && selectedDoc ? { scale: 0.95 } : {}}
+                    onClick={() => !isEmergency && selectedDoc && onAssign(item.id, selectedDoc)}
+                    className="btn-premium"
+                    disabled={isEmergency || !selectedDoc}
+                    style={{
+                        padding: '12px 20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        cursor: (isEmergency || !selectedDoc) ? 'not-allowed' : 'pointer',
+                        opacity: (isEmergency || !selectedDoc) ? 0.5 : 1
+                    }}
+                >
+                    <UserCheck size={18} /> Approve
+                </motion.button>
+            </div>
+        </motion.div>
+    );
+};
 
 const Appointments = () => {
-    const { 
-        pendingApprovals: activeQueue, 
-        approveAppointment, 
-        addPendingAppointment,
-        completedHistory: historicalPatients 
-    } = useAppointments();
-
+    const [pendingQueue, setPendingQueue] = useState([]);
+    const [history, setHistory] = useState([]);
+    const [doctors, setDoctors] = useState([]);
     const [isEmergency, setIsEmergency] = useState(false);
     const [showLogs, setShowLogs] = useState(false);
 
-    const handleReschedule = (patient) => {
-        alert(`vArogra Booking: Rescheduling requested for ${patient}. Suggesting alternative time slots...`);
+    const hospitalId = auth?.currentUser?.uid || 'demo-hospital-id';
+
+    useEffect(() => {
+        // Fetch Doctors for assignment
+        const fetchDoctors = async () => {
+            if (!db) return;
+            const q = query(collection(db, "doctors"), where("hospitalId", "==", hospitalId));
+            const snap = await getDocs(q);
+            setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        };
+        fetchDoctors();
+
+        // Subscribe to Pending Appointments
+        const unsubPending = subscribeToAppointments({ hospitalId, status: 'pending' }, setPendingQueue);
+
+        // Subscribe to Completed Appointments
+        const unsubHistory = subscribeToAppointments({ hospitalId, status: 'completed' }, (data) => setHistory(data.slice(0, 10)));
+
+        return () => {
+            unsubPending();
+            unsubHistory();
+        };
+    }, [hospitalId]);
+
+    const handleAssign = async (appointmentId, doctorId) => {
+        const doc = doctors.find(d => d.id === doctorId);
+        try {
+            await updateAppointmentStatus(appointmentId, 'approved', {
+                doctorId: doctorId,
+                doctorName: doc.name
+            });
+            alert(`vArogra ORCHESTRATION: Specialist ${doc.name} assigned to mission.`);
+        } catch (error) {
+            console.error("Error assigning doctor:", error);
+        }
     };
 
-    const handleBooking = (id, patient) => {
-        approveAppointment(id);
-        alert(`vArogra Confirmation: Appointment for ${patient} successfully booked. Ticket Transmission initialized.`);
-    };
-
-    const handleAssignToken = () => {
+    const handleAssignToken = async () => {
         if (isEmergency) {
             alert("COMMAND DENIED: Orchestration is currently under PROTOCOL ALPHA lockdown.");
             return;
         }
-        const nextId = activeQueue.length > 0 ? Math.max(...activeQueue.map(t => t.id)) + 1 : 1;
-        const lastTokenStr = activeQueue.length > 0 ? activeQueue[activeQueue.length - 1].token : 'T-041';
-        const lastTokenNum = parseInt(lastTokenStr.split('-')[1]) || 41;
-        const newToken = {
-            id: nextId,
-            token: `T-0${lastTokenNum + 1}`,
-            name: 'Generic Patient',
-            doctor: 'Dr. Michael Chen',
-            time: 'ASAP',
-            status: 'Waiting',
-            est: '10 min'
-        };
-        addPendingAppointment(newToken);
-        alert(`vArogra PROTOCOL: New token ${newToken.token} dispatched for processing.`);
+        try {
+            const appointmentData = {
+                hospitalId,
+                patientName: 'Generic Walk-in',
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                status: 'pending',
+                type: 'Walk-in'
+            };
+            const id = await addDoc(collection(db, "appointments"), {
+                ...appointmentData,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+            alert(`vArogra PROTOCOL: New manual entry ${id} dispatched for processing.`);
+        } catch (error) {
+            console.error("Error creating manual appointment:", error);
+        }
     };
 
     const triggerEmergency = () => {
@@ -177,7 +226,7 @@ const Appointments = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '3.5rem' }}>
                 <div>
                     <h2 style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1.5px', marginBottom: '0.5rem' }}>Appointment Orchestration</h2>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Managing patient flow and token assignment under hospital protocol.</p>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Managing patient flow and specialist assignment under hospital protocol.</p>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                     <motion.button
@@ -208,16 +257,16 @@ const Appointments = () => {
                             filter: isEmergency ? 'grayscale(1)' : 'none'
                         }}
                     >
-                        Assign New Token
+                        New Manual Token
                     </motion.button>
                 </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '3.5rem' }}>
                 {[
-                    { label: 'Total Assigned', val: activeQueue.length + (isEmergency ? 0 : 152), icon: <ClipboardList />, color: 'var(--brand-primary)' },
-                    { label: 'In Consultation', val: isEmergency ? 'TRAUMA ACTIVE' : '18', icon: <UserPlus />, color: 'var(--brand-teal)' },
-                    { label: 'Pending Arrival', val: isEmergency ? '0' : activeQueue.length * 14, icon: <Clock />, color: 'var(--warning)' }
+                    { label: 'Active Specialists', val: doctors.length, icon: <UserCheck />, color: 'var(--brand-teal)' },
+                    { label: 'Pending Approvals', val: pendingQueue.length, icon: <ClipboardList />, color: 'var(--brand-primary)' },
+                    { label: 'Network status', val: 'ENCRYPTED', icon: <Activity />, color: 'var(--success)' }
                 ].map((s, idx) => (
                     <div key={idx} className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', background: 'var(--bg-surface)' }}>
                         <div style={{ padding: '12px', borderRadius: 'var(--radius-lg)', background: 'rgba(59, 130, 246, 0.05)', color: s.color }}>
@@ -225,7 +274,7 @@ const Appointments = () => {
                         </div>
                         <div>
                             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</p>
-                            <h4 style={{ fontSize: s.val.length > 8 ? '1.1rem' : '1.8rem', fontWeight: '900' }}>{s.val}</h4>
+                            <h4 style={{ fontSize: String(s.val).length > 8 ? '1.1rem' : '1.8rem', fontWeight: '900' }}>{s.val}</h4>
                         </div>
                     </div>
                 ))}
@@ -244,9 +293,16 @@ const Appointments = () => {
                     </div>
                     <div>
                         <AnimatePresence>
-                            {activeQueue.length > 0 ? (
-                                activeQueue.map((item, i) => (
-                                    <QueueItem key={item.id} item={item} idx={i} onReschedule={handleReschedule} onBook={() => handleBooking(item.id, item.name)} isEmergency={isEmergency} />
+                            {pendingQueue.length > 0 ? (
+                                pendingQueue.map((item, i) => (
+                                    <QueueItem
+                                        key={item.id}
+                                        item={item}
+                                        idx={i}
+                                        doctors={doctors}
+                                        onAssign={handleAssign}
+                                        isEmergency={isEmergency}
+                                    />
                                 ))
                             ) : (
                                 <motion.div
@@ -338,7 +394,7 @@ const Appointments = () => {
                                                 <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.25rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
                                                     Session Audit • {new Date().toLocaleDateString()}
                                                 </h4>
-                                                {historicalPatients.map((p, i) => (
+                                                {history.map((p, i) => (
                                                     <HistoricalItem key={p.id} item={p} idx={i} />
                                                 ))}
                                             </div>
@@ -361,21 +417,21 @@ const Appointments = () => {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                             {[
-                                { name: 'Surgical OPD', val: 85, color: 'var(--critical)' },
-                                { name: 'Emergency Trauma', val: 30, color: 'var(--success)' },
-                                { name: 'Pediatric Ward', val: 65, color: 'var(--warning)' }
+                                { name: 'Assigned Missions', val: 'ACTIVE', color: 'var(--brand-primary)' },
+                                { name: 'Emergency Nodes', val: 'STABLE', color: 'var(--success)' },
+                                { name: 'Clinic Density', val: 'MODERATE', color: 'var(--warning)' }
                             ].map((load, i) => (
                                 <div key={i}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '10px' }}>
                                         <span style={{ fontWeight: '700', color: 'var(--text-secondary)' }}>{load.name}</span>
-                                        <span style={{ color: load.color, fontWeight: '900' }}>{load.val}%</span>
+                                        <span style={{ color: load.color, fontWeight: '900' }}>{load.val}</span>
                                     </div>
                                     <div style={{ height: '8px', background: 'var(--bg-main)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-glass)' }}>
-                                        <motion.div 
+                                        <motion.div
                                             initial={{ width: 0 }}
-                                            animate={{ width: `${load.val}%` }}
+                                            animate={{ width: `100%` }}
                                             transition={{ duration: 1, delay: i * 0.1 }}
-                                            style={{ height: '100%', background: load.color, borderRadius: '4px' }} 
+                                            style={{ height: '100%', background: load.color, borderRadius: '4px' }}
                                         />
                                     </div>
                                 </div>
@@ -386,7 +442,7 @@ const Appointments = () => {
                     <div className="card" style={{ padding: '2.5rem', background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.05), transparent)', border: '1px solid var(--border-glass)' }}>
                         <h3 style={{ fontSize: '1.1rem', fontWeight: '900', marginBottom: '1rem', color: 'var(--text-primary)' }}>System Note</h3>
                         <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-                            Operational protocols are strictly enforced. All token dispatch and approval events are logged to the central medical ledger.
+                            Operational protocols are strictly enforced. All token dispatch and approval events are logged to the central clinical ledger.
                         </p>
                     </div>
                 </div>

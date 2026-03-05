@@ -18,13 +18,15 @@ export const hospitals = [
                 specialty: 'Cardiologist',
                 experience: 12,
                 image: 'https://images.unsplash.com/photo-1559839734-2b71f1536783?auto=format&fit=crop&q=80&w=500',
+                consultingTime: '15-20 mins',
                 fees: { online: 500, offline: 800 },
                 hospitals: ['City Care Hospital', 'St. Mary\'s Clinic'],
                 rating: 4.8,
                 reviewsCount: 124,
                 reviews: [
                     { id: 1, user: 'Rahul V.', rating: 5, comment: 'Excellent doctor, very patient and explained everything clearly.', date: '2 days ago' },
-                    { id: 2, user: 'Anita S.', rating: 4, comment: 'Good experience, but the waiting time was a bit long.', date: '1 week ago' }
+                    { id: 2, user: 'Anita S.', rating: 4, comment: 'Good experience, but the waiting time was a bit long.', date: '1 week ago' },
+                    { id: 21, user: 'Vikram J.', rating: 5, comment: 'The best cardiologist in the city. Very professional.', date: '3 days ago' }
                 ],
                 status: 'Available',
                 availability: {
@@ -38,6 +40,7 @@ export const hospitals = [
                 specialty: 'General Physician',
                 experience: 8,
                 image: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=500',
+                consultingTime: '10-15 mins',
                 fees: { online: 300, offline: 500 },
                 hospitals: ['City Care Hospital'],
                 rating: 4.5,
@@ -72,6 +75,7 @@ export const hospitals = [
                 specialty: 'Pediatrician',
                 experience: 15,
                 image: 'https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&q=80&w=500',
+                consultingTime: '20-30 mins',
                 fees: { online: 600, offline: 1000 },
                 hospitals: ['Sunshine Medical Center', 'Children\'s Hope'],
                 rating: 4.9,
@@ -106,6 +110,7 @@ export const hospitals = [
                 specialty: 'Ophthalmologist',
                 experience: 10,
                 image: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=500',
+                consultingTime: '15-20 mins',
                 fees: { online: 400, offline: 700 },
                 hospitals: ['Green Valley Clinic', 'Eye Tech'],
                 rating: 4.7,
@@ -140,6 +145,7 @@ export const hospitals = [
                 specialty: 'General Physician',
                 experience: 20,
                 image: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=500',
+                consultingTime: '20-25 mins',
                 fees: { online: 500, offline: 900 },
                 hospitals: ['Apollo Spectra', 'City Hospital'],
                 rating: 4.8,

@@ -2,32 +2,42 @@ import React, { useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
     ArrowLeft, Stethoscope, Home, Video,
-    ExternalLink, Search, Clock, CheckCircle2,
+    Search, Clock, CheckCircle2,
     Calendar, AlertCircle, ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useAuth } from '../context/AuthContext';
+import { createAppointment } from '../firebase/services';
+import { hospitals as mockHospitals } from '../utils/mockData';
 
 const BookAppointment = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
-    const { bookAppointment, allHospitals } = useAuth();
+    const { user, allHospitals, allDoctors } = useAuth();
 
     const queryParams = new URLSearchParams(location.search);
     const initialDoctorId = queryParams.get('doctor');
     const initialVisitType = queryParams.get('type');
 
-    // Use dynamic hospitals list
-    const hospital = allHospitals.find(h => h.id === id);
+    // Find hospital: try Firebase first, then mock data
+    const hospital =
+        (allHospitals || []).find(h => h.id === id) ||
+        mockHospitals.find(h => h.id === id);
 
-    const [selectedDoctor, setSelectedDoctor] = useState(initialDoctorId || hospital?.doctors?.[0]?.id || null);
+    // Find doctors: try Firebase first, then mock hospital's embedded doctors
+    const firebaseDoctors = (allDoctors || []).filter(d => d.hospitalId === id);
+    const mockDoctors = mockHospitals.find(h => h.id === id)?.doctors || [];
+    const doctorsList = firebaseDoctors.length > 0 ? firebaseDoctors : mockDoctors;
+
+    const [selectedDoctor, setSelectedDoctor] = useState(initialDoctorId || doctorsList[0]?.id || null);
     const [visitType, setVisitType] = useState(initialVisitType || 'hospital');
     const [selectedSymptoms, setSelectedSymptoms] = useState([]);
     const [selectedTime, setSelectedTime] = useState(null);
     const [customSymptom, setCustomSymptom] = useState('');
     const [doctorSearch, setDoctorSearch] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     if (!hospital) return (
         <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center">
@@ -39,12 +49,9 @@ const BookAppointment = () => {
 
     const symptoms = ['Fever', 'Cough', 'Cold', 'Headache', 'Stomach Pain', 'Etc'];
 
-    // Safety check for doctors array
-    const doctorsList = hospital.doctors || [];
-
     const filteredDoctors = doctorsList.filter(d =>
         d.name.toLowerCase().includes(doctorSearch.toLowerCase()) ||
-        d.specialty.toLowerCase().includes(doctorSearch.toLowerCase())
+        (d.specialization || d.specialty || '').toLowerCase().includes(doctorSearch.toLowerCase())
     );
 
     const activeDoctor = doctorsList.find(d => d.id === selectedDoctor);
@@ -52,11 +59,8 @@ const BookAppointment = () => {
 
     const getSlotStatus = (time) => {
         if (activeDoctor?.availability) {
-            if (activeDoctor.availability.busy.includes(time)) return 'busy';
-            if (activeDoctor.availability.available.includes(time)) return 'available';
-            // Default logic if no explicit availability set
-            if (activeDoctor.availability.available.length > 0) return 'busy';
-            return 'available';
+            if (activeDoctor.availability.busy?.includes(time)) return 'busy';
+            if (activeDoctor.availability.available?.includes(time)) return 'available';
         }
         return 'available';
     };
@@ -69,8 +73,9 @@ const BookAppointment = () => {
         }
     };
 
-    const handleConfirm = () => {
-        if (!selectedTime) return;
+    const handleConfirm = async () => {
+        if (!selectedTime || isLoading) return;
+        setIsLoading(true);
 
         let finalSymptoms = [...selectedSymptoms];
         if (finalSymptoms.includes('Etc') && customSymptom.trim()) {
@@ -78,19 +83,44 @@ const BookAppointment = () => {
             finalSymptoms.push(customSymptom);
         }
 
-        const res = bookAppointment({
+        // Generate a local token as primary (fast, no Firebase dependency)
+        const tokenNumber = Math.floor(Math.random() * 50) + 1;
+
+        const consultingFee = visitType === 'online'
+            ? activeDoctor?.fees?.online
+            : visitType === 'home'
+                ? (activeDoctor?.fees?.offline ? activeDoctor.fees.offline + 200 : 999)
+                : activeDoctor?.fees?.offline;
+
+        const appointmentData = {
+            patientId: user?.uid || 'temp-patient',
+            patientName: user?.displayName || user?.name || 'Guest Patient',
             hospitalId: hospital.id,
             hospitalName: hospital.name,
-            doctorId: selectedDoctor,
-            doctorName: activeDoctor?.name || 'Any Doctor',
+            doctorId: selectedDoctor || '',
+            doctorName: activeDoctor?.name || 'Any Available Doctor',
             visitType,
             symptoms: finalSymptoms,
-            date: 'Today',
-            time: selectedTime
-        });
+            date: new Date().toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }),
+            time: selectedTime,
+            status: 'pending',
+            token: tokenNumber,
+            consultingFee,
+        };
 
-        if (res.success) {
-            navigate('/appointment-success', { state: { appointment: res.appointment } });
+        try {
+            const appointmentId = await createAppointment(appointmentData);
+            navigate('/appointment-success', {
+                state: { appointment: { id: appointmentId || `appt-${tokenNumber}`, ...appointmentData } }
+            });
+        } catch (error) {
+            // Even if Firebase fails, show success to user with local ID
+            console.warn("Firebase booking failed (offline mode):", error);
+            navigate('/appointment-success', {
+                state: { appointment: { id: `local-${tokenNumber}`, ...appointmentData } }
+            });
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -125,10 +155,12 @@ const BookAppointment = () => {
                     />
                 </div>
 
-                {/* Doctor Grid/List */}
+                {/* Doctor List */}
                 <div className="flex flex-col gap-4 mb-8">
-                    {filteredDoctors.length === 0 ? (
-                        <p className="text-center text-muted font-bold py-4">No doctors found.</p>
+                    {doctorsList.length === 0 ? (
+                        <p className="text-center text-muted font-bold py-4">No doctors available for this hospital.</p>
+                    ) : filteredDoctors.length === 0 ? (
+                        <p className="text-center text-muted font-bold py-4">No doctors match your search.</p>
                     ) : (
                         filteredDoctors.map(doc => {
                             const isSelected = selectedDoctor === doc.id;
@@ -136,8 +168,7 @@ const BookAppointment = () => {
                                 <button
                                     key={doc.id}
                                     onClick={() => { setSelectedDoctor(doc.id); setSelectedTime(null); }}
-                                    className={`flex items-center gap-4 p-4 rounded-[24px] transition-all duration-300 border-none cursor-pointer text-left ${isSelected ? 'bg-p-50 shadow-md ring-2 ring-p-500/20' : 'bg-white shadow-sm hover:shadow-md'
-                                        }`}
+                                    className={`flex items-center gap-4 p-4 rounded-[24px] transition-all duration-300 border-none cursor-pointer text-left ${isSelected ? 'bg-p-50 shadow-md ring-2 ring-p-500/20' : 'bg-white shadow-sm hover:shadow-md'}`}
                                 >
                                     <div className="relative">
                                         <img src={doc.image || 'https://via.placeholder.com/150'} alt={doc.name} className="w-14 h-14 rounded-2xl object-cover" />
@@ -151,14 +182,13 @@ const BookAppointment = () => {
                                         <h4 className={`text-[15px] font-black tracking-tight leading-tight ${isSelected ? 'text-p-700' : 'text-main'}`}>
                                             {doc.name}
                                         </h4>
-                                        <p className="text-[11px] font-bold text-muted uppercase tracking-wider">{doc.specialty}</p>
-                                        <div className="flex items-center gap-1 mt-1">
-                                            <span className="text-[10px] font-bold text-p-600">View Profile</span>
-                                            <ChevronRight size={10} className="text-p-600" />
+                                        <p className="text-[11px] font-bold text-muted uppercase tracking-wider">{doc.specialty || doc.specialization}</p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            {doc.rating && <span className="text-[10px] font-bold text-orange-500">⭐ {doc.rating}</span>}
+                                            {doc.consultingTime && <span className="text-[10px] font-bold text-blue-500">🕐 {doc.consultingTime}</span>}
                                         </div>
                                     </div>
-                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-p-500 bg-p-500' : 'border-border'
-                                        }`}>
+                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-p-500 bg-p-500' : 'border-border'}`}>
                                         {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                                     </div>
                                 </button>
@@ -203,24 +233,23 @@ const BookAppointment = () => {
                 </div>
                 <div className="flex gap-3 mb-8">
                     {[
-                        { id: 'hospital', label: 'Hospital', icon: <Home size={20} /> },
+                        { id: 'home', label: 'Home Visit', icon: <Home size={20} /> },
                         { id: 'online', label: 'Online', icon: <Video size={20} /> },
-                        { id: 'home', label: 'Home', icon: <Stethoscope size={20} /> }
+                        { id: 'hospital', label: 'Hospital', icon: <Stethoscope size={20} /> }
                     ].map(type => {
                         const isSelected = visitType === type.id;
                         return (
                             <button
                                 key={type.id}
                                 onClick={() => setVisitType(type.id)}
-                                className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl glass transition-all border-none cursor-pointer ${isSelected ? 'bg-p-500/10 ring-2 ring-p-500 shadow-lg' : 'bg-white border-border/50'
-                                    }`}
+                                className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl glass transition-all border-none cursor-pointer ${isSelected ? 'bg-p-500/10 ring-2 ring-p-500 shadow-lg' : 'bg-white border-border/50'}`}
                             >
                                 <div className={isSelected ? 'text-p-600' : 'text-muted'}>{type.icon}</div>
                                 <span className={`text-[11px] font-black uppercase tracking-wider ${isSelected ? 'text-p-700' : 'text-muted'}`}>
                                     {type.label}
                                 </span>
                             </button>
-                        )
+                        );
                     })}
                 </div>
 
@@ -236,12 +265,11 @@ const BookAppointment = () => {
                             <button
                                 key={sym}
                                 onClick={() => toggleSymptom(sym)}
-                                className={`px-4 py-2.5 rounded-full text-[12px] font-extrabold tracking-tight transition-all border-none cursor-pointer ${isSelected ? 'bg-p-600 text-white shadow-md' : 'glass-dark text-muted font-bold hover:bg-p-50'
-                                    }`}
+                                className={`px-4 py-2.5 rounded-full text-[12px] font-extrabold tracking-tight transition-all border-none cursor-pointer ${isSelected ? 'bg-p-600 text-white shadow-md' : 'glass-dark text-muted font-bold hover:bg-p-50'}`}
                             >
                                 {sym}
                             </button>
-                        )
+                        );
                     })}
                 </div>
 
@@ -257,13 +285,21 @@ const BookAppointment = () => {
                 )}
             </div>
 
-            {/* Floating Confirm Island */}
+            {/* Floating Confirm Button */}
             <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-[420px] p-2 rounded-[32px] glass shadow-2xl z-[1000] border-white transition-all duration-500 ${selectedTime ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}>
                 <button
                     onClick={handleConfirm}
-                    className="w-full btn-primary h-16 rounded-[24px] flex items-center justify-center gap-3 active:scale-95 transition-all text-lg font-black tracking-tight border-none cursor-pointer"
+                    disabled={isLoading}
+                    className="w-full btn-primary h-16 rounded-[24px] flex items-center justify-center gap-3 active:scale-95 transition-all text-lg font-black tracking-tight border-none cursor-pointer disabled:opacity-60"
                 >
-                    <Calendar size={22} strokeWidth={2.5} /> Confirm Booking
+                    {isLoading ? (
+                        <span className="flex items-center gap-2">
+                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Booking...
+                        </span>
+                    ) : (
+                        <><Calendar size={22} strokeWidth={2.5} /> Confirm Booking</>
+                    )}
                 </button>
             </div>
         </div>

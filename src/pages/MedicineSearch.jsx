@@ -1,15 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ShoppingCart, Info, CheckCircle, AlertCircle, Trash2, Package, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
+import { getDocs, collection, query, where } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { createOrder } from '../firebase/services';
+import { useNavigate } from 'react-router-dom';
 
 const MedicineSearch = () => {
-    const [query, setQuery] = useState('');
+    const { user } = useAuth();
+    const navigate = useNavigate();
+    const [queryStr, setQueryStr] = useState('');
     const [medicines, setMedicines] = useState([]);
     const [cart, setCart] = useState([]);
     const [selectedMed, setSelectedMed] = useState(null);
     const [saleType, setSaleType] = useState('strip'); // 'strip' or 'single'
     const [quantity, setQuantity] = useState(1);
     const [loading, setLoading] = useState(false);
+    const [pharmacies, setPharmacies] = useState([]);
+    const [selectedPharmacy, setSelectedPharmacy] = useState(null);
+    const [isCheckingOut, setIsCheckingOut] = useState(false);
 
     // Mock Database
     const medicineDb = [
@@ -22,13 +32,28 @@ const MedicineSearch = () => {
     ];
 
     useEffect(() => {
-        if (query.trim().length > 1) {
+        const fetchPharmacies = async () => {
+            try {
+                const q = query(collection(db, "users"), where("role", "==", "medical_store"));
+                const snap = await getDocs(q);
+                const p = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setPharmacies(p);
+                if (p.length > 0) setSelectedPharmacy(p[0]);
+            } catch (err) {
+                console.error("Error fetching pharmacies:", err);
+            }
+        };
+        fetchPharmacies();
+    }, []);
+
+    useEffect(() => {
+        if (queryStr.trim().length > 1) {
             setLoading(true);
             const timer = setTimeout(() => {
                 const results = medicineDb.filter(m =>
-                    m.brandName.toLowerCase().includes(query.toLowerCase()) ||
-                    m.genericName.toLowerCase().includes(query.toLowerCase()) ||
-                    m.salt.toLowerCase().includes(query.toLowerCase())
+                    m.brandName.toLowerCase().includes(queryStr.toLowerCase()) ||
+                    m.genericName.toLowerCase().includes(queryStr.toLowerCase()) ||
+                    m.salt.toLowerCase().includes(queryStr.toLowerCase())
                 );
                 setMedicines(results);
                 setLoading(false);
@@ -37,7 +62,7 @@ const MedicineSearch = () => {
         } else {
             setMedicines([]);
         }
-    }, [query]);
+    }, [queryStr]);
 
     const handleAddToCart = () => {
         if (!selectedMed) return;
@@ -270,19 +295,59 @@ const MedicineSearch = () => {
                         ))}
                     </div>
 
-                    <button style={{
-                        width: '100%',
-                        marginTop: '20px',
-                        padding: '16px',
-                        borderRadius: '16px',
-                        border: 'none',
-                        background: '#10b981',
-                        color: 'white',
-                        fontWeight: '800',
-                        fontSize: '16px',
-                        cursor: 'pointer'
-                    }}>
-                        Proceed to Checkout
+                    <div style={{ marginTop: '20px' }}>
+                        <label style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', marginBottom: '8px', display: 'block' }}>SELECT PHARMACY</label>
+                        <select
+                            value={selectedPharmacy?.id || ''}
+                            onChange={(e) => setSelectedPharmacy(pharmacies.find(p => p.id === e.target.value))}
+                            style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #eee', marginBottom: '20px', fontSize: '14px', fontWeight: '700' }}
+                        >
+                            {pharmacies.map(p => (
+                                <option key={p.id} value={p.id}>{p.name} ({p.address || 'Local'})</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <button
+                        onClick={async () => {
+                            if (!selectedPharmacy) return alert("Select a pharmacy first");
+                            setIsCheckingOut(true);
+                            try {
+                                const orderData = {
+                                    patientId: user?.uid || user?.id,
+                                    patientName: user?.name || 'Patient',
+                                    userName: user?.name,
+                                    storeId: selectedPharmacy.id,
+                                    storeName: selectedPharmacy.name,
+                                    items: cart.map(i => `${i.name} (${i.quantity} ${i.type})`),
+                                    total: cartTotal,
+                                    status: 'pending'
+                                };
+                                await createOrder(orderData);
+                                alert("Order placed successfully! The pharmacy will notify you soon.");
+                                setCart([]);
+                                navigate('/dashboard/patient');
+                            } catch (err) {
+                                console.error(err);
+                                alert("Failed to place order.");
+                            } finally {
+                                setIsCheckingOut(false);
+                            }
+                        }}
+                        disabled={isCheckingOut}
+                        style={{
+                            width: '100%',
+                            padding: '16px',
+                            borderRadius: '16px',
+                            border: 'none',
+                            background: isCheckingOut ? '#94a3b8' : '#10b981',
+                            color: 'white',
+                            fontWeight: '800',
+                            fontSize: '16px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        {isCheckingOut ? 'Processing...' : 'Place Order'}
                     </button>
                 </div>
             )}

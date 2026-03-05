@@ -32,6 +32,8 @@ export const AuthProvider = ({ children }) => {
     const [allHospitals, setAllHospitals] = useState([]);
     const [allDoctors, setAllDoctors] = useState([]);
     const [allMedicalStores, setAllMedicalStores] = useState([]);
+    const [nearbyHospitals, setNearbyHospitals] = useState([]);
+    const [loadingHospitals, setLoadingHospitals] = useState(false);
 
     const [appointments, setAppointments] = useState([]);
     const [orders, setOrders] = useState([]);
@@ -39,6 +41,7 @@ export const AuthProvider = ({ children }) => {
     const [announcements, setAnnouncements] = useState([]);
     const [medicalCamps, setMedicalCamps] = useState([]);
     const [campRegistrations, setCampRegistrations] = useState([]);
+    const [prescriptions, setPrescriptions] = useState([]);
 
     // Doctor Specific
     const [doctorStatus, setDoctorStatus] = useState('Available');
@@ -48,47 +51,92 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         let isCancelled = false;
+        let unsubAppointments = () => { };
+        let unsubPrescriptions = () => { };
 
-        // Firebase Auth Listener
         const unsubscribe = subscribeToAuthChanges(async (firebaseUser) => {
             if (isCancelled) return;
 
+            unsubAppointments();
+            unsubPrescriptions();
+
             if (firebaseUser) {
+                // 1. SET BASIC AUTH DATA IMMEDIATELY
+                // This allows instant navigation to the dashboard
+                const cachedUser = safeJsonParse('varogra_user', {});
+                const storedRole = localStorage.getItem('userRole');
+
+                // Active role discovery: Priority: storedRole > cachedUser.role > default 'patient'
+                const activeRole = storedRole || cachedUser.role || 'patient';
+
+                const basicAuthUser = {
+                    ...cachedUser, // Start with cached data
+                    uid: firebaseUser.uid,
+                    email: firebaseUser.email,
+                    displayName: firebaseUser.displayName,
+                    photoURL: firebaseUser.photoURL,
+                    role: activeRole // Ensure role is not overwritten by old cache
+                };
+
+                console.log(`[Auth] Session identified. UID: ${basicAuthUser.uid}, Role: ${basicAuthUser.role}`);
+                setUser(basicAuthUser);
+                setLoading(false);
+
+                // 2. FETCH CLOUD DATA IN BACKGROUND
                 try {
-                    // Start fetching profile but don't let it block the initial loading hide if possible
-                    // Or at least ensure it has a catch
-                    const profile = await getUserProfile(firebaseUser.uid).catch(err => {
-                        console.warn("Firestore profile fetch failed, using auth data", err);
-                        return null;
+                    // Fetch profile and data in parallel
+                    const profilePromise = getUserProfile(firebaseUser.uid);
+
+                    profilePromise.then(profile => {
+                        if (isCancelled || !profile) return;
+                        console.log(`[Auth] Profile loaded for ${firebaseUser.uid}. Role: ${profile.role}`);
+                        const fullProfile = { ...basicAuthUser, ...profile };
+                        setUser(fullProfile);
+                        localStorage.setItem('varogra_user', JSON.stringify(fullProfile));
+                        if (profile.role) {
+                            localStorage.setItem('userRole', profile.role);
+                        }
                     });
 
-                    if (isCancelled) return;
+                    // Subscriptions (also in parallel-ish)
+                    import('../firebase/services').then(m => {
+                        if (isCancelled) return;
+                        unsubAppointments = m.subscribeToAppointments({ patientId: firebaseUser.uid }, setAppointments);
+                        unsubPrescriptions = m.subscribeToPrescriptions(firebaseUser.uid, setPrescriptions);
 
-                    const fullProfile = {
-                        uid: firebaseUser.uid,
-                        email: firebaseUser.email,
-                        displayName: firebaseUser.displayName,
-                        ...profile
-                    };
-                    setUser(fullProfile);
-                    localStorage.setItem('varogra_user', JSON.stringify(fullProfile));
+                        // 3. FETCH NEARBY HOSPITALS IF PATIENT
+                        if (activeRole === 'patient') {
+                            setLoadingHospitals(true);
+                            // We wait for the profile to get the location, but we can also check basicAuthUser/cachedUser
+                            const location = profile?.location || basicAuthUser?.location;
+                            if (location) {
+                                m.getNearbyHospitalsAndDoctors(location).then(data => {
+                                    if (isCancelled) return;
+                                    setNearbyHospitals(data);
+                                    setLoadingHospitals(false);
+                                }).catch(err => {
+                                    console.error("[Auth] Failed to fetch nearby hospitals:", err);
+                                    setLoadingHospitals(false);
+                                });
+                            } else {
+                                setLoadingHospitals(false);
+                            }
+                        }
+                    });
+
                 } catch (error) {
-                    console.error("Auth listener error:", error);
+                    console.error("Background data fetch failed:", error);
                 }
             } else {
-                // If no Firebase user, check if we have a persistent manual session
                 const storedMockUser = localStorage.getItem('varogra_user');
                 if (!storedMockUser) {
                     setUser(null);
                 } else {
                     const parsed = JSON.parse(storedMockUser);
-                    // FIXED: Do not force logout if Firebase returns null but we have a stored session.
-                    // This prevents redirects due to temporary sync issues or multi-tab persistence conflicts.
-                    console.log("vArogra: Firebase returned null, but found stored session. Retaining user:", parsed.uid || parsed.id);
                     setUser(parsed);
                 }
+                setLoading(false);
             }
-            setLoading(false);
         });
 
         // Load other data from localStorage (Legacy/Mock)
@@ -99,9 +147,7 @@ export const AuthProvider = ({ children }) => {
                 if (storedAppts) {
                     setAppointments(JSON.parse(storedAppts));
                 } else {
-                    const demoAppt = [{ id: 'APT-1', doctorName: 'Sarah Smith', time: '10:00 AM', hospitalName: 'City Care Hospital', status: 'Accepted', visitType: 'offline', timestamp: new Date().toISOString() }];
-                    setAppointments(demoAppt);
-                    localStorage.setItem('varogra_appointments', JSON.stringify(demoAppt));
+                    setAppointments([]);
                 }
 
                 // Orders
@@ -109,9 +155,7 @@ export const AuthProvider = ({ children }) => {
                 if (storedOrders) {
                     setOrders(JSON.parse(storedOrders));
                 } else {
-                    const demoOrder = [{ id: 'ORD-1', storeName: 'Apollo Pharmacy', status: 'Out for delivery', timestamp: new Date().toISOString() }];
-                    setOrders(demoOrder);
-                    localStorage.setItem('varogra_orders', JSON.stringify(demoOrder));
+                    setOrders([]);
                 }
 
                 // Blood Requests
@@ -119,9 +163,7 @@ export const AuthProvider = ({ children }) => {
                 if (storedBlood) {
                     setBloodRequests(JSON.parse(storedBlood));
                 } else {
-                    const demoBlood = [{ id: 'BLD-1', patientName: 'Abhinav', bloodType: 'O+', status: 'Urgent', hospitalName: 'Apollo Spectra', timestamp: new Date().toISOString() }];
-                    setBloodRequests(demoBlood);
-                    localStorage.setItem('varogra_blood_requests', JSON.stringify(demoBlood));
+                    setBloodRequests([]);
                 }
 
                 // Others
@@ -158,6 +200,8 @@ export const AuthProvider = ({ children }) => {
         return () => {
             isCancelled = true;
             unsubscribe();
+            unsubAppointments();
+            unsubPrescriptions();
         };
     }, []);
 
@@ -165,11 +209,12 @@ export const AuthProvider = ({ children }) => {
         // Master Login Bypass
         if (email === '123' && password === 'dsa') {
             const adminUser = {
-                uid: 'admin-patient',
-                email: 'admin@healthlink.com',
-                displayName: 'System Admin',
-                name: 'System Admin',
+                uid: 'demo-patient-id',
+                email: 'alice@demo.com',
+                displayName: 'Alice Cooper',
+                name: 'Alice Cooper',
                 role: 'patient',
+                location: 'Vizag', // Added for testing discovery
                 isAdmin: true
             };
             setUser(adminUser);
@@ -218,8 +263,16 @@ export const AuthProvider = ({ children }) => {
             else if (provider === 'facebook') userData = await signInWithFacebook(role);
 
             if (userData) {
-                setUser(userData);
-                localStorage.setItem('varogra_user', JSON.stringify(userData));
+                const fullUserData = {
+                    uid: userData.uid,
+                    email: userData.email,
+                    displayName: userData.displayName,
+                    photoURL: userData.photoURL,
+                    role: role
+                };
+                setUser(fullUserData);
+                localStorage.setItem('varogra_user', JSON.stringify(fullUserData));
+                localStorage.setItem('userRole', role);
                 return { success: true };
             }
         } catch (error) {
@@ -271,24 +324,39 @@ export const AuthProvider = ({ children }) => {
     };
 
 
-    const loginDoctor = async (code, password) => {
+    const loginDoctor = async (email, password) => {
         // Master Login Bypass
-        if (code === '123' && password === 'dsa') {
-            return { success: true, doctor: { name: 'Admin Doctor', code: 'MASTER-D', role: 'doctor', uid: 'demo-master-doc', status: 'approved' } };
+        if (email === '123' && password === 'dsa') {
+            return { success: true, doctor: { name: 'Dr. Sarah Smith', code: 'MASTER-D', role: 'doctor', uid: 'demo-doctor-id', id: 'demo-doctor-id', status: 'approved', hospitalId: 'demo-hospital-id', hospitalName: 'City General Hospital' } };
         }
 
-        const doc = allDoctors.find(d => d.code === code && d.password === password);
-        if (doc) return { success: true, doctor: doc };
-        if (code.startsWith('DOC')) {
-            return { success: true, doctor: { name: 'Dr. Sample', code, role: 'doctor', id: 'd1', status: 'approved' } };
+        try {
+            const { loginUser, getUserProfile } = await import('../firebase/auth');
+            const userData = await loginUser(email, password);
+
+            // Check status in Firestore profile
+            const profile = await getUserProfile(userData.uid);
+
+            if (profile && profile.status === 'pending') {
+                await logoutUser(); // Immediately log them back out
+                return { success: false, message: 'Your account is pending approval by the Hospital Admin.' };
+            }
+
+            const fullUserData = { ...userData, ...profile, role: 'doctor' };
+            setUser(fullUserData);
+            localStorage.setItem('varogra_user', JSON.stringify(fullUserData));
+            return { success: true, doctor: fullUserData, user: fullUserData };
+
+        } catch (error) {
+            console.error("Doctor login error:", error);
+            return { success: false, message: error.code === 'auth/invalid-credential' ? 'Invalid email or password.' : 'Login failed.' };
         }
-        return { success: false, message: 'Invalid ID or Passkey' };
     };
 
     const loginMedicalStore = async (code, pin) => {
         // Master Login Bypass
         if (code === '123' && pin === 'dsa') {
-            return { success: true, store: { name: 'Admin Store', code: 'MASTER-S', role: 'medical_store', id: 'master-store' } };
+            return { success: true, store: { name: 'Main Street Pharmacy', code: 'MSTR-1234', role: 'medical_store', id: 'demo-store-id', uid: 'demo-store-id' } };
         }
 
         const store = allMedicalStores.find(s => s.code === code);
@@ -472,15 +540,21 @@ export const AuthProvider = ({ children }) => {
         return { success: true };
     };
 
-    const logout = async () => {
-        try {
-            await logoutUser();
-            setUser(null);
-            localStorage.removeItem('varogra_user');
-            localStorage.removeItem('userRole');
-        } catch (error) {
-            console.error("Logout error:", error);
-        }
+    const logout = () => {
+        // 1. Instantly destroy local session state
+        // This instantly triggers React Router to kick the user out to /login
+        setUser(null);
+
+        // 2. Clear all persistent UI storage synchronously
+        localStorage.removeItem('varogra_user');
+        localStorage.removeItem('userRole');
+
+        // 3. Fire-and-forget Firebase signout. 
+        // We DO NOT await this, because if Firebase hangs on a flaky mobile network,
+        // it would block the UI from navigating away.
+        logoutUser().catch((error) => {
+            console.error("Firebase logout failed (possibly offline), but local session wiped:", error);
+        });
     };
     const completeLogin = (u) => { setUser(u); localStorage.setItem('varogra_user', JSON.stringify(u)); return true; };
     const approveDoctor = (did) => { return { success: true } };
@@ -496,8 +570,9 @@ export const AuthProvider = ({ children }) => {
     return (
         <AuthContext.Provider value={{
             user, loading, appointments, orders, bloodRequests,
-            announcements, medicalCamps, campRegistrations,
+            announcements, medicalCamps, campRegistrations, prescriptions,
             allHospitals, allDoctors, allMedicalStores,
+            nearbyHospitals, loadingHospitals,
             doctorStatus, doctorSchedule, autoApprove, notifications,
             setUser, completeLogin, setDoctorStatus, setDoctorSchedule, setAutoApprove,
             loginPatient, registerPatient, registerMedicalStore, loginDoctor, loginMedicalStore,

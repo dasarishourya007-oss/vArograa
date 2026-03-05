@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
     Users,
@@ -10,7 +11,7 @@ import {
     User
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { doctorService } from '../../services/doctorService';
+import { subscribeToAppointments, updateAppointmentStatus } from '../../firebase/services';
 
 const SummaryCard = ({ title, value, icon: Icon, color, trend }) => (
     <motion.div
@@ -46,6 +47,7 @@ const SummaryCard = ({ title, value, icon: Icon, color, trend }) => (
 );
 
 const DoctorDashboard = () => {
+    const navigate = useNavigate();
     const { user } = useAuth();
     const [appointments, setAppointments] = useState([]);
     const [liveQueue, setLiveQueue] = useState([]);
@@ -55,23 +57,18 @@ const DoctorDashboard = () => {
         if (!user) return;
 
         const doctorId = user.uid || user.id;
-        const unsubAppts = doctorService.subscribeToAppointments(doctorId, (data) => {
+        // Listen to all appointments assigned to this doctor
+        const unsub = subscribeToAppointments({ doctorId }, (data) => {
             setAppointments(data);
             setLoading(false);
         });
 
-        const unsubQueue = doctorService.subscribeToLiveQueue(doctorId, (data) => {
-            setLiveQueue(data);
-        });
-
-        return () => {
-            unsubAppts();
-            unsubQueue();
-        };
+        return () => unsub();
     }, [user]);
 
-    const activeConsultation = liveQueue.find(c => c.status === 'active');
-    const pendingPatients = liveQueue.filter(c => c.status === 'pending');
+    const activeConsultations = appointments.filter(a => a.status === 'approved');
+    const completedConsultations = appointments.filter(a => a.status === 'completed');
+    const pendingPatients = activeConsultations; // For now mapping approved to pending queue
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -91,19 +88,19 @@ const DoctorDashboard = () => {
                     trend="+12%"
                 />
                 <SummaryCard
-                    title="Active Consultation"
-                    value={activeConsultation ? 1 : 0}
+                    title="Approved Patients"
+                    value={activeConsultations.length}
                     icon={Play}
                     color="16, 185, 129"
                 />
                 <SummaryCard
-                    title="Pending Patients"
-                    value={pendingPatients.length}
-                    icon={Clock}
+                    title="Completed Today"
+                    value={completedConsultations.length}
+                    icon={CheckCircle2}
                     color="245, 158, 11"
                 />
                 <SummaryCard
-                    title="Avg. Time / Patient"
+                    title="Avg. Time"
                     value="18m"
                     icon={TrendingUp}
                     color="139, 92, 246"
@@ -121,26 +118,28 @@ const DoctorDashboard = () => {
                         </div>
                     </div>
 
-                    {activeConsultation ? (
+                    {pendingPatients.length > 0 ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', padding: '1.5rem', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                             <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'var(--brand-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <User color="white" size={32} />
                             </div>
                             <div style={{ flex: 1 }}>
-                                <h4 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '4px' }}>{activeConsultation.patientName}</h4>
-                                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Token: #{activeConsultation.tokenNumber} • Appointment: {activeConsultation.type}</p>
+                                <h4 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '4px' }}>{pendingPatients[0].patientName}</h4>
+                                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Status: {pendingPatients[0].status} • Type: {pendingPatients[0].visitType}</p>
                             </div>
-                            <button className="btn-premium" style={{ padding: '12px 24px' }}>Resume Session</button>
+                            <button
+                                onClick={() => navigate('/doctor/prescription', { state: { appointment: pendingPatients[0] } })}
+                                className="btn-premium" style={{ padding: '12px 24px' }}>Start Session</button>
                         </div>
                     ) : (
                         <div style={{ textAlign: 'center', padding: '3rem', border: '2px dashed var(--border-glass)', borderRadius: '16px' }}>
                             <AlertCircle size={48} color="var(--text-muted)" style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                            <h3 style={{ marginBottom: '0.5rem' }}>No active session</h3>
-                            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Start your next consultation from the pending list.</p>
+                            <h3 style={{ marginBottom: '0.5rem' }}>No pending patients</h3>
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Queue is currently clear.</p>
                             <button
                                 className="btn-premium"
-                                disabled={pendingPatients.length === 0}
-                                style={{ opacity: pendingPatients.length === 0 ? 0.5 : 1 }}
+                                disabled
+                                style={{ opacity: 0.5 }}
                             >
                                 Start Next Consultation
                             </button>

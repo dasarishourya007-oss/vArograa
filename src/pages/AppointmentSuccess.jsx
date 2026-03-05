@@ -59,8 +59,22 @@ const AppointmentSuccess = () => {
                                 <p className="text-[15px] font-black text-main uppercase">{appointment.doctorName}</p>
                             </div>
                             <div className="flex flex-col gap-1">
-                                <span className="text-[10px] font-black tracking-[2px] text-p-600 uppercase">Token</span>
-                                <p className="text-[18px] font-black text-p-600">#{appointment.id.split('-')[1]}</p>
+                                <span className="text-[10px] font-black tracking-[2px] text-p-600 uppercase">Token No.</span>
+                                <p className="text-[24px] font-black text-p-600">#{appointment.token || '01'}</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-black tracking-[2px] text-p-600 uppercase">Consulting Fee</span>
+                                <p className="text-[15px] font-black text-main">₹{appointment.consultingFee || '500'}</p>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-black tracking-[2px] text-p-600 uppercase">Reminders</span>
+                                <div className="flex items-center gap-1">
+                                    <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+                                    <span className="text-[11px] font-bold text-success">Active (5m before)</span>
+                                </div>
                             </div>
                         </div>
 

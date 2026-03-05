@@ -100,7 +100,6 @@ const ConsultationCard = ({ docName, patient, token, startTime, duration, progre
                         width: '50px',
                         height: '50px',
                         borderRadius: '14px',
-                        background: 'rgba(20, 184, 166, 0.1)',
                         background: 'rgba(20, 184, 166, 0.05)',
                         color: 'var(--brand-teal)',
                         display: 'flex',
