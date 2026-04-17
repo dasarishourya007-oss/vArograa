@@ -1,34 +1,47 @@
-import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import Button from '../components/Button';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     Users, Clock, Activity, Settings, LogOut,
     CheckCircle, Camera, Upload, Trash2,
-    ChevronRight, Bell, Calendar, ShieldCheck
+    ChevronRight, Bell, Calendar, ShieldCheck,
+    X, Type, PenTool
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import Button from '../components/Button';
 import ConfirmModal from '../components/ConfirmModal';
 import Input from '../components/Input';
 import { getAIResponse } from '../utils/AIService';
-import { useRef, useEffect } from 'react';
+import { subscribeToAppointments, addAppointmentPrescription, uploadPrescriptionImage } from '../firebase/services';
+import WritingBoard from '../components/WritingBoard';
+
 
 const DoctorDashboard = () => {
     const navigate = useNavigate();
     const {
         user, appointments, updateAppointmentStatus, updateProfile, logout,
-        doctorStatus, setDoctorStatus, autoApprove, setAutoApprove
+        doctorStatus, setDoctorStatus, autoApprove, setAutoApprove,
+        currentHospital
     } = useAuth();
+    const hospitalName = currentHospital?.hospitalName || currentHospital?.name || user?.hospitalName || 'Hospital';
 
     const [activeTab, setActiveTab] = useState('queue'); // 'queue' | 'ai-bot' | 'settings'
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const [profileMsg, setProfileMsg] = useState({ type: '', text: '' });
+    const [assignedPatients, setAssignedPatients] = useState([]);
+    const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
+    const [selectedAppointment, setSelectedAppointment] = useState(null);
+    const [prescriptionForm, setPrescriptionForm] = useState({ medicine: '', dosage: '', instructions: '', days: '' });
+    const [isSavingPrescription, setIsSavingPrescription] = useState(false);
+    const [prescriptionMessage, setPrescriptionMessage] = useState('');
 
     // AI Chat State
     const [chatHistory, setChatHistory] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const [isAILoading, setIsAILoading] = useState(false);
+    const [prescriptionMode, setPrescriptionMode] = useState('text'); // 'text' | 'draw'
     const chatEndRef = useRef(null);
+
 
     const scrollToBottom = () => {
         chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -37,6 +50,18 @@ const DoctorDashboard = () => {
     useEffect(() => {
         scrollToBottom();
     }, [chatHistory, isAILoading]);
+
+    useEffect(() => {
+        const doctorId = user?.uid || user?.id;
+        if (!doctorId) return () => { };
+        const unsubscribe = subscribeToAppointments({
+            doctorId,
+            status: ['accepted', 'Accepted']
+        }, (docs) => {
+            setAssignedPatients(docs);
+        });
+        return unsubscribe;
+    }, [user?.uid, user?.id]);
 
     const [profileForm, setProfileForm] = useState({
         name: user?.name || '',
@@ -85,6 +110,71 @@ const DoctorDashboard = () => {
         }
     };
 
+    const handleOpenPrescription = (appointment) => {
+        setSelectedAppointment(appointment);
+        setPrescriptionForm({ medicine: '', dosage: '', instructions: '', days: '' });
+        setPrescriptionMessage('');
+        setPrescriptionMode('text');
+        setPrescriptionModalOpen(true);
+    };
+
+    const handleClosePrescriptionModal = () => {
+        setPrescriptionModalOpen(false);
+        setSelectedAppointment(null);
+        setPrescriptionMessage('');
+    };
+
+    const handlePrescriptionSubmit = async (event) => {
+        if (event) event.preventDefault();
+        if (!selectedAppointment?.id) return;
+        if (prescriptionMode === 'text' && (!prescriptionForm.medicine.trim() || !prescriptionForm.dosage.trim())) {
+            setPrescriptionMessage('Medicine and dosage are required.');
+            return;
+        }
+        setPrescriptionMessage('');
+        setIsSavingPrescription(true);
+        try {
+            await addAppointmentPrescription({
+                appointmentId: selectedAppointment.id,
+                prescription: prescriptionMode === 'text' ? {
+                    medicine: prescriptionForm.medicine.trim(),
+                    dosage: prescriptionForm.dosage.trim(),
+                    instructions: prescriptionForm.instructions.trim(),
+                    days: prescriptionForm.days.trim()
+                } : null,
+                doctorName: user?.name,
+                patientId: selectedAppointment.patientId
+            });
+            handleClosePrescriptionModal();
+        } catch (error) {
+            console.error("Prescription save failed:", error);
+            setPrescriptionMessage('Failed to save prescription.');
+        } finally {
+            setIsSavingPrescription(false);
+        }
+    };
+
+    const handlePrescriptionDrawSave = async (dataUrl) => {
+        if (!selectedAppointment?.id) return;
+        setIsSavingPrescription(true);
+        setPrescriptionMessage('Uploading prescription...');
+        try {
+            const imageUrl = await uploadPrescriptionImage(selectedAppointment.id, dataUrl);
+            await addAppointmentPrescription({
+                appointmentId: selectedAppointment.id,
+                imageUrl: imageUrl,
+                doctorName: user?.name,
+                patientId: selectedAppointment.patientId
+            });
+            handleClosePrescriptionModal();
+        } catch (error) {
+            console.error("Prescription draw save failed:", error);
+            setPrescriptionMessage('Failed to upload prescription.');
+        } finally {
+            setIsSavingPrescription(false);
+        }
+    };
+
     const handleUpdateProfile = (e) => {
         e.preventDefault();
         setProfileMsg({ type: '', text: '' });
@@ -101,7 +191,7 @@ const DoctorDashboard = () => {
             {/* Minimalist Clinical Header */}
             <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex items-center justify-between">
                 <div>
-                    <h1 className="text-xl font-black text-slate-800 tracking-tight">Dr. {user.name}</h1>
+                    <h1 className="text-xl font-black text-slate-800 tracking-tight">{hospitalName} · Dr. {user.name}</h1>
                     <p className="text-[11px] font-bold text-teal-600 uppercase tracking-widest flex items-center gap-1">
                         <ShieldCheck size={12} strokeWidth={3} /> Doctor's Portal
                     </p>
@@ -204,7 +294,38 @@ const DoctorDashboard = () => {
                             exit={{ opacity: 0, scale: 0.95 }}
                             className="space-y-4"
                         >
-                            <h3 className="text-lg font-black text-slate-800 px-1">Clinical Queue</h3>
+                            <div className="mb-6">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-lg font-black text-slate-800">My Patients</h3>
+                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Live</span>
+                        </div>
+                        {assignedPatients.length === 0 ? (
+                            <div className="rounded-[30px] border border-dashed border-slate-200 p-6 text-center text-slate-400">
+                                No accepted appointments yet.
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-3">
+                                {assignedPatients.map((appt) => (
+                                    <div key={appt.id} className="flex flex-col gap-2 bg-white border border-slate-100 rounded-[28px] p-4 shadow-sm">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <p className="text-sm font-black text-slate-900">{appt.patientName || 'Patient'}</p>
+                                                <p className="text-[13px] text-slate-500">{appt.date || 'Date TBD'} • {appt.time || 'Time TBD'}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleOpenPrescription(appt)}
+                                                className="px-3 py-2 rounded-2xl bg-p-600 text-[11px] font-black uppercase tracking-[0.2em] text-white shadow-lg shadow-p-600/40 hover:bg-p-500 transition"
+                                            >
+                                                Add Prescription
+                                            </button>
+                                        </div>
+                                        <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Consultation: {String(appt.visitType || appt.consultationType || 'Hospital').toUpperCase()}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <h3 className="text-lg font-black text-slate-800 px-1">Clinical Queue</h3>
                             {pending.length > 0 ? (
                                 pending.map(appt => (
                                     <div key={appt.id} className="bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm flex items-center justify-between group hover:border-teal-100 transition-colors">
@@ -396,6 +517,99 @@ const DoctorDashboard = () => {
                 onClose={() => setShowLogoutConfirm(false)}
                 onConfirm={logout}
             />
+
+            {/* Prescription Modal */}
+            <AnimatePresence>
+                {prescriptionModalOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+                        >
+                            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-800">Prescription for {selectedAppointment?.patientName}</h3>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{selectedAppointment?.date} • {selectedAppointment?.time}</p>
+                                </div>
+                                <button
+                                    onClick={handleClosePrescriptionModal}
+                                    className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <div className="p-6 overflow-y-auto">
+                                <div className="flex gap-2 mb-6 p-1 bg-slate-100 rounded-2xl w-fit">
+                                    <button
+                                        onClick={() => setPrescriptionMode('text')}
+                                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${prescriptionMode === 'text' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500'}`}
+                                    >
+                                        <Type size={14} /> Text Editor
+                                    </button>
+                                    <button
+                                        onClick={() => setPrescriptionMode('draw')}
+                                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${prescriptionMode === 'draw' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500'}`}
+                                    >
+                                        <PenTool size={14} /> Digital Pad
+                                    </button>
+                                </div>
+
+                                {prescriptionMessage && (
+                                    <div className={`p-4 rounded-2xl text-xs font-bold mb-4 ${prescriptionMessage.includes('Failed') ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'}`}>
+                                        {prescriptionMessage}
+                                    </div>
+                                )}
+
+                                {prescriptionMode === 'text' ? (
+                                    <form onSubmit={handlePrescriptionSubmit} className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <Input
+                                                label="Medicine Name"
+                                                placeholder="e.g. Paracetamol"
+                                                value={prescriptionForm.medicine}
+                                                onChange={e => setPrescriptionForm({ ...prescriptionForm, medicine: e.target.value })}
+                                            />
+                                            <Input
+                                                label="Dosage"
+                                                placeholder="e.g. 1-0-1"
+                                                value={prescriptionForm.dosage}
+                                                onChange={e => setPrescriptionForm({ ...prescriptionForm, dosage: e.target.value })}
+                                            />
+                                            <Input
+                                                label="Duration (Days)"
+                                                placeholder="e.g. 5"
+                                                value={prescriptionForm.days}
+                                                onChange={e => setPrescriptionForm({ ...prescriptionForm, days: e.target.value })}
+                                            />
+                                            <Input
+                                                label="Instructions"
+                                                placeholder="After food"
+                                                value={prescriptionForm.instructions}
+                                                onChange={e => setPrescriptionForm({ ...prescriptionForm, instructions: e.target.value })}
+                                            />
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={isSavingPrescription}
+                                            className="w-full mt-6 bg-teal-600 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-teal-600/20 active:scale-95 transition-all disabled:opacity-50"
+                                        >
+                                            {isSavingPrescription ? 'Saving...' : 'Send Text Prescription'}
+                                        </button>
+                                    </form>
+                                ) : (
+                                    <div className="h-[450px]">
+                                        <WritingBoard onSave={handlePrescriptionDrawSave} />
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
         </div>
     );
 };

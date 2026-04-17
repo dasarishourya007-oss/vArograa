@@ -42,8 +42,14 @@ const resources = {
                 "pediatrics": "Pediatrics",
                 "dermatology": "Dermatology",
                 "neurology": "Neurology",
-                "general": "General"
+                "general": "General",
+                "fever": "Fever",
+                "headache": "Headache",
+                "stomach_pain": "Stomach Pain",
+                "cough_cold": "Cough & Cold",
+                "ent": "ENT"
             },
+            "all": "All",
             "sos": "Emergency SOS",
             "call_ambulance": "Calling Ambulance...",
             "nearby_stores": "Nearby Medical Stores",
@@ -129,7 +135,7 @@ const resources = {
             "informational_only_disclaimer": "This analysis is for informational purposes only. Do not take any medicine without consulting your doctor.",
             "got_it_thanks": "Got it, Thanks!",
             "ai_doctor": "AI Health Assistant",
-            "ai_doctor_intro": "Hello! I am your AI Health Assistant. How can I help you today?",
+            "ai_assistant_intro": "Hello! I am your vArogra AI Assistant. I can help explain symptoms, understand medicines, or guide you to book a doctor. How can I help you today?",
             "ai_disclaimer": "AI responses can be inaccurate. Consult a doctor for medical advice.",
             "ai_error_message": "Sorry, I am having trouble connecting. Please try again later.",
             "online": "Online",
@@ -157,7 +163,9 @@ const resources = {
             "closed": "Closed",
             "by_dr": "By Dr.",
             "no_digital_prescriptions_yet": "No digital prescriptions yet",
-            "v_arogra_smart_brain": "vArogra Smart Brain"
+            "hospitals_nearby": "Hospitals Nearby",
+            "best_specialists": "Best Specialists",
+            "search_results": "Search Results"
         }
     },
     te: {
@@ -199,8 +207,14 @@ const resources = {
                 "pediatrics": "పీడియాట్రిక్స్",
                 "dermatology": "డెర్మటాలజీ",
                 "neurology": "న్యూరాలజీ",
-                "general": "జనరల్"
+                "general": "జనరల్",
+                "fever": "జ్వరం",
+                "headache": "తలనొప్పి",
+                "stomach_pain": "కడుపు నొప్పి",
+                "cough_cold": "దగ్గు & జలుబు",
+                "ent": "ENT నిపుణులు"
             },
+            "all": "అన్నీ",
             "sos": "అత్యవసర SOS",
             "call_ambulance": "అంబులెన్స్‌కు కాల్ చేస్తున్నాము...",
             "nearby_stores": "సమీప వైద్య దుకాణాలు",
@@ -286,7 +300,7 @@ const resources = {
             "informational_only_disclaimer": "ఈ విశ్లేషణ కేవలం సమాచార ప్రయోజనాల కోసం మాత్రమే. మీ వైద్యుడిని సంప్రదించకుండా ఎటువంటి మందులు తీసుకోవద్దు.",
             "got_it_thanks": "అర్థమైంది, ధన్యవాదాలు!",
             "ai_doctor": "AI ఆరోగ్య సహాయకుడు",
-            "ai_doctor_intro": "హలో! నేను మీ AI ఆరోగ్య సహాయకుడిని. ఈరోజు నేను మీకు ఏ విధంగా సహాయపడగలను?",
+            "ai_assistant_intro": "హలో! నేను మీ vArogra AI సహాయకుడిని. లక్షణాలను వివరించడంలో, మందులను అర్థం చేసుకోవడంలో లేదా డాక్టరును బుక్ చేయడంలో నేను మీకు సహాయపడగలను. ఈరోజు మీకు ఏ విధంగా సహాయపడగలను?",
             "ai_disclaimer": "AI ప్రతిస్పందనలు తప్పుగా ఉండవచ్చు. వైద్య సలహా కోసం డాక్టరును సంప్రదించండి.",
             "ai_error_message": "క్షమించండి, కనెక్ట్ చేయడంలో ఇబ్బందిగా ఉంది. దయచేసి తర్వాత మళ్ళీ ప్రయత్నించండి.",
             "online": "ఆన్‌లైన్",
@@ -314,7 +328,9 @@ const resources = {
             "closed": "మూసివేయబడింది",
             "by_dr": "డాక్టర్ ద్వారా",
             "no_digital_prescriptions_yet": "ఇంకా డిజిటల్ ప్రిస్క్రిప్షన్‌లు లేవు",
-            "varogra_smart_brain": "vArogra స్మార్ట్ మెదడు"
+            "hospitals_nearby": "సమీప ఆసుపత్రులు",
+            "best_specialists": "ఉత్తమ నిపుణులు",
+            "search_results": "శోధన ఫలితాలు"
         }
     },
     hi: {
@@ -356,8 +372,14 @@ const resources = {
                 "pediatrics": "बाल रोग विज्ञान",
                 "dermatology": "त्वचा विज्ञान",
                 "neurology": "तंत्रिका विज्ञान",
-                "general": "सामान्य"
+                "general": "सामान्य",
+                "fever": "बुख़ार",
+                "headache": "सिरदर्द",
+                "stomach_pain": "पेट दर्द",
+                "cough_cold": "खांसी और जुकाम",
+                "ent": "ENT विशेषज्ञ"
             },
+            "all": "सभी",
             "sos": "आपातकालीन SOS",
             "call_ambulance": "एम्बुलेंस बुला रहे हैं...",
             "nearby_stores": "आस-पास के मेडिकल स्टोर",
@@ -443,7 +465,7 @@ const resources = {
             "informational_only_disclaimer": "यह विश्लेषण केवल सूचनात्मक उद्देश्यों के लिए है। अपने डॉक्टर से परामर्श किए बिना कोई भी दवा न लें.",
             "got_it_thanks": "समझ गया, धन्यवाद!",
             "ai_doctor": "AI स्वास्थ्य सहायक",
-            "ai_doctor_intro": "नमस्ते! मैं आपका AI स्वास्थ्य सहायक हूं। आज मैं आपकी क्या सहायता कर सकता हूँ?",
+            "ai_assistant_intro": "नमस्ते! मैं आपका vArogra AI सहायक हूँ। मैं लक्षणों को समझाने, दवाओं को समझने या डॉक्टर बुक करने में आपकी मदद कर सकता हूँ। आज मैं आपकी क्या सहायता कर सकता हूँ?",
             "ai_disclaimer": "AI प्रतिक्रियाएं गलत हो सकती हैं। चिकित्सा सलाह के लिए डॉक्टर से परामर्श लें।",
             "ai_error_message": "क्षमा करें, मुझे कनेक्ट करने में समस्या हो रही है। कृपया बाद में पुनः प्रयास करें।",
             "online": "ऑनलाइन",
@@ -471,7 +493,9 @@ const resources = {
             "closed": "बंद",
             "by_dr": "डॉ. द्वारा",
             "no_digital_prescriptions_yet": "अभी तक कोई डिजिटल प्रिस्क्रिप्शन नहीं",
-            "varogra_smart_brain": "vArogra स्मार्ट ब्रेन"
+            "hospitals_nearby": "आस-पास के अस्पताल",
+            "best_specialists": "सर्वश्रेष्ठ विशेषज्ञ",
+            "search_results": "खोज परिणाम"
         }
     }
 }

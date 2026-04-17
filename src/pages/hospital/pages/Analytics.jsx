@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAuth } from '../../../context/AuthContext';
 import {
     LineChart,
     Line,
@@ -22,6 +23,7 @@ import {
 import { motion } from 'framer-motion';
 
 const Analytics = () => {
+    const { user } = useAuth();
     const [timeRange, setTimeRange] = React.useState('month');
 
     const periodData = {
@@ -121,7 +123,7 @@ const Analytics = () => {
                 `}</style>
                 <div className="report-header">
                     <h1 style={{ margin: 0 }}>vArogra Network - Hospital Performance Report</h1>
-                    <p style={{ fontSize: '1.2rem', margin: '10px 0' }}>Facility: <strong>Central Command</strong></p>
+                    <p style={{ fontSize: '1.2rem', margin: '10px 0' }}>Facility: <strong>{user?.hospitalName || 'vArogra Health Center'}</strong></p>
                     <p>Report Period: {timeRange.toUpperCase()} | Generated: {new Date().toLocaleString()}</p>
                 </div>
 

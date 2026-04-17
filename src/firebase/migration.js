@@ -1,5 +1,5 @@
 import { db } from "./config";
-import { doc, setDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export const migrateDataToFirestore = async () => {
     try {
@@ -77,8 +77,8 @@ export const migrateDataToFirestore = async () => {
             createdAt: new Date().toISOString()
         });
 
-        // 5. Pharmacies
-        await setDoc(doc(db, "pharmacies", storeId), {
+        // 5. Medical Stores
+        await setDoc(doc(db, "medical_stores", storeId), {
             pharmacyId: storeId,
             name: "Main Street Pharmacy",
             licenseNumber: "RX88220",

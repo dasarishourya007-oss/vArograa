@@ -121,12 +121,6 @@ const LoginView = ({ email, setEmail, password, setPassword, onSubmit, onSwitch,
         className="w-full max-w-[400px]"
     >
         <div className="text-center mb-8">
-            <div className="flex items-center justify-center gap-1.5 mb-6">
-                <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="text-blue-600 drop-shadow-sm">
-                    <path d="M16 2C16 9.73 9.73 16 2 16C9.73 16 16 22.27 16 30C16 22.27 22.27 16 30 16C22.27 16 16 9.73 16 2Z" fill="currentColor" />
-                </svg>
-                <img src="/logo.jpg" alt="vArogra Logo" className="h-10 w-auto" />
-            </div>
             <h2 className="text-3xl font-bold text-slate-900 mb-2">Welcome back</h2>
             <p className="text-slate-500 text-sm">Please enter your details to sign in</p>
         </div>
@@ -166,8 +160,8 @@ const LoginView = ({ email, setEmail, password, setPassword, onSubmit, onSwitch,
                 <div className="flex items-center gap-3 px-4 py-3.5 bg-white border border-slate-200 rounded-xl focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all shadow-sm">
                     <Mail size={18} className="text-slate-400" />
                     <input
-                        type="text"
-                        placeholder="Email or 123"
+                        type="email"
+                        placeholder="name@example.com"
                         className="bg-transparent border-none outline-none w-full font-semibold text-slate-800 placeholder:text-slate-300"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -238,7 +232,7 @@ const SignUpView = ({ data, setData, onSubmit, onSwitch, showCalendar, setShowCa
     >
         <div className="text-center mb-6">
             <h2 className="text-2xl font-bold text-emerald-500 mb-2">Create Account</h2>
-            <p className="text-slate-500 text-sm">Join vArogra for better healthcare</p>
+            <p className="text-slate-500 text-sm">Join our platform for better healthcare</p>
         </div>
 
         <form onSubmit={onSubmit} className="flex flex-col gap-4">

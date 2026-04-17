@@ -42,14 +42,17 @@ const DoctorProfile = () => {
         );
     }
 
+    const heroImage = doctor.photoURL || doctor.image || '/images/default-doctor.png';
+
     return (
         <div className="container min-h-screen bg-[#fcfdfe] pb-32 animate-entrance relative">
 
             {/* Cinematic Hero Section */}
             <div className="relative h-[380px] w-full">
                 <img
-                    src={doctor.image}
+                    src={heroImage}
                     alt={doctor.name}
+                    loading="lazy"
                     className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-transparent to-transparent opacity-90" />

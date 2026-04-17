@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Image as ImageIcon, Camera, X, UploadCloud } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ImageUpload = ({ label, image, onImageChange, className, progress }) => {
+const ImageUpload = ({ label, image, onImageChange, className, progress, circular, cameraOnly = false }) => {
     const fileInputRef = useRef(null);
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
@@ -10,7 +10,17 @@ const ImageUpload = ({ label, image, onImageChange, className, progress }) => {
     const [showCamera, setShowCamera] = useState(false);
     const [stream, setStream] = useState(null);
 
+    // Remove auto-start to avoid permission issues without user interaction
+    /*
+    React.useEffect(() => {
+        if (cameraOnly && !image && !showCamera) {
+            startCamera();
+        }
+    }, [cameraOnly, image, showCamera]);
+    */
+
     const handleFileSelect = (e) => {
+        if (cameraOnly) return;
         const file = e.target.files[0];
         if (file) {
             processFile(file);
@@ -107,6 +117,7 @@ const ImageUpload = ({ label, image, onImageChange, className, progress }) => {
     };
 
     const handleDrop = (e) => {
+        if (cameraOnly) return;
         e.preventDefault();
         setIsDragging(false);
         const file = e.dataTransfer.files[0];
@@ -135,7 +146,7 @@ const ImageUpload = ({ label, image, onImageChange, className, progress }) => {
             {label && <label className="text-sm font-bold text-slate-500 ml-1 mb-2 block">{label}</label>}
 
             {showCamera ? (
-                <div className="relative w-full h-[300px] bg-black rounded-[32px] overflow-hidden flex items-center justify-center">
+                <div className={`relative w-full h-[300px] bg-black ${circular ? 'rounded-full aspect-square' : 'rounded-[32px]'} overflow-hidden flex items-center justify-center`}>
                     <video
                         ref={videoRef}
                         autoPlay
@@ -146,12 +157,14 @@ const ImageUpload = ({ label, image, onImageChange, className, progress }) => {
 
                     <div className="absolute bottom-6 inset-x-0 flex items-center justify-center gap-8">
                         <button
+                            type="button"
                             onClick={stopCamera}
                             className="p-4 bg-white/20 backdrop-blur-md rounded-full text-white hover:bg-white/30 transition-colors"
                         >
                             <X size={24} />
                         </button>
                         <button
+                            type="button"
                             onClick={capturePhoto}
                             className="p-1 rounded-full border-4 border-white transition-transform active:scale-90"
                         >
@@ -170,9 +183,11 @@ const ImageUpload = ({ label, image, onImageChange, className, progress }) => {
                     />
 
                     <div
+                        onClick={cameraOnly && !preview ? startCamera : undefined}
                         className={`
-                            relative w-full min-h-[220px] rounded-[32px] border-2 border-dashed transition-all overflow-hidden flex flex-col items-center justify-center p-6
+                            relative w-full ${circular ? 'aspect-square rounded-full' : 'min-h-[220px] rounded-[32px]'} border-2 border-dashed transition-all overflow-hidden flex flex-col items-center justify-center p-6
                             ${isDragging ? 'border-p-500 bg-p-50/50' : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'}
+                            ${cameraOnly && !preview ? 'cursor-pointer' : ''}
                         `}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
@@ -207,14 +222,18 @@ const ImageUpload = ({ label, image, onImageChange, className, progress }) => {
                                     )}
 
                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                                        {!cameraOnly && (
+                                            <button
+                                                type="button"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                className="bg-white/90 p-4 rounded-2xl shadow-xl hover:scale-110 active:scale-95 transition-all text-slate-800 flex flex-col items-center gap-1"
+                                            >
+                                                <UploadCloud size={20} />
+                                                <span className="text-[10px] font-bold">Gallery</span>
+                                            </button>
+                                        )}
                                         <button
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className="bg-white/90 p-4 rounded-2xl shadow-xl hover:scale-110 active:scale-95 transition-all text-slate-800 flex flex-col items-center gap-1"
-                                        >
-                                            <UploadCloud size={20} />
-                                            <span className="text-[10px] font-bold">Gallery</span>
-                                        </button>
-                                        <button
+                                            type="button"
                                             onClick={startCamera}
                                             className="bg-white/90 p-4 rounded-2xl shadow-xl hover:scale-110 active:scale-95 transition-all text-slate-800 flex flex-col items-center gap-1"
                                         >
@@ -224,6 +243,7 @@ const ImageUpload = ({ label, image, onImageChange, className, progress }) => {
                                     </div>
 
                                     <button
+                                        type="button"
                                         onClick={clearImage}
                                         className="absolute top-4 right-4 p-2 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 active:scale-90 transition-transform z-10"
                                     >
@@ -238,20 +258,24 @@ const ImageUpload = ({ label, image, onImageChange, className, progress }) => {
                                     exit={{ opacity: 0, y: -10 }}
                                     className="flex flex-col items-center gap-6 w-full"
                                 >
-                                    <div className="flex gap-4 w-full px-4">
-                                        <button
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className="flex-1 aspect-square rounded-3xl bg-white border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-3 hover:shadow-md hover:border-p-200 transition-all group active:scale-95"
-                                        >
-                                            <div className="w-12 h-12 rounded-2xl bg-slate-50 items-center justify-center flex text-slate-400 group-hover:bg-p-50 group-hover:text-p-600 transition-colors">
-                                                <UploadCloud size={24} />
-                                            </div>
-                                            <span className="text-sm font-bold text-main">File Manager</span>
-                                        </button>
+                                    <div className="flex gap-4 w-full px-4 justify-center">
+                                        {!cameraOnly && (
+                                            <button
+                                                type="button"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                className="flex-1 max-w-[160px] aspect-square rounded-3xl bg-white border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-3 hover:shadow-md hover:border-p-200 transition-all group active:scale-95"
+                                            >
+                                                <div className="w-12 h-12 rounded-2xl bg-slate-50 items-center justify-center flex text-slate-400 group-hover:bg-p-50 group-hover:text-p-600 transition-colors">
+                                                    <UploadCloud size={24} />
+                                                </div>
+                                                <span className="text-sm font-bold text-main">File Manager</span>
+                                            </button>
+                                        )}
 
                                         <button
+                                            type="button"
                                             onClick={startCamera}
-                                            className="flex-1 aspect-square rounded-3xl bg-white border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-3 hover:shadow-md hover:border-p-200 transition-all group active:scale-95"
+                                            className={`${cameraOnly ? 'w-40 h-40' : 'flex-1 max-w-[160px] aspect-square'} rounded-3xl bg-white border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-3 hover:shadow-md hover:border-p-200 transition-all group active:scale-95`}
                                         >
                                             <div className="w-12 h-12 rounded-2xl bg-slate-50 items-center justify-center flex text-slate-400 group-hover:bg-p-50 group-hover:text-p-600 transition-colors">
                                                 <Camera size={24} />
@@ -260,9 +284,11 @@ const ImageUpload = ({ label, image, onImageChange, className, progress }) => {
                                         </button>
                                     </div>
 
-                                    <p className="text-[11px] font-bold text-slate-300 uppercase tracking-widest text-center">
-                                        or drag image here
-                                    </p>
+                                    {!cameraOnly && (
+                                        <p className="text-[11px] font-bold text-slate-300 uppercase tracking-widest text-center">
+                                            or drag image here
+                                        </p>
+                                    )}
                                 </motion.div>
                             )}
                         </AnimatePresence>

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CheckCircle2, Calendar, Clock, MapPin, Share2, Download, Home } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -59,8 +59,22 @@ const AppointmentSuccess = () => {
                                 <p className="text-[15px] font-black text-main uppercase">{appointment.doctorName}</p>
                             </div>
                             <div className="flex flex-col gap-1">
-                                <span className="text-[10px] font-black tracking-[2px] text-p-600 uppercase">Token</span>
-                                <p className="text-[18px] font-black text-p-600">#{appointment.id.split('-')[1]}</p>
+                                <span className="text-[10px] font-black tracking-[2px] text-p-600 uppercase">Token No.</span>
+                                <p className="text-[24px] font-black text-p-600">#{appointment.token || '01'}</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-black tracking-[2px] text-p-600 uppercase">Consulting Fee</span>
+                                <p className="text-[15px] font-black text-main">â‚¹{appointment.consultingFee || '500'}</p>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-black tracking-[2px] text-p-600 uppercase">Reminders</span>
+                                <div className="flex items-center gap-1">
+                                    <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+                                    <span className="text-[11px] font-bold text-success">Active (5m before)</span>
+                                </div>
                             </div>
                         </div>
 
@@ -101,7 +115,7 @@ const AppointmentSuccess = () => {
                     <Home size={22} strokeWidth={2.5} /> Back to Home
                 </button>
                 <button
-                    onClick={() => navigate('/?tab=appointments')}
+                    onClick={() => navigate('/dashboard/patient?tab=appointments')}
                     className="w-full mt-4 h-10 bg-transparent border-none font-bold text-p-600 text-sm active:opacity-60 transition-all"
                 >
                     View My Appointments
@@ -112,3 +126,4 @@ const AppointmentSuccess = () => {
 };
 
 export default AppointmentSuccess;
+

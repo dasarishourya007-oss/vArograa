@@ -1,17 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldAlert, MapPin, Clock, CheckCircle2, AlertTriangle, User } from 'lucide-react';
-import { listenToSOSRequests, updateAppointmentStatus } from '../../firebase/services';
+import { listenToSOSRequests } from '../../firebase/services';
 
-export const SOSAlertPanel = () => {
+export const SOSAlertPanel = ({ user }) => {
     const [alerts, setAlerts] = useState([]);
 
     useEffect(() => {
         const unsub = listenToSOSRequests((data) => {
-            setAlerts(data);
+            // Filter: Only show alerts from the doctor's affiliated hospital network
+            const filtered = data.filter(alert => {
+                // Global emergencies without specific location might be broadcast to everyone
+                if (!alert.location && !alert.hospitalId) return true;
+                
+                const alertLoc = String(alert.location || '').toLowerCase();
+                const alertHospId = String(alert.hospitalId || '').toLowerCase();
+                const docHospName = String(user?.hospitalName || '').toLowerCase();
+                const docHospId = String(user?.hospitalId || '').toLowerCase();
+                
+                // Match either by explicitly linked Hospital ID or by approximate Name matching
+                const matchesId = docHospId && alertHospId === docHospId;
+                const matchesName = docHospName && alertLoc.includes(docHospName);
+                
+                return matchesId || matchesName;
+            });
+            setAlerts(filtered);
         });
         return () => unsub();
-    }, []);
+    }, [user?.hospitalId, user?.hospitalName]);
 
     if (alerts.length === 0) return null;
 
@@ -19,7 +35,10 @@ export const SOSAlertPanel = () => {
         <div className="mb-6">
             <div className="flex items-center gap-2 mb-4">
                 <ShieldAlert className="text-rose-600 animate-pulse" size={24} />
-                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Active SOS Emergencies</h2>
+                <div>
+                    <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Active SOS Emergencies</h2>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{user?.hospitalName ? `Network: ${user.hospitalName}` : 'Global Network'}</p>
+                </div>
             </div>
             <div className="flex flex-col gap-3">
                 <AnimatePresence>
@@ -60,7 +79,7 @@ export const SOSAlertPanel = () => {
     );
 };
 
-export const PatientTriageInsight = ({ patientId, triageData }) => {
+export const PatientTriageInsight = ({ triageData }) => {
     if (!triageData) return null;
 
     return (

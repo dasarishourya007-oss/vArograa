@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Calendar, Bot, ShoppingBag, User, AlertCircle, Package, Megaphone, Mic, Search } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { Home, Calendar, Bot, ShoppingBag, User, AlertCircle, Package, Megaphone, Mic, Search, Droplets, FileText } from 'lucide-react';
+
 import { motion, AnimatePresence } from 'framer-motion';
 
 const BottomNav = ({ activeTab, onTabChange, onVoiceAssistant }) => {
@@ -60,6 +60,7 @@ const BottomNav = ({ activeTab, onTabChange, onVoiceAssistant }) => {
                 </motion.button>
 
 
+
                 {/* SOS Button */}
                 <div className="relative">
                     <motion.div
@@ -94,6 +95,7 @@ const BottomNav = ({ activeTab, onTabChange, onVoiceAssistant }) => {
                 >
                     <Package size={20} />
                 </motion.button>
+
             </motion.div>
 
             {/* AI Bot Pill (Green) - Fixed in place, no scroll-relative movement */}
@@ -103,15 +105,25 @@ const BottomNav = ({ activeTab, onTabChange, onVoiceAssistant }) => {
                 whileHover={{ scale: 1.05, y: -2 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => onTabChange('ai-assistant')}
-                className={`px-7 py-3.5 rounded-[28px] font-black text-[12px] uppercase tracking-[0.1em] shadow-[0_15px_30px_rgba(16,185,129,0.25)] transition-all border-none cursor-pointer flex items-center gap-2 ${activeTab === 'ai-assistant'
-                    ? 'bg-emerald-600 text-white ring-2 ring-emerald-300 ring-offset-2'
-                    : 'bg-[#7eb343] hover:bg-[#8bc54a] text-white'
+                className={`relative w-14 h-14 rounded-full overflow-hidden shadow-[0_15px_35px_rgba(0,0,0,0.2)] transition-all border-none cursor-pointer flex items-center justify-center bg-white p-0 ${activeTab === 'ai-assistant'
+                    ? 'ring-4 ring-emerald-400 ring-offset-2 scale-110'
+                    : ''
                     }`}
             >
-                AI BOT
+                <img 
+                    src="/ai_orb.png" 
+                    alt="AI Assistant" 
+                    className="w-[190%] h-[190%] object-cover shrink-0" 
+                    style={{ 
+                        filter: 'contrast(1.05)',
+                    }}
+                />
             </motion.button>
         </div>
     );
 };
 
 export default BottomNav;
+
+
+

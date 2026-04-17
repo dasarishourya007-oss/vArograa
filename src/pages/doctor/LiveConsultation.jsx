@@ -6,7 +6,9 @@ import {
     PhoneOff, ChevronRight, X, Pill, FlaskConical, Stethoscope,
     Clipboard, Calendar, Activity, Save, Trash2, Plus,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { sendPrescriptionToPatient, subscribeToAppointments, updateAppointmentStatus } from '../../firebase/services';
+
 
 // ─── Today's booked appointments ────────────────────────────────────────────
 const TODAY_APPOINTMENTS = [
@@ -131,11 +133,72 @@ const SEND_STAGES = [
     { label: 'Delivered to patient! ✓', icon: '✅', color: 'var(--brand-teal)' },
 ];
 
-const PrescriptionPanel = ({ session, onClose }) => {
+const PrescriptionPanel = ({ session, onClose, doctorUser, onPrescriptionSent }) => {
     const [meds, setMeds] = useState([{ name: '', dose: '', frequency: '', duration: '', instructions: '' }]);
     const [advice, setAdvice] = useState('');
     const [diagnosis, setDiagnosis] = useState('');
     const [stage, setStage] = useState(-1); // -1 = idle, 0-3 = sending stages
+    const canvasRef = useRef(null);
+    const drawingRef = useRef(false);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+    }, []);
+
+    const getPoint = (event) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
+        const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+        const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+        return {
+            x: ((clientX - rect.left) / rect.width) * canvas.width,
+            y: ((clientY - rect.top) / rect.height) * canvas.height
+        };
+    };
+
+    const startDraw = (event) => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) return;
+        drawingRef.current = true;
+        const { x, y } = getPoint(event);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+    };
+
+    const draw = (event) => {
+        if (!drawingRef.current) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) return;
+        const { x, y } = getPoint(event);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+    };
+
+    const stopDraw = () => {
+        drawingRef.current = false;
+    };
+
+    const clearBoard = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) return;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+    };
     const addMed = () => setMeds(m => [...m, { name: '', dose: '', frequency: '', duration: '', instructions: '' }]);
     const removeMed = i => setMeds(m => m.filter((_, idx) => idx !== i));
     const updateMed = (i, field, val) => setMeds(m => m.map((med, idx) => idx === i ? { ...med, [field]: val } : med));
@@ -146,39 +209,35 @@ const PrescriptionPanel = ({ session, onClose }) => {
         fontSize: '0.82rem', width: '100%', boxSizing: 'border-box',
     };
 
-    const sendPrescription = () => {
+    const sendPrescription = async () => {
         if (!session) return;
-        // Build the record
-        const rx = {
-            id: Date.now(),
-            patient: session.patientName,
-            age: session.age,
-            gender: session.gender,
-            date: new Date().toLocaleDateString('en-CA'),
-            status: 'Active',
-            templateLabel: diagnosis || 'Custom Prescription',
-            diagnosis,
-            medicines: meds,
-            advice,
-            doctorName: 'Dr. Sarah Wilson',
-        };
+        try {
+            let s = 0;
+            setStage(s);
+            const tick = setInterval(() => {
+                s += 1;
+                if (s < SEND_STAGES.length) setStage(s);
+            }, 650);
 
-        // Save to localStorage
-        const existing = JSON.parse(localStorage.getItem(RX_STORAGE_KEY) || '[]');
-        localStorage.setItem(RX_STORAGE_KEY, JSON.stringify([rx, ...existing]));
-
-        // Run staged animation
-        let s = 0;
-        setStage(s);
-        const tick = setInterval(() => {
-            s += 1;
-            if (s < SEND_STAGES.length) {
-                setStage(s);
-            } else {
-                clearInterval(tick);
-                setTimeout(() => { setStage(-1); onClose(); }, 900);
-            }
-        }, 700);
+            await sendPrescriptionToPatient({
+                appointmentId: session?.id,
+                appointment: session,
+                doctor: doctorUser,
+                diagnosis,
+                medicines: meds,
+                advice,
+                notes: '',
+                whiteboardDataUrl: canvasRef.current?.toDataURL('image/png') || ''
+            });
+            await updateAppointmentStatus(session?.id, 'completed', { completedByDoctor: true });
+            clearInterval(tick);
+            setStage(SEND_STAGES.length - 1);
+            onPrescriptionSent?.();
+            setTimeout(() => { setStage(-1); onClose(); }, 900);
+        } catch (error) {
+            console.error('Prescription send failed:', error);
+            setStage(-1);
+        }
     };
 
     const isSending = stage >= 0;
@@ -223,6 +282,28 @@ const PrescriptionPanel = ({ session, onClose }) => {
                         </div>
                     ))}
                 </div>
+            </div>
+
+            <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Digital Writing Board</label>
+                    <button onClick={clearBoard} disabled={isSending} style={{ background: 'rgba(15,23,42,0.12)', color: 'var(--text-muted)', border: '1px solid var(--border-glass)', borderRadius: '6px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}>
+                        Clear
+                    </button>
+                </div>
+                <canvas
+                    ref={canvasRef}
+                    width={900}
+                    height={300}
+                    onMouseDown={startDraw}
+                    onMouseMove={draw}
+                    onMouseUp={stopDraw}
+                    onMouseLeave={stopDraw}
+                    onTouchStart={startDraw}
+                    onTouchMove={draw}
+                    onTouchEnd={stopDraw}
+                    style={{ width: '100%', height: '170px', background: 'white', borderRadius: '10px', border: '1px solid var(--border-glass)', touchAction: 'none', marginBottom: '10px' }}
+                />
             </div>
 
             <div>
@@ -311,8 +392,7 @@ const NotepadPanel = () => {
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 const LiveConsultation = () => {
-    const navigate = useNavigate();
-
+    const { user } = useAuth();
     const [queue, setQueue] = useState(TODAY_APPOINTMENTS);
     const [activeSession, setActiveSession] = useState(null);
     const [timer, setTimer] = useState(0);
@@ -320,7 +400,35 @@ const LiveConsultation = () => {
     const [diagnosis, setDiagnosis] = useState('');
     const [completed, setCompleted] = useState([]);
     const [drawer, setDrawer] = useState(null); // 'history' | 'labs' | 'prescription' | 'notepad'
+    const [notice, setNotice] = useState('');
     const intervalRef = useRef(null);
+
+    useEffect(() => {
+        const doctorId = user?.uid || user?.id;
+        if (!doctorId) return;
+        const unsub = subscribeToAppointments({ doctorId }, (rows) => {
+            const mapped = (rows || []).map((a, idx) => ({
+                id: a.id,
+                tokenNumber: a.token || String(idx + 1).padStart(2, '0'),
+                patientName: a.patientName || 'Patient',
+                type: a.appointmentType || a.visitType || 'Consultation',
+                time: a.time || '',
+                age: a.age || '--',
+                gender: a.gender || '--',
+                bloodGroup: a.bloodGroup || '--',
+                allergies: Array.isArray(a.allergies) ? a.allergies : [],
+                status: String(a.status || '').toLowerCase(),
+                summary: a.summary || a.reason || '',
+                patientId: a.patientId || null,
+                doctorName: a.doctorName || '',
+                hospitalName: a.hospitalName || '',
+                date: a.date || '',
+                appointmentType: a.appointmentType || ''
+            }));
+            setQueue(mapped.length > 0 ? mapped : TODAY_APPOINTMENTS);
+        });
+        return () => unsub && unsub();
+    }, [user?.uid, user?.id]);
 
     useEffect(() => {
         if (activeSession) {
@@ -376,6 +484,11 @@ const LiveConsultation = () => {
 
     return (
         <div style={{ position: 'relative' }}>
+            {notice && (
+                <div style={{ marginBottom: '10px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(16,185,129,0.12)', color: 'var(--brand-teal)', fontWeight: 700, fontSize: '0.82rem' }}>
+                    {notice}
+                </div>
+            )}
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: '280px 1fr 280px',
@@ -641,7 +754,17 @@ const LiveConsultation = () => {
                             <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
                                 {drawer === 'history' && <PatientHistoryPanel session={activeSession} />}
                                 {drawer === 'labs' && <LabReportsPanel session={activeSession} />}
-                                {drawer === 'prescription' && <PrescriptionPanel session={activeSession} onClose={() => setDrawer(null)} />}
+                                {drawer === 'prescription' && (
+                                    <PrescriptionPanel
+                                        session={activeSession}
+                                        doctorUser={user}
+                                        onClose={() => setDrawer(null)}
+                                        onPrescriptionSent={() => {
+                                            setNotice('Prescription sent to patient account and Medical Records.');
+                                            setTimeout(() => setNotice(''), 4000);
+                                        }}
+                                    />
+                                )}
                                 {drawer === 'notepad' && <NotepadPanel />}
                             </div>
                         </motion.div>

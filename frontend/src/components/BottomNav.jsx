@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Calendar, Bot, ShoppingBag, User, AlertCircle, Package, Megaphone, Mic } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { Home, Calendar, Bot, ShoppingBag, User, AlertCircle, Package, Megaphone, Mic, Search, FileText } from 'lucide-react';
+
 import { motion, AnimatePresence } from 'framer-motion';
 
 const BottomNav = ({ activeTab, onTabChange, onVoiceAssistant }) => {
@@ -49,6 +49,27 @@ const BottomNav = ({ activeTab, onTabChange, onVoiceAssistant }) => {
                     <Home size={22} />
                 </motion.button>
 
+                {/* Appointments Button */}
+                <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => onTabChange('appointments')}
+                    className={`flex items-center justify-center transition-colors ${activeTab === 'appointments' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                    <Calendar size={22} />
+                </motion.button>
+
+                {/* Medical Records Button */}
+                <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => onTabChange('records')}
+                    className={`flex items-center justify-center transition-colors ${activeTab === 'records' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                    <FileText size={22} />
+                </motion.button>
+
+
                 {/* Updates/Announcements Button */}
                 <motion.button
                     whileHover={{ scale: 1.1 }}
@@ -58,6 +79,7 @@ const BottomNav = ({ activeTab, onTabChange, onVoiceAssistant }) => {
                 >
                     <Megaphone size={22} />
                 </motion.button>
+
 
                 {/* SOS Button */}
                 <div className="relative">
@@ -114,3 +136,6 @@ const BottomNav = ({ activeTab, onTabChange, onVoiceAssistant }) => {
 };
 
 export default BottomNav;
+
+
+

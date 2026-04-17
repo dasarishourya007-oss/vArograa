@@ -11,61 +11,91 @@ const HospitalCard = ({ hospital, onClick }) => {
         window.location.href = `tel:9999999999`; // Placeholder
     };
 
+    const isTopRated = hospital.rating >= 5.0;
+    
     return (
         <div
             onClick={onClick}
-            className="flex flex-col gap-0 mb-6 group active:scale-[0.98] transition-all duration-300"
+            className={`flex flex-col gap-0 mb-8 group active:scale-[1.0] transition-all duration-300 rounded-[32px] overflow-hidden ${isTopRated ? 'gold-card' : 'bg-white shadow-md border border-slate-100 hover:shadow-xl'}`}
         >
-            {/* Image Section - Detached/Floating look */}
-            <div style={{ position: 'relative', height: '180px', borderRadius: 'var(--r-lg)', overflow: 'hidden', marginBottom: '-40px', zIndex: 1, boxShadow: '0 10px 30px -5px rgba(0,0,0,0.15)' }}>
+            {/* Header/Image Section */}
+            <div className="relative h-[180px] overflow-hidden">
                 <img
-                    src={hospital.image}
+                    src={hospital.image || 'https://img.freepik.com/free-vector/hospital-building-concept-illustration_114360-8440.jpg'}
                     alt={hospital.name}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                 />
-
-                {/* Distance Overlay */}
-                <div style={{ position: 'absolute', top: '20px', right: '20px' }} className="glass px-3 py-1.5 rounded-2xl shadow-sm">
-                    <span style={{ fontSize: '11px', fontWeight: '800', color: 'white' }}>{hospital.distance}</span>
+                
+                {/* Top Overlay */}
+                <div className="absolute top-4 left-4 flex gap-2">
+                    {hospital.rating >= 4.5 && (
+                        <div className={`px-3 py-1 rounded-full flex items-center gap-1.5 font-black text-[10px] tracking-wider shadow-lg ${hospital.rating >= 4.9 ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-white' : 'bg-white text-slate-900 border border-slate-100'}`}>
+                            <Star size={12} fill="currentColor" />
+                            {hospital.rating >= 4.9 ? 'PREMIUM PARTNER' : 'HIGHLY RATED'}
+                        </div>
+                    )}
+                    <div className="px-3 py-1 rounded-full bg-emerald-500 text-white font-black text-[10px] tracking-wider shadow-lg">
+                        OPEN
+                    </div>
                 </div>
 
-                {/* Status Overlay */}
-                <div style={{ position: 'absolute', bottom: '50px', left: '20px' }}>
-                    <div className={`${hospital.isOpen !== false ? 'bg-success' : 'bg-slate-500'} px-3 py-1 rounded-full shadow-lg border border-white/20`}>
-                        <span className="text-white font-bold text-[10px] tracking-wider">{hospital.isOpen !== false ? 'OPEN' : 'CLOSED'}</span>
-                    </div>
+                {/* Distance Overlay */}
+                <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-2xl shadow-sm border border-white/20">
+                    <span className="text-[11px] font-black text-slate-800">{hospital.distance}</span>
                 </div>
             </div>
 
-            {/* Info Section - Glass Card */}
-            <div className="glass p-6 pt-14 rounded-[32px] shadow-lg border-none" style={{ background: 'rgba(255,255,255,0.85)' }}>
+            {/* Info Section */}
+            <div className="p-5 flex flex-col">
                 <div className="flex justify-between items-start mb-4">
                     <div className="flex flex-col gap-1 max-w-[75%]">
-                        <h3 style={{ fontSize: '19px', fontWeight: '800', color: 'var(--text-main)', letterSpacing: '-0.5px' }}>{hospital.name}</h3>
-                        <div className="flex items-center gap-1.5">
-                            <MapPin size={12} className="text-p-500" />
-                            <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--text-muted)' }}>{hospital.address}</span>
+                        <h3 className="text-[19px] font-black text-slate-900 tracking-tight leading-none truncate uppercase">
+                            {hospital.name}
+                        </h3>
+                        <div className="flex items-center gap-1.5 mt-1">
+                            <MapPin size={12} className="text-p-600" />
+                            <span className="text-[12px] font-bold text-slate-400 truncate">{hospital.address}</span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-1 px-3 py-1.5 rounded-2xl bg-white shadow-sm border border-border/50">
-                        <Star size={12} className="text-accent" fill="var(--accent)" />
-                        <span style={{ fontSize: '13px', fontWeight: '800' }}>{hospital.rating}</span>
+                    
+                    {/* Rating Badge */}
+                    <div className={`flex items-center gap-1 px-3 py-1.5 rounded-[12px] ${isTopRated ? 'bg-amber-50 text-amber-500 border border-amber-200' : 'bg-slate-50 text-slate-600 border border-slate-100'}`}>
+                        <Star size={12} fill="currentColor" className={isTopRated ? 'text-amber-500' : 'text-slate-400'} />
+                        <span className="text-[13px] font-black">{hospital.rating}</span>
                     </div>
                 </div>
 
-                {/* Primary Action Button */}
-                <div className="flex gap-2">
+                {/* Pricing Tiers Section */}
+                {hospital.consultationFees && (
+                    <div className="flex gap-2 mb-4">
+                        <div className="flex-1 bg-blue-50/50 p-2.5 rounded-2xl border border-blue-100/50 flex flex-col items-center">
+                            <span className="text-[14px] font-black text-blue-600">₹{hospital.consultationFees.online}</span>
+                            <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest mt-0.5">Online</span>
+                        </div>
+                        <div className="flex-1 bg-emerald-50/50 p-2.5 rounded-2xl border border-emerald-100/50 flex flex-col items-center">
+                            <span className="text-[14px] font-black text-emerald-600">₹{hospital.consultationFees.offline}</span>
+                            <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest mt-0.5">Offline</span>
+                        </div>
+                        <div className="flex-1 bg-violet-50/50 p-2.5 rounded-2xl border border-violet-100/50 flex flex-col items-center">
+                            <span className="text-[14px] font-black text-violet-600">₹{hospital.consultationFees.home}</span>
+                            <span className="text-[8px] font-black text-violet-400 uppercase tracking-widest mt-0.5">Home Visit</span>
+                        </div>
+                    </div>
+                )}
+
+                {/* Footer Actions */}
+                <div className="flex gap-2.5 mt-2">
                     <button
                         onClick={(e) => { e.stopPropagation(); navigate(`/book-appointment/${hospital.id}`); }}
-                        className="flex-1 btn-primary py-4 rounded-[20px] font-bold text-[13px] flex items-center justify-center gap-2 border-none cursor-pointer"
+                        className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-[20px] font-black text-[13px] tracking-wide border-none cursor-pointer transition-all active:scale-95 ${isTopRated ? 'gold-btn' : 'bg-p-600 text-white shadow-lg shadow-p-200 hover:bg-p-700'}`}
                     >
-                        <Calendar size={16} strokeWidth={2.5} /> Book Appointment
+                        <Calendar size={16} strokeWidth={3} /> BOOK APPOINTMENT
                     </button>
                     <button
                         onClick={handleCall}
-                        className="glass-dark p-4 rounded-[20px] active:scale-90 transition-transform cursor-pointer border-none"
+                        className="p-4 rounded-[20px] bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100 hover:text-p-600 transition-all active:scale-90"
                     >
-                        <Phone size={20} className="text-p-600" />
+                        <Phone size={20} strokeWidth={2.5} />
                     </button>
                 </div>
             </div>

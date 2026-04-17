@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ChevronLeft,
@@ -7,6 +7,8 @@ import {
     MoreHorizontal,
     Filter,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { subscribeToAppointments } from '../../firebase/services';
 
 // Helper: format a Date as "YYYY-MM-DD"
 const toKey = (date) => {
@@ -80,6 +82,7 @@ const getStatusColor = (status) => {
         case 'Completed': return 'var(--brand-teal)';
         case 'Booked': return 'var(--brand-primary)';
         case 'Cancelled': return 'var(--critical)';
+        case 'Pending': return 'var(--warning)';
         default: return 'var(--text-muted)';
     }
 };
@@ -90,20 +93,72 @@ const MONTH_NAMES = [
 ];
 
 const MySchedule = () => {
-    const today = new Date(2026, 1, 26); // Feb 26 2026 — matches mock data
+    const { user } = useAuth();
+    const today = new Date();
     const [selectedDate, setSelectedDate] = useState(today);
     const [calMonth, setCalMonth] = useState(today.getMonth());   // 0-based
     const [calYear, setCalYear] = useState(today.getFullYear());
 
     // State for appointments so we can cancel them
     const [appointments, setAppointments] = useState(INITIAL_APPOINTMENTS);
+    const [liveAppointments, setLiveAppointments] = useState([]);
     const [openMenuId, setOpenMenuId] = useState(null); // Track which row's menu is open
     const [filterStatus, setFilterStatus] = useState('All');
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+
+    useEffect(() => {
+        const doctorId = user?.uid || user?.id;
+        if (!doctorId) return undefined;
+
+        const unsubPrimary = subscribeToAppointments({ doctorId }, (data) => setLiveAppointments(data || []));
+        const refId = user?.doctorId || user?.id;
+        let unsubRef = () => { };
+        if (refId && refId !== doctorId) {
+            unsubRef = subscribeToAppointments({ doctorRefId: refId }, (data) => {
+                setLiveAppointments((prev) => {
+                    const merged = [...(prev || []), ...(data || [])];
+                    const seen = new Set();
+                    return merged.filter((item) => {
+                        if (!item?.id || seen.has(item.id)) return false;
+                        seen.add(item.id);
+                        return true;
+                    });
+                });
+            });
+        }
+
+        return () => {
+            unsubPrimary();
+            unsubRef();
+        };
+    }, [user?.uid, user?.id, user?.doctorId]);
     // Slots for the selected date, mapped and filtered
     const selectedKey = toKey(selectedDate);
-    const slots = (appointments[selectedKey] || []).filter(slot => {
+    const normalizedLiveSlots = (liveAppointments || [])
+        .filter((appt) => {
+            const key = appt?.appointmentDateKey || '';
+            if (key) return key === selectedKey;
+            return false;
+        })
+        .map((appt) => {
+            const st = String(appt?.status || '').toLowerCase();
+            let mappedStatus = 'Booked';
+            if (st === 'pending') mappedStatus = 'Pending';
+            if (st === 'accepted' || st === 'confirmed') mappedStatus = 'Booked';
+            if (st === 'completed') mappedStatus = 'Completed';
+            if (st === 'rejected' || st === 'cancelled') mappedStatus = 'Cancelled';
+
+            return {
+                time: appt?.time || '--',
+                patient: appt?.patientName || 'Patient',
+                type: appt?.appointmentType || appt?.visitType || 'Consultation',
+                status: mappedStatus
+            };
+        });
+
+    const sourceSlots = normalizedLiveSlots.length > 0 ? normalizedLiveSlots : (appointments[selectedKey] || []);
+    const slots = sourceSlots.filter(slot => {
         if (filterStatus === 'All') return true;
         if (slot.status === 'Break') return true; // always show breaks
         return slot.status === filterStatus;
@@ -154,7 +209,8 @@ const MySchedule = () => {
     const todayKey = toKey(today);
     const hasAppointments = (day) => {
         const k = toKey(new Date(calYear, calMonth, day));
-        return !!appointments[k];
+        const hasLive = (liveAppointments || []).some((appt) => (appt?.appointmentDateKey || '') === k);
+        return hasLive || !!appointments[k];
     };
 
     const handleCancelAppointment = (dateKey, index) => {
@@ -536,3 +592,5 @@ const MySchedule = () => {
 };
 
 export default MySchedule;
+
+

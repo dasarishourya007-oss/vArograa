@@ -57,7 +57,7 @@ const portals = [
     },
     {
         id: 'pharmacy',
-        title: 'Pharmacy',
+        title: 'Medical Store',
         description: 'Inventory & Sales',
         route: '/login/medical-store',
         color: '#ea580c',          // orange
@@ -97,7 +97,7 @@ const LoginSelection = () => {
 
     return (
         <div
-            style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", background: 'linear-gradient(160deg, #f0fdf4 0%, #f8fafc 40%, #eff6ff 100%)' }}
+            style={{ fontFamily: "'Outfit', 'Inter', 'Segoe UI', sans-serif", background: 'linear-gradient(160deg, #f0fdf4 0%, #f8fafc 40%, #eff6ff 100%)' }}
             className="min-h-screen w-full flex flex-col overflow-hidden relative"
         >
             {/* Decorative blobs */}
@@ -105,14 +105,7 @@ const LoginSelection = () => {
             <div style={{ position: 'absolute', bottom: 80, right: -40, width: 180, height: 180, borderRadius: '50%', background: 'radial-gradient(circle, #bfdbfe 0%, transparent 70%)', opacity: 0.5, pointerEvents: 'none' }} />
             <div style={{ position: 'absolute', bottom: -30, left: '30%', width: 120, height: 120, borderRadius: '50%', background: 'radial-gradient(circle, #fed7aa 0%, transparent 70%)', opacity: 0.55, pointerEvents: 'none' }} />
 
-            {/* Top Nav */}
-            <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 12px #16a34a44' }}>
-                        <span style={{ color: '#fff', fontWeight: 900, fontSize: 18 }}>v</span>
-                    </div>
-                    <span style={{ fontWeight: 800, fontSize: 20, color: '#0f172a', letterSpacing: '-0.5px' }}>vArogra</span>
-                </div>
+            <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '18px 24px 0' }}>
                 <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 6, borderRadius: 8, display: 'flex' }}>
                     <Settings size={22} />
                 </button>

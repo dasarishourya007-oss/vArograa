@@ -9,10 +9,15 @@ import {
     Save,
     Mail,
     Smartphone,
-    Monitor
+    Monitor,
+    Camera
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../../../context/AuthContext';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { auth, db } from '../../../firebase/config';
+import { uploadHospitalPhoto } from '../../../firebase/uploadImage';
+import ImageUpload from '../../../components/ImageUpload';
 
 const SettingsOption = ({ icon, title, desc, children, isOpen, onToggle, danger, isSaved }) => (
     <div style={{ marginBottom: '1rem' }}>
@@ -89,7 +94,59 @@ const SettingsOption = ({ icon, title, desc, children, isOpen, onToggle, danger,
 );
 
 const Settings = () => {
-    const { logout, user, role } = useAuth();
+    const { logout, user, role, updateUserProfilePhoto } = useAuth();
+    const location = useLocation();
+    const navigate = useNavigate();
+    const fileToCompressedDataUrl = (file, maxDimension = 320, quality = 0.72) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ratio = Math.min(1, maxDimension / Math.max(img.width, img.height, 1));
+                canvas.width = Math.max(1, Math.round(img.width * ratio));
+                canvas.height = Math.max(1, Math.round(img.height * ratio));
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = reject;
+            img.src = reader.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+
+    const getLocalLogoKey = (hospitalId) => `varogra_hospital_logo_${hospitalId}`;
+    const getPersistedHospitalPhoto = (hospitalId) => {
+        if (!hospitalId) return '';
+        try {
+            return localStorage.getItem(getLocalLogoKey(hospitalId)) || '';
+        } catch {
+            return '';
+        }
+    };
+
+    const withTimeout = (promise, ms = 30000) => Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out.')), ms))
+    ]);
+
+    const persistHospitalPhotoLocally = (hospitalId, photoURL, localPhoto = '') => {
+        if (!hospitalId || !photoURL) return;
+        const raw = localStorage.getItem('varogra_hospitals');
+        const list = raw ? JSON.parse(raw) : [];
+        const updated = (list || []).map((h) => {
+            const hid = h?.id || h?.hospitalId;
+            return hid === hospitalId ? { ...h, photoURL } : h;
+        });
+        localStorage.setItem('varogra_hospitals', JSON.stringify(updated));
+
+        const snapshot = localPhoto || (String(photoURL).startsWith('data:image/') ? photoURL : '');
+        if (snapshot) {
+            localStorage.setItem(getLocalLogoKey(hospitalId), snapshot);
+        }
+    };
     const [openSection, setOpenSection] = useState(null);
     const [savedStatus, setSavedStatus] = useState({});
 
@@ -109,6 +166,18 @@ const Settings = () => {
         sms: false,
         system: true
     });
+
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
+    const [pendingLogoFile, setPendingLogoFile] = useState(null);
+    const [logoPreview, setLogoPreview] = useState(null);
+    const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
+    
+    React.useEffect(() => {
+        if (location?.state?.requirePhotoUpload) {
+            setStatusMsg({ type: 'error', text: 'Please upload hospital logo now. This is required after login.' });
+            navigate(location.pathname, { replace: true, state: null });
+        }
+    }, [location, navigate]);
 
     const handleToggle = (section) => {
         setOpenSection(openSection === section ? null : section);
@@ -131,6 +200,70 @@ const Settings = () => {
         }, 3000);
     };
 
+    const handleLogoSelect = async (file) => {
+        if (!file) return;
+        try {
+            const preview = await fileToCompressedDataUrl(file);
+            setPendingLogoFile(file);
+            setLogoPreview(preview);
+            setStatusMsg({ type: '', text: '' });
+        } catch (error) {
+            console.error('Preview failed:', error);
+            setStatusMsg({ type: 'error', text: 'Unable to read selected image. Please try another file.' });
+        }
+    };
+
+    const handleSaveProfile = async () => {
+        const hospitalId = user?.uid || user?.id || user?.hospitalId || localStorage.getItem('varogra_hospital_id');
+
+        if (!hospitalId) {
+            setStatusMsg({ type: 'error', text: 'Hospital ID not found. Please login again.' });
+            return;
+        }
+
+        setIsSavingProfile(true);
+        setStatusMsg({ type: '', text: '' });
+
+        try {
+            if (pendingLogoFile) {
+                const localSnapshot = logoPreview || await fileToCompressedDataUrl(pendingLogoFile);
+                if (!auth?.currentUser?.uid) {
+                    const localUrl = logoPreview || await fileToCompressedDataUrl(pendingLogoFile);
+                    if (typeof updateUserProfilePhoto === 'function') updateUserProfilePhoto(localUrl);
+                    persistHospitalPhotoLocally(hospitalId, localUrl);
+                    setStatusMsg({ type: 'success', text: 'Logo saved in demo mode. It will persist on refresh.' });
+                } else {
+                    try {
+                        const downloadURL = await withTimeout(uploadHospitalPhoto(hospitalId, pendingLogoFile), 30000);
+                        if (typeof updateUserProfilePhoto === 'function') {
+                            updateUserProfilePhoto(downloadURL);
+                        }
+                        persistHospitalPhotoLocally(hospitalId, downloadURL, localSnapshot);
+                        setStatusMsg({ type: 'success', text: 'Hospital logo updated! Visible to all patients now.' });
+                    } catch (cloudError) {
+                        console.error('Cloud upload failed, falling back to local save:', cloudError);
+                        const localUrl = logoPreview || await fileToCompressedDataUrl(pendingLogoFile);
+                        if (typeof updateUserProfilePhoto === 'function') updateUserProfilePhoto(localUrl);
+                        persistHospitalPhotoLocally(hospitalId, localUrl);
+                        setStatusMsg({ type: 'success', text: 'Cloud was slow, logo saved locally.' });
+                    }
+                }
+
+                setPendingLogoFile(null);
+                setLogoPreview(null);
+            } else {
+                setStatusMsg({ type: 'success', text: 'Profile changes saved.' });
+            }
+
+            markSaved('profile');
+        } catch (error) {
+            console.error('Upload failed:', error);
+            setStatusMsg({ type: 'error', text: error?.message || 'Upload failed. Please try again.' });
+        } finally {
+            setIsSavingProfile(false);
+        }
+    };
+
     return (
         <div style={{ maxWidth: '800px' }}>
             <div style={{ marginBottom: '3.5rem' }}>
@@ -151,6 +284,36 @@ const Settings = () => {
                     isSaved={savedStatus.profile}
                 >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        {statusMsg.text && (
+                            <div style={{
+                                padding: '12px',
+                                borderRadius: '12px',
+                                fontSize: '0.8rem',
+                                fontWeight: '700',
+                                background: statusMsg.type === 'success' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                color: statusMsg.type === 'success' ? '#22c55e' : '#ef4444'
+                            }}>
+                                {statusMsg.text}
+                            </div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', marginBottom: '1rem', width: '100%' }}>
+                            <div style={{ width: '150px' }}>
+                                <ImageUpload
+                                    image={logoPreview || user?.photoURL || getPersistedHospitalPhoto(user?.uid || user?.id || user?.hospitalId || localStorage.getItem('varogra_hospital_id'))}
+                                    onImageChange={handleLogoSelect}
+                                    cameraOnly={!user?.isVerified}
+                                    circular={true}
+                                />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <h4 style={{ fontSize: '1rem', fontWeight: '800', marginBottom: '4px' }}>Hospital Logo</h4>
+                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                    {!user?.isVerified 
+                                        ? "Live photo capture required for verification. Once approved, you can use the gallery." 
+                                        : "Your hospital logo is verified and visible to all patients."}
+                                </p>
+                            </div>
+                        </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div>
                                 <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px', display: 'block' }}>Display Name</label>
@@ -171,8 +334,8 @@ const Settings = () => {
                                 />
                             </div>
                         </div>
-                        <button className="btn-premium" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => markSaved('profile')}>
-                            <Save size={16} /> Save Changes
+                        <button className="btn-premium" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={handleSaveProfile} disabled={isSavingProfile}>
+                            <Save size={16} /> {isSavingProfile ? 'Saving...' : 'Save Changes'}
                         </button>
                     </div>
                 </SettingsOption>

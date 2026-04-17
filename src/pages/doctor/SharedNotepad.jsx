@@ -7,8 +7,6 @@ import {
     Lock,
     History,
     ChevronDown,
-    Search,
-    Clock,
     User
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -220,7 +218,7 @@ const SharedNotepad = () => {
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            {notesHistory.map((note, i) => (
+                            {notesHistory.map((note) => (
                                 <div key={note.id} style={{ position: 'relative', paddingLeft: '24px' }}>
                                     <div style={{ position: 'absolute', left: 0, top: '8px', width: '8px', height: '8px', borderRadius: '50%', background: note.visibility === 'shared' ? 'var(--brand-teal)' : 'var(--brand-primary)' }} />
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>

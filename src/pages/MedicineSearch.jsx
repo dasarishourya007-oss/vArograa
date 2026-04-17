@@ -7,29 +7,32 @@ import { db } from '../firebase/config';
 import { createOrder } from '../firebase/services';
 import { useNavigate } from 'react-router-dom';
 
+// Mock Database
+const medicineDb = [
+    { id: 1, brandName: 'Dolo 650', genericName: 'Paracetamol', salt: 'Paracetamol 650mg', strength: '650mg', form: 'Tablet', packSize: 15, stripPrice: 30, stock: 150 },
+    { id: 2, brandName: 'Citrogin', genericName: 'Levocetirizine', salt: 'Levocetirizine Hydrochloride', strength: '5mg', form: 'Tablet', packSize: 10, stripPrice: 18, stock: 80 },
+    { id: 3, brandName: 'Pan 40', genericName: 'Pantoprazole', salt: 'Pantoprazole Sodium', strength: '40mg', form: 'Tablet', packSize: 15, stripPrice: 145, stock: 45 },
+    { id: 4, brandName: 'Augmentin 625 Duo', genericName: 'Amoxicillin + Clavulanic Acid', salt: 'Amoxicillin 500mg, Clavulanic Acid 125mg', strength: '625mg', form: 'Tablet', packSize: 10, stripPrice: 220, stock: 20 },
+    { id: 5, brandName: 'Calpol 500', genericName: 'Paracetamol', salt: 'Paracetamol 500mg', strength: '500mg', form: 'Tablet', packSize: 15, stripPrice: 15, stock: 300 },
+    { id: 6, brandName: 'Benadryl', genericName: 'Diphenhydramine', salt: 'Diphenhydramine HCl', strength: '150ml', form: 'Syrup', packSize: 1, stripPrice: 120, stock: 15 },
+];
+
 const MedicineSearch = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [queryStr, setQueryStr] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
     const [medicines, setMedicines] = useState([]);
     const [cart, setCart] = useState([]);
     const [selectedMed, setSelectedMed] = useState(null);
     const [saleType, setSaleType] = useState('strip'); // 'strip' or 'single'
     const [quantity, setQuantity] = useState(1);
+    // eslint-disable-next-line no-unused-vars
     const [loading, setLoading] = useState(false);
     const [pharmacies, setPharmacies] = useState([]);
     const [selectedPharmacy, setSelectedPharmacy] = useState(null);
     const [isCheckingOut, setIsCheckingOut] = useState(false);
 
-    // Mock Database
-    const medicineDb = [
-        { id: 1, brandName: 'Dolo 650', genericName: 'Paracetamol', salt: 'Paracetamol 650mg', strength: '650mg', form: 'Tablet', packSize: 15, stripPrice: 30, stock: 150 },
-        { id: 2, brandName: 'Citrogin', genericName: 'Levocetirizine', salt: 'Levocetirizine Hydrochloride', strength: '5mg', form: 'Tablet', packSize: 10, stripPrice: 18, stock: 80 },
-        { id: 3, brandName: 'Pan 40', genericName: 'Pantoprazole', salt: 'Pantoprazole Sodium', strength: '40mg', form: 'Tablet', packSize: 15, stripPrice: 145, stock: 45 },
-        { id: 4, brandName: 'Augmentin 625 Duo', genericName: 'Amoxicillin + Clavulanic Acid', salt: 'Amoxicillin 500mg, Clavulanic Acid 125mg', strength: '625mg', form: 'Tablet', packSize: 10, stripPrice: 220, stock: 20 },
-        { id: 5, brandName: 'Calpol 500', genericName: 'Paracetamol', salt: 'Paracetamol 500mg', strength: '500mg', form: 'Tablet', packSize: 15, stripPrice: 15, stock: 300 },
-        { id: 6, brandName: 'Benadryl', genericName: 'Diphenhydramine', salt: 'Diphenhydramine HCl', strength: '150ml', form: 'Syrup', packSize: 1, stripPrice: 120, stock: 15 },
-    ];
+    // Mock Database moved above component
 
     useEffect(() => {
         const fetchPharmacies = async () => {
@@ -52,13 +55,13 @@ const MedicineSearch = () => {
     }, []);
 
     useEffect(() => {
-        if (queryStr.trim().length > 1) {
+        if (searchQuery.trim().length > 1) {
             setLoading(true);
             const timer = setTimeout(() => {
                 const results = medicineDb.filter(m =>
-                    m.brandName.toLowerCase().includes(queryStr.toLowerCase()) ||
-                    m.genericName.toLowerCase().includes(queryStr.toLowerCase()) ||
-                    m.salt.toLowerCase().includes(queryStr.toLowerCase())
+                    m.brandName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    m.genericName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    m.salt.toLowerCase().includes(searchQuery.toLowerCase())
                 );
                 setMedicines(results);
                 setLoading(false);
@@ -67,7 +70,7 @@ const MedicineSearch = () => {
         } else {
             setMedicines([]);
         }
-    }, [queryStr]);
+    }, [searchQuery]);
 
     const handleAddToCart = () => {
         if (!selectedMed) return;
@@ -95,7 +98,7 @@ const MedicineSearch = () => {
 
         setCart([...cart, cartItem]);
         setSelectedMed(null);
-        setQuery('');
+        setSearchQuery('');
         setQuantity(1);
     };
 
@@ -124,8 +127,8 @@ const MedicineSearch = () => {
                     <input
                         type="text"
                         placeholder="Search Brand, Generic or Salt..."
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                         style={{ border: 'none', outline: 'none', width: '100%', fontSize: '16px', fontWeight: '600' }}
                     />
                 </div>
@@ -246,7 +249,7 @@ const MedicineSearch = () => {
                             <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Total Price</div>
                                 <div style={{ fontSize: '24px', fontWeight: '900', color: 'var(--p-600)' }}>
-                                    ₹{((saleType === 'strip' ? selectedMed.stripPrice : selectedMed.stripPrice / selectedMed.packSize) * quantity).toFixed(2)}
+                                    Rs.{((saleType === 'strip' ? selectedMed.stripPrice : selectedMed.stripPrice / selectedMed.packSize) * quantity).toFixed(2)}
                                 </div>
                             </div>
                         </div>
@@ -280,7 +283,7 @@ const MedicineSearch = () => {
                 <div className="card-premium" style={{ padding: '24px', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
                         <h4 style={{ fontWeight: '800' }}>Your Cart ({cart.length})</h4>
-                        <div style={{ color: 'var(--p-600)', fontWeight: '900' }}>₹{cartTotal.toFixed(2)}</div>
+                        <div style={{ color: 'var(--p-600)', fontWeight: '900' }}>Rs.{cartTotal.toFixed(2)}</div>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -291,7 +294,7 @@ const MedicineSearch = () => {
                                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{item.quantity} x {item.type}</div>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div style={{ fontSize: '14px', fontWeight: '800' }}>₹{item.total.toFixed(2)}</div>
+                                    <div style={{ fontSize: '14px', fontWeight: '800' }}>Rs.{item.total.toFixed(2)}</div>
                                     <button onClick={() => removeFromCart(item.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444' }}>
                                         <Trash2 size={16} />
                                     </button>

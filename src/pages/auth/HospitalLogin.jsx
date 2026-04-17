@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Mail, Lock, Loader2, Eye, EyeOff,
-    Building2, MapPin, User, Phone, CheckCircle2,
+    Building2, MapPin, User, Phone, CheckCircle2, Camera,
     AlertCircle, Navigation, Copy, ShieldCheck, ArrowRight, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -11,6 +11,8 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../firebase/config';
 
 import { useAuth } from '../../context/AuthContext';
+import ImageUpload from '../../components/ImageUpload';
+import { uploadHospitalPhoto } from '../../firebase/uploadImage';
 
 // ── Sub-components ──────────────────────────────────────────────────────────────
 
@@ -64,6 +66,9 @@ const HospitalLogin = ({ isEmbedded = false }) => {
     const [generatedOtp, setGeneratedOtp] = useState('');
     const [enteredOtp, setEnteredOtp] = useState(['', '', '', '', '', '']);
     const [pendingUid, setPendingUid] = useState('');
+    const [hospitalPhoto, setHospitalPhoto] = useState(null);
+    const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+    const [username, setUsername] = useState('');
 
     // ── Location auto-detect ──────────────────────────────────────────────────
     const detectLocation = () => {
@@ -181,41 +186,74 @@ const HospitalLogin = ({ isEmbedded = false }) => {
 
         setIsLoading(true); setErrorMsg('');
 
-        // Save to Firestore with 5-second timeout — never block the user
-        const timeout = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('timeout')), 5000)
-        );
-        const saveToFirestore = (async () => {
-            if (db && pendingUid) {
-                const hospitalCode = "HSP-" + Math.floor(10000 + Math.random() * 90000);
-                // Save the code to local state so the success screen can show it
-                setGeneratedOtp(hospitalCode); // Reusing this state hook for convenience on the success screen
+        setStep('photo');
+        setIsLoading(false);
+    };
 
-                await setDoc(doc(db, 'hospitals', pendingUid), {
-                    id: pendingUid, name: hospitalName, address, adminName,
-                    phone, email: regEmail, licenseNo: licenseNo || '',
-                    role: 'hospital', isVerified: false,
-                    hospital_code: hospitalCode,
-                    rating: 0, doctors: [], facilities: [],
-                    isOpen: true, hasEmergency: false, createdAt: serverTimestamp(),
-                });
-                await setDoc(doc(db, 'users', pendingUid), {
-                    uid: pendingUid, displayName: hospitalName, email: regEmail,
-                    role: 'hospital', hospitalId: pendingUid,
-                    hospital_code: hospitalCode,
-                    phone, createdAt: serverTimestamp(),
-                });
-            }
-        })();
+    const handleSavePhoto = async () => {
+        if (!hospitalPhoto) { setErrorMsg('Please capture a photo for verification.'); return; }
+        setIsLoading(true); setErrorMsg('');
+        setIsUploadingPhoto(true);
 
         try {
-            await Promise.race([saveToFirestore, timeout]);
-        } catch (err) {
-            console.warn('Firestore save skipped (offline/timeout):', err.message);
-        }
+            if (db && pendingUid) {
+                // Upload photo first
+                let photoURL = '';
+                try {
+                    photoURL = await uploadHospitalPhoto(pendingUid, hospitalPhoto);
+                } catch (uploadErr) {
+                    console.error("Photo upload failed:", uploadErr);
+                    // Continue without photoURL if upload fails, or handle as needed
+                }
 
-        setIsLoading(false);
-        setStep('success');
+                const hospitalCode = "HSP-" + Math.floor(10000 + Math.random() * 90000);
+                // Save the code to local state so the success screen can show it
+                setGeneratedOtp(hospitalCode); 
+
+                await setDoc(doc(db, 'hospitals', pendingUid), {
+                    id: pendingUid, 
+                    hospitalId: pendingUid,
+                    name: hospitalName, 
+                    username: username || hospitalName,
+                    address, 
+                    adminName,
+                    phone, 
+                    email: regEmail, 
+                    licenseNo: licenseNo || '',
+                    role: 'hospital', 
+                    isVerified: false,
+                    hospital_code: hospitalCode,
+                    photoURL,
+                    rating: 0, 
+                    doctors: [], 
+                    facilities: [],
+                    isOpen: true, 
+                    hasEmergency: false, 
+                    createdAt: serverTimestamp(),
+                });
+
+                await setDoc(doc(db, 'users', pendingUid), {
+                    uid: pendingUid, 
+                    displayName: username || hospitalName, 
+                    email: regEmail,
+                    role: 'hospital', 
+                    hospitalId: pendingUid,
+                    hospital_code: hospitalCode,
+                    photoURL,
+                    phone, 
+                    createdAt: serverTimestamp(),
+                });
+
+                setSuccessMsg('Account created! Hospital Code: ' + hospitalCode);
+                setStep('success');
+            }
+        } catch (err) {
+            console.error('Final registration failed:', err);
+            setErrorMsg(err.message || 'Verification failed at final step.');
+        } finally { 
+            setIsLoading(false); 
+            setIsUploadingPhoto(false); 
+        }
     };
 
     // ── OTP input helpers ─────────────────────────────────────────────────────
@@ -269,29 +307,26 @@ const HospitalLogin = ({ isEmbedded = false }) => {
 
                 {!isEmbedded && (
                     <div className="text-center mb-8">
-                        <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-emerald-600 to-teal-700 rounded-3xl shadow-2xl shadow-emerald-500/20 mb-5">
-                            <Building2 className="text-white w-10 h-10" />
-                        </div>
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tighter mb-2">
-                            vArogra <span className="text-emerald-600">Hospital</span>
+                        <h1 className="text-4xl font-black text-slate-900 tracking-tighter mb-2">
+                             Hospital <span className="text-emerald-600">Portal</span>
                         </h1>
-                        <p className="text-slate-500 font-medium text-sm">Administrative Command Center Portal</p>
+                        <p className="text-slate-500 font-bold text-sm">Administrative Command Center</p>
                     </div>
                 )}
 
                 {/* ── Step Indicator (signup only) ── */}
                 {!isLogin && (
-                    <div className="flex items-center gap-2 mb-5 px-1">
-                        {['form', 'otp', 'success'].map((s, i) => (
+                    <div className="flex items-center gap-2 mb-5 px-1 text-center">
+                        {['form', 'otp', 'photo', 'success'].map((s, i) => (
                             <React.Fragment key={s}>
-                                <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-black transition-all ${step === s ? 'bg-emerald-600 text-white shadow-lg' : ['form', 'otp', 'success'].indexOf(step) > i ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                                    {['form', 'otp', 'success'].indexOf(step) > i ? '✓' : i + 1}
+                                <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-black transition-all ${step === s ? 'bg-emerald-600 text-white shadow-lg' : ['form', 'otp', 'photo', 'success'].indexOf(step) > i ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                                    {['form', 'otp', 'photo', 'success'].indexOf(step) > i ? '✓' : i + 1}
                                 </div>
-                                {i < 2 && <div className={`flex-1 h-0.5 rounded-full transition-all ${['form', 'otp', 'success'].indexOf(step) > i ? 'bg-emerald-400' : 'bg-slate-200'}`} />}
+                                {i < 3 && <div className={`flex-1 h-0.5 rounded-full transition-all ${['form', 'otp', 'photo', 'success'].indexOf(step) > i ? 'bg-emerald-400' : 'bg-slate-200'}`} />}
                             </React.Fragment>
                         ))}
                         <div className="ml-2 text-xs font-bold text-slate-500">
-                            {step === 'form' ? 'Fill Details' : step === 'otp' ? 'Verify OTP' : 'Your Code'}
+                            {step === 'form' ? 'Fill' : step === 'otp' ? 'OTP' : step === 'photo' ? 'Photo' : 'Your Code'}
                         </div>
                     </div>
                 )}
@@ -438,6 +473,52 @@ const HospitalLogin = ({ isEmbedded = false }) => {
                                     className="w-full py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors">
                                     ← Go back
                                 </button>
+                            </motion.div>
+                        )}
+
+                        {/* ══ PHOTO STEP ══ */}
+                        {step === 'photo' && (
+                            <motion.div key="photo" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
+                                <div className="text-center">
+                                    <div className="w-16 h-16 bg-emerald-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-emerald-600">
+                                        <Camera size={32} />
+                                    </div>
+                                    <h2 className="text-xl font-black text-slate-900">Upload Photo</h2>
+                                    <p className="text-sm text-slate-500 mt-2">
+                                        Please capture a live photo of your hospital front for identity verification.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest text-center">Identity Details</p>
+                                    <AuthInput 
+                                        icon={<User size={18} />} 
+                                        type="text" 
+                                        placeholder="Pick a unique username *"
+                                        value={username} 
+                                        onChange={(e) => setUsername(e.target.value)} 
+                                        required 
+                                    />
+                                    <p className="text-[10px] text-slate-400 font-bold px-4 text-center">
+                                        Logged in as: <span className="text-slate-600 underline">{regEmail}</span>
+                                    </p>
+                                </div>
+
+                                <ImageUpload
+                                    image={hospitalPhoto}
+                                    onImageChange={(img) => setHospitalPhoto(img)}
+                                    cameraOnly={true}
+                                    className="max-w-[320px] mx-auto"
+                                />
+
+                                <button onClick={handleSavePhoto} disabled={isLoading || !hospitalPhoto}
+                                    className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl font-black text-sm tracking-widest uppercase shadow-xl active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                                    {isLoading ? <><Loader2 className="animate-spin w-5 h-5" /> Submitting...</> : <><CheckCircle2 size={18} /> Finalize Registration</>}
+                                </button>
+                                
+                                <p className="text-[10px] text-center font-bold text-slate-400 uppercase tracking-widest px-4">
+                                    This photo is required to prevent fake accounts. It will be reviewed by the vArogra compliance team.
+                                </p>
                             </motion.div>
                         )}
 

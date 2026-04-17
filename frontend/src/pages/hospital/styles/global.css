@@ -1,0 +1,191 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700&display=swap');
+
+:root {
+    /* Primary Brand Palette */
+    --brand-dark: #1E3A8A;
+    --brand-primary: #3B82F6;
+    --brand-teal: #14B8A6;
+
+    /* Backgrounds */
+    --bg-main: #F1F5F9;
+    --bg-surface: #FFFFFF;
+    --bg-sidebar: #1E293B;
+
+    /* Text */
+    --text-primary: #0F172A;
+    --text-secondary: #64748B;
+    --text-muted: #94A3B8;
+
+    /* Status Colors */
+    --success: #22C55E;
+    --warning: #F59E0B;
+    --critical: #EF4444;
+    --info: #06B6D4;
+
+    /* Shadows & Radii */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --radius-xl: 16px;
+    --radius-lg: 12px;
+
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Layout Spacing */
+    --sidebar-width: 280px;
+    --sidebar-collapsed: 80px;
+    --header-height: 80px;
+}
+
+/* Hospital Portal - Global Light Theme by Default */
+.hospital-dashboard-root {
+    --bg-main: #F1F5F9;
+    --bg-surface: rgba(255, 255, 255, 0.85);
+    --bg-sidebar: #FFFFFF;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #64748B;
+    --border-glass: rgba(15, 23, 42, 0.08);
+
+    --primary-glow: rgba(59, 130, 246, 0.1);
+    --teal-glow: rgba(20, 184, 166, 0.1);
+
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(160deg, #f0fdf4 0%, #f8fafc 40%, #eff6ff 100%);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    transition: var(--transition);
+}
+
+/* Dark Mode - Explicit class only if needed in future */
+.hospital-dashboard-root.dark-theme {
+    --bg-main: #0F172A;
+    --bg-surface: #1E293B;
+    --bg-sidebar: #0F172A;
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --border-glass: rgba(255, 255, 255, 0.06);
+}
+
+.hospital-dashboard-root * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Glassmorphism Classes (Subtle & Pro) */
+.glass {
+    background: var(--bg-surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-glass);
+    box-shadow: var(--shadow-md);
+    border-radius: var(--radius-xl);
+}
+
+.card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+}
+
+.card:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: rgba(59, 130, 246, 0.2);
+}
+
+.pill {
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.btn-premium {
+    background: linear-gradient(135deg, var(--brand-dark), var(--brand-primary));
+    color: white;
+    border: none;
+    border-radius: var(--radius-lg);
+    padding: 12px 24px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn-secondary {
+    background: var(--bg-main);
+    color: var(--text-primary);
+    border: 1px solid var(--border-glass);
+}
+
+.btn-danger {
+    background: var(--critical);
+    color: white;
+}
+
+.btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border-glass);
+    color: var(--text-secondary);
+}
+
+button {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    transition: var(--transition);
+}
+
+.dashboard-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.main-wrapper {
+    flex: 1;
+    margin-left: var(--sidebar-width);
+    padding: 2rem;
+    transition: var(--transition);
+}
+
+@media (max-width: 1024px) {
+    .main-wrapper {
+        margin-left: 80px;
+    }
+}
+
+@media (max-width: 768px) {
+    .main-wrapper {
+        margin-left: 0;
+        padding: 1rem;
+        margin-top: var(--header-height);
+    }
+}
+
+/* Custom Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary);
+}

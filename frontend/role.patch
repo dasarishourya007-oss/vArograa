@@ -1,0 +1,27 @@
+
+*** Begin Patch
+*** Update File: src/components/RoleRouter.jsx
+@@
+-    useEffect(() => {
+-        if (loading || !user) return;
+-        if (!location.pathname.startsWith('/dashboard')) return;
+-        if (location.pathname !== '/dashboard' && location.pathname !== '/dashboard/') return;
+-        const target = ROLE_PATHS[user.role];
+-        if (!target) {
+-            navigate('/', { replace: true });
+-            return;
+-        }
+-        navigate(target, { replace: true });
+-    }, [loading, location.pathname, navigate, user]);
++    useEffect(() => {
++        if (loading || !user) return;
++        if (!location.pathname.startsWith('/dashboard')) return;
++        const target = ROLE_PATHS[user.role];
++        if (!target) {
++            navigate('/', { replace: true });
++            return;
++        }
++        if (location.pathname.startsWith(target)) return;
++        navigate(target, { replace: true });
++    }, [loading, location.pathname, navigate, user]);
+*** End Patch

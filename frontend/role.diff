@@ -1,0 +1,26 @@
+diff --git a/src/components/RoleRouter.jsx b/src/components/RoleRouter.jsx
+--- a/src/components/RoleRouter.jsx
++++ b/src/components/RoleRouter.jsx
+@@ -32,10 +32,10 @@
+-    useEffect(() => {
+-        if (loading || !user) return;
+-        if (!location.pathname.startsWith('/dashboard')) return;
+-        if (location.pathname !== '/dashboard' && location.pathname !== '/dashboard/') return;
+-        const target = ROLE_PATHS[user.role];
+-        if (!target) {
+-            navigate('/', { replace: true });
+-            return;
+-        }
+-        navigate(target, { replace: true });
+-    }, [loading, location.pathname, navigate, user]);
++    useEffect(() => {
++        if (loading || !user) return;
++        if (!location.pathname.startsWith('/dashboard')) return;
++        const target = ROLE_PATHS[user.role];
++        if (!target) {
++            navigate('/', { replace: true });
++            return;
++        }
++        if (location.pathname.startsWith(target)) return;
++        navigate(target, { replace: true });
++    }, [loading, location.pathname, navigate, user]);

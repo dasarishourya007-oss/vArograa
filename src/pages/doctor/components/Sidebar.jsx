@@ -13,7 +13,8 @@ import {
     Stethoscope,
     ClipboardList,
     MessageSquare,
-    BrainCircuit
+    BrainCircuit,
+    UserCircle
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,10 +27,9 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
         { title: 'My Schedule', icon: <CalendarClock size={22} />, path: '/dashboard/doctor/schedule' },
         { title: 'Live Consultation', icon: <MonitorPlay size={22} />, path: '/dashboard/doctor/live' },
         { title: 'Patient History', icon: <Users size={22} />, path: '/dashboard/doctor/history' },
-        { title: 'Prescriptions', icon: <ClipboardList size={22} />, path: '/dashboard/doctor/prescriptions' },
-        { title: 'SmartScript™', icon: <BrainCircuit size={22} />, path: '/dashboard/doctor/smart-script' },
-        { title: 'Shared Notepad', icon: <FileText size={22} />, path: '/dashboard/doctor/notepad' },
+        { title: 'Smart Prescription', icon: <BrainCircuit size={22} />, path: '/dashboard/doctor/smart-prescription' },
         { title: 'Alerts', icon: <Bell size={22} />, path: '/dashboard/doctor/notifications' },
+        { title: 'My Profile', icon: <UserCircle size={22} />, path: '/dashboard/doctor/profile' },
     ];
 
     return (
@@ -58,18 +58,16 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                 marginBottom: '2.5rem',
                 overflow: 'hidden'
             }}>
-                <div style={{
-                    minWidth: '40px',
-                    height: '40px',
-                    background: 'linear-gradient(135deg, var(--brand-primary, #3B82F6), var(--brand-teal, #14B8A6))',
-                    borderRadius: 'var(--radius-lg, 12px)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 0 15px rgba(59, 130, 246, 0.3)'
-                }}>
-                    <Stethoscope color="white" size={24} />
-                </div>
+                <img
+                    src="/pwa-192x192.png"
+                    alt="vArogra"
+                    style={{
+                        minWidth: '40px',
+                        height: '40px',
+                        objectFit: 'contain',
+                        borderRadius: 'var(--radius-lg, 12px)',
+                    }}
+                />
                 {!isCollapsed && (
                     <motion.span
                         initial={{ opacity: 0 }}

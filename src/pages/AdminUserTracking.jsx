@@ -4,7 +4,7 @@ import { db } from "../firebase/config";
 import { User, Clock, Monitor, Globe, ShieldCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const AdminUserTracking = () => {
+const AccessMonitor = () => {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -45,7 +45,7 @@ const AdminUserTracking = () => {
                     <div>
                         <h1 className="text-3xl font-bold text-[#1A2B3C] flex items-center gap-3">
                             <ShieldCheck className="text-[#0052D4]" size={32} />
-                            User Tracking Dashboard
+                            Access Insight Monitor
                         </h1>
                         <p className="text-gray-500 mt-1">Monitor real-time user login activity across the platform</p>
                     </div>
@@ -108,7 +108,7 @@ const AdminUserTracking = () => {
                                                             log.role === 'hospital' ? 'bg-teal-100 text-teal-700' :
                                                                 'bg-blue-100 text-blue-700'
                                                     }`}>
-                                                    {log.role}
+                                                    {log.role === 'admin' ? 'SYSTEM' : log.role}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
@@ -144,4 +144,4 @@ const AdminUserTracking = () => {
     );
 };
 
-export default AdminUserTracking;
+export default AccessMonitor;

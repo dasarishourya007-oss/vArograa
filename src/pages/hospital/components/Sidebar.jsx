@@ -23,7 +23,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../firebase/config';
 
 const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
-    const { logout, role } = useAuth();
+    const { logout, role, user } = useAuth();
 
     const [pendingCount, setPendingCount] = useState(0);
 
@@ -82,18 +82,16 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                 marginBottom: '2.5rem',
                 overflow: 'hidden'
             }}>
-                <div style={{
-                    minWidth: '40px',
-                    height: '40px',
-                    background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-teal))',
-                    borderRadius: 'var(--radius-lg)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 0 15px var(--primary-glow)'
-                }}>
-                    <Droplets color="white" size={24} />
-                </div>
+                <img
+                    src="/pwa-192x192.png"
+                    alt="vArogra"
+                    style={{
+                        minWidth: '40px',
+                        height: '40px',
+                        objectFit: 'contain',
+                        borderRadius: 'var(--radius-lg)',
+                    }}
+                />
                 {!isCollapsed && (
                     <motion.span
                         initial={{ opacity: 0 }}
@@ -207,12 +205,12 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                         fontSize: '1.1rem',
                         color: 'white'
                     }}>
-                        {role?.[0] || 'A'}
+                        {(user?.adminName || 'A')[0]}
                     </div>
                     {!isCollapsed && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                            <p style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-primary)' }}>Hospital Admin</p>
-                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{role || 'Superuser'}</p>
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ flex: 1, overflow: 'hidden' }}>
+                            <p style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{user?.adminName || 'Administrator'}</p>
+                            <p style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{user?.hospitalName || 'Health Center'}</p>
                         </motion.div>
                     )}
                 </div>

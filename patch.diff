@@ -1,0 +1,11 @@
+diff --git a/src/pages/DoctorDashboard.jsx b/src/pages/DoctorDashboard.jsx
+--- a/src/pages/DoctorDashboard.jsx
++++ b/src/pages/DoctorDashboard.jsx
+@@ -13,3 +13,4 @@
+-import Input from '../components/Input';
+-import { getAIResponse } from '../services/aiService';
+-import { useRef, useEffect } from 'react';
++import Input from '../components/Input';
++import { getAIResponse } from '../services/aiService';
++import { uploadDoctorPhoto } from '../firebase/uploadImage';
++import { useRef, useEffect } from 'react';

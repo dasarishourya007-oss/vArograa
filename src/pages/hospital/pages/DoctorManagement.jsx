@@ -1,248 +1,717 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Search,
-    Trash2,
-    User,
-    Mail,
-    Stethoscope,
-    ShieldCheck,
-    ChevronRight
+    Search, Trash2, User, Mail, Stethoscope,
+    Phone, Plus, X, Loader2, Eye, EyeOff,
+    CheckCircle2, AlertCircle, Copy,
+    UserPlus, XCircle, Users, Clock3, TriangleAlert, Filter, ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { collection, query, where, onSnapshot, doc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../../../firebase/config';
+import { collection, onSnapshot, doc, deleteDoc, updateDoc, serverTimestamp, query, where } from 'firebase/firestore';
+import { db } from '../../../firebase/config';
 import { useAuth } from '../../../context/AuthContext';
+import { createDoctorAccount } from '../../../firebase/auth';
 
+// â”€â”€ Reusable form input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const FormInput = ({ label, icon, rightIcon, ...props }) => (
+    <div>
+        <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5">{label}</label>
+        <div className="relative group">
+            {icon && (
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-600 transition-colors z-10">
+                    {icon}
+                </div>
+            )}
+            <input
+                {...props}
+                className={`w-full bg-slate-50 border border-slate-200 rounded-xl py-3.5 ${icon ? 'pl-11' : 'pl-4'} ${rightIcon ? 'pr-11' : 'pr-4'} text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-all text-sm`}
+            />
+            {rightIcon && (
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 z-10">
+                    {rightIcon}
+                </div>
+            )}
+        </div>
+    </div>
+);
+
+// â”€â”€ Create Doctor Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const CreateDoctorModal = ({ hospitalId, onClose, onCreated }) => {
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [department, setDepartment] = useState('');
+    const [phone, setPhone] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [result, setResult] = useState(null); // { uid, tempPassword }
+    const [showPassword, setShowPassword] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setIsLoading(true);
+        try {
+            const res = await createDoctorAccount(hospitalId, { name, email, department, phone });
+            setResult(res);
+            onCreated?.();
+        } catch (err) {
+            setError(
+                err.code === 'auth/email-already-in-use'
+                    ? 'A doctor with this email already exists.'
+                    : err.message || 'Failed to create doctor account.'
+            );
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleCopy = () => {
+        if (result?.tempPassword) {
+            navigator.clipboard.writeText(result.tempPassword);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={result ? onClose : undefined}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            {/* Panel */}
+            <motion.div
+                initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
+            >
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                        <h3 className="text-lg font-black" style={{ color: 'var(--text-primary)' }}>
+                            {result ? 'Doctor Created!' : 'Create Doctor Account'}
+                        </h3>
+                        <p className="text-xs font-medium mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                            {result ? 'Share credentials with the doctor' : 'Doctor will receive login credentials'}
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
+                        <X size={18} />
+                    </button>
+                </div>
+
+                <div className="p-6">
+                    <AnimatePresence mode="wait">
+                        {/* â”€â”€ Success State â”€â”€ */}
+                        {result ? (
+                            <motion.div key="success" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
+                                <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                                    <CheckCircle2 size={24} className="text-emerald-600 shrink-0" />
+                                    <div>
+                                        <p className="font-black text-emerald-800 text-sm">{name}</p>
+                                        <p className="text-emerald-600 text-xs font-medium">{email}</p>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
+                                        Temporary Password â€” share this once
+                                    </p>
+                                    <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                                        <code className="flex-1 text-lg font-black tracking-wider text-amber-900">
+                                            {showPassword ? result.tempPassword : 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢'}
+                                        </code>
+                                        <button
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center hover:bg-amber-200 transition-colors"
+                                        >
+                                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                        <button
+                                            onClick={handleCopy}
+                                            className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center hover:bg-amber-200 transition-colors"
+                                        >
+                                            {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+                                        </button>
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 mt-2">
+                                        This password is shown only once. Doctor should change it after first login.
+                                    </p>
+                                </div>
+
+                                <button
+                                    onClick={onClose}
+                                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-sm tracking-wider shadow-lg active:scale-95 transition-all"
+                                >
+                                    Done
+                                </button>
+                            </motion.div>
+                        ) : (
+                            /* â”€â”€ Form State â”€â”€ */
+                            <motion.form key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} onSubmit={handleSubmit} className="space-y-4">
+                                <AnimatePresence>
+                                    {error && (
+                                        <motion.div
+                                            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                                            className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 text-red-600 text-sm font-medium rounded-xl"
+                                        >
+                                            <AlertCircle size={16} className="shrink-0 mt-0.5" /> {error}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
+                                <FormInput label="Doctor Name" icon={<User size={16} />} type="text" placeholder="Dr. Jane Smith" value={name} onChange={(e) => setName(e.target.value)} required />
+                                <FormInput label="Email Address" icon={<Mail size={16} />} type="email" placeholder="doctor@hospital.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                                <FormInput label="Department / Specialty" icon={<Stethoscope size={16} />} type="text" placeholder="Cardiology, General Surgery..." value={department} onChange={(e) => setDepartment(e.target.value)} required />
+                                <FormInput label="Phone Number" icon={<Phone size={16} />} type="tel" placeholder="+91 98765 43210" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+
+                                <div className="pt-1">
+                                    <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">
+                                        A temporary password will be auto-generated and shown to you after account creation.
+                                    </p>
+                                    <button
+                                        type="submit" disabled={isLoading}
+                                        className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-sm tracking-wider shadow-lg active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {isLoading ? <><Loader2 className="animate-spin w-5 h-5" /> Creating Account...</> : <><Plus size={18} /> Create Doctor Account</>}
+                                    </button>
+                                </div>
+                            </motion.form>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
+// â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const DoctorManagement = () => {
     const { user } = useAuth();
     const [doctors, setDoctors] = useState([]);
+    const [hospitalScopedDoctors, setHospitalScopedDoctors] = useState([]);
+    const [globalScopedDoctors, setGlobalScopedDoctors] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [actionLoading, setActionLoading] = useState(null);
 
-    const hospitalId = user?.uid || user?.id || 'demo-hospital-id';
+    const resolveHospitalId = () => {
+        const storedHospital = (() => {
+            try {
+                const raw = localStorage.getItem('varogra_user');
+                return raw ? JSON.parse(raw) : null;
+            } catch {
+                return null;
+            }
+        })();
+        const storedRole = localStorage.getItem('userRole');
+
+        const runtimeRole = (user?.role || '').toLowerCase();
+        const runtimeHospitalId = runtimeRole === 'hospital'
+            ? (user?.uid || user?.id || null)
+            : null;
+
+        const storedHospitalId = (storedRole === 'hospital' || (storedHospital?.role || '').toLowerCase() === 'hospital')
+            ? (storedHospital?.hospitalId || storedHospital?.uid || storedHospital?.id || null)
+            : null;
+
+        return runtimeHospitalId || storedHospitalId || null;
+    };
+
+    const [hospitalId, setHospitalId] = useState(() => resolveHospitalId());
 
     useEffect(() => {
-        if (!db || !hospitalId) return;
-        const q = query(collection(db, "hospitals", hospitalId, "doctors"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            setDoctors(docs);
-        });
+        setHospitalId(resolveHospitalId());
+    }, [user]);
+
+    useEffect(() => {
+        const onStorage = (event) => {
+            if (event.key === 'varogra_user' || event.key === 'userRole') {
+                setHospitalId(resolveHospitalId());
+            }
+        };
+        window.addEventListener('storage', onStorage);
+        return () => window.removeEventListener('storage', onStorage);
+    }, [user]);
+
+    useEffect(() => {
+        if (!db || !hospitalId) {
+            setHospitalScopedDoctors([]);
+            return;
+        }
+
+        const hospitalDoctorsRef = collection(db, 'hospitals', hospitalId, 'doctors');
+        const unsubscribe = onSnapshot(
+            hospitalDoctorsRef,
+            (snapshot) => {
+                const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                setHospitalScopedDoctors(docs);
+            },
+            (error) => {
+                console.error('Hospital doctors listener error:', error);
+                setHospitalScopedDoctors([]);
+            }
+        );
+
         return unsubscribe;
     }, [hospitalId]);
 
-    const handleDelete = async (id) => {
-        if (window.confirm("Are you sure you want to remove this doctor?")) {
-            await deleteDoc(doc(db, "hospitals", hospitalId, "doctors", id));
+    useEffect(() => {
+        if (!db || !hospitalId) {
+            setGlobalScopedDoctors([]);
+            return;
         }
-    };
 
-    const handleApprove = async (id) => {
-        try {
-            await updateDoc(doc(db, "hospitals", hospitalId, "doctors", id), {
-                status: 'APPROVED'
-            });
-            await updateDoc(doc(db, "users", id), {
-                status: 'APPROVED'
-            });
-            alert("Doctor approved successfully.");
-        } catch (error) {
-            console.error("Error approving doctor:", error);
-            alert("Failed to approve doctor.");
-        }
-    };
-
-    const handleReject = async (id) => {
-        if (window.confirm("Are you sure you want to reject this doctor?")) {
-            try {
-                await updateDoc(doc(db, "hospitals", hospitalId, "doctors", id), {
-                    status: 'REJECTED'
-                });
-                await updateDoc(doc(db, "users", id), {
-                    status: 'REJECTED'
-                });
-                alert("Doctor rejected.");
-            } catch (error) {
-                console.error("Error rejecting doctor:", error);
-                alert("Failed to reject doctor.");
+        const globalDoctorsRef = query(
+            collection(db, 'doctors'),
+            where('hospitalId', '==', hospitalId)
+        );
+        const unsubscribe = onSnapshot(
+            globalDoctorsRef,
+            (snapshot) => {
+                const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                setGlobalScopedDoctors(docs);
+            },
+            (error) => {
+                console.error('Global doctors listener error:', error);
+                setGlobalScopedDoctors([]);
             }
+        );
+
+        return unsubscribe;
+    }, [hospitalId]);
+
+    useEffect(() => {
+        const merged = new Map();
+        [...globalScopedDoctors, ...hospitalScopedDoctors].forEach((item) => {
+            const key = item.email || item.uid || item.id;
+            if (!key) return;
+            const current = merged.get(key) || {};
+            merged.set(key, { ...current, ...item, id: item.id || current.id });
+        });
+        setDoctors(Array.from(merged.values()));
+    }, [hospitalScopedDoctors, globalScopedDoctors]);
+
+    const handleDelete = async (id) => {
+        if (window.confirm('Are you sure you want to remove this doctor?')) {
+            await deleteDoc(doc(db, 'hospitals', hospitalId, 'doctors', id));
         }
     };
 
-    const pendingDoctors = doctors.filter(d => d.status === 'PENDING_APPROVAL');
+    const handleApprove = async (docId) => {
+        setActionLoading(docId);
+        try {
+            await updateDoc(doc(db, 'hospitals', hospitalId, 'doctors', docId), {
+                status: 'APPROVED',
+                updatedAt: serverTimestamp()
+            });
+
+            await updateDoc(doc(db, 'doctors', docId), {
+                status: 'APPROVED',
+                updatedAt: serverTimestamp()
+            });
+
+            try {
+                await updateDoc(doc(db, 'users', docId), {
+                    doctorStatus: 'APPROVED',
+                    status: 'APPROVED',
+                    updatedAt: serverTimestamp()
+                });
+            } catch (userUpdateError) {
+                console.warn('User status update warning:', userUpdateError);
+            }
+        } catch (err) {
+            console.error('Approve error:', err);
+            alert('Failed to approve. Make sure you have permissions.');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleReject = async (docId) => {
+        if (!window.confirm("Reject this doctor's registration?")) return;
+        setActionLoading(docId);
+        try {
+            await updateDoc(doc(db, 'hospitals', hospitalId, 'doctors', docId), {
+                status: 'REJECTED',
+                updatedAt: serverTimestamp()
+            });
+
+            await updateDoc(doc(db, 'doctors', docId), {
+                status: 'REJECTED',
+                updatedAt: serverTimestamp()
+            });
+
+            try {
+                await updateDoc(doc(db, 'users', docId), {
+                    doctorStatus: 'REJECTED',
+                    status: 'REJECTED',
+                    updatedAt: serverTimestamp()
+                });
+            } catch (userUpdateError) {
+                console.warn('User status update warning:', userUpdateError);
+            }
+        } catch (err) {
+            console.error('Reject error:', err);
+            alert('Failed to reject.');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const pendingRequests = doctors.filter(d => d.status === 'PENDING_APPROVAL' || !d.status || d.status === 'PENDING');
     const rejectedDoctors = doctors.filter(d => d.status === 'REJECTED');
 
-    const activeDoctors = doctors.filter(d => d.status === 'APPROVED' && (
-        d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (d.specialization && d.specialization.toLowerCase().includes(searchTerm.toLowerCase()))
-    ));
+    const approvedDoctors = doctors.filter(d => d.status === 'APPROVED' || d.status === 'ACTIVE');
+
+    const filteredApprovedDoctors = approvedDoctors.filter((d) => {
+        const haystack = `${d.name || ''} ${d.specialization || ''} ${d.department || ''} ${d.email || ''}`.toLowerCase();
+        const searchMatch = haystack.includes(searchTerm.toLowerCase());
+        if (!searchMatch) return false;
+        if (statusFilter === 'all') return true;
+        return (d.status || '').toLowerCase() === statusFilter;
+    });
+
+    const getInitials = (name = '') => {
+        const parts = name.trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 0) return 'DR';
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+    };
+
+    const getStatusBadge = (statusRaw) => {
+        const s = (statusRaw || '').toString().toUpperCase();
+        if (s === 'APPROVED' || s === 'ACTIVE') {
+            return (
+                <span className="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700">
+                    Approved
+                </span>
+            );
+        }
+        if (s === 'REJECTED') {
+            return (
+                <span className="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-rose-100 text-rose-700">
+                    Rejected
+                </span>
+            );
+        }
+        return (
+            <span className="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
+                Pending
+            </span>
+        );
+    };
 
     return (
-        <div style={{ paddingBottom: '3rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '3.5rem' }}>
-                <div>
-                    <h2 style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1.5px', marginBottom: '0.5rem' }}>Medical Staff Directory</h2>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Manage your hospital's specialized medical personnel.</p>
-                        {pendingDoctors.length > 0 && (
-                            <div className="pill" style={{ background: 'var(--critical)', color: 'white', border: 'none', fontWeight: '800' }}>
-                                {pendingDoctors.length} PENDING ACTION
-                            </div>
-                        )}
+        <div className="max-w-7xl mx-auto px-6 py-8">
+            {/* 1) Header */}
+            <div className="flex items-start justify-between gap-4 mb-8">
+                <div className="min-w-0">
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Doctor Team Hub</h1>
+                    <p className="text-sm text-slate-600 mt-1">
+                        Manage hospital doctors, approvals and staffing
+                    </p>
+                </div>
+
+                <div className="shrink-0">
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-5 py-2.5 shadow-sm transition whitespace-nowrap"
+                    >
+                        <Plus size={16} /> Invite Doctor
+                    </button>
+                </div>
+            </div>
+
+            {/* 2) Controls Row */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 mb-8">
+                <div className="relative flex-1 min-w-0">
+                    <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                        type="text"
+                        placeholder="Search doctors"
+                        className="w-full border border-slate-200 bg-white rounded-xl px-4 py-2.5 pl-10 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+
+                <div className="relative w-full md:w-[220px] shrink-0">
+                    <Filter size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="w-full border border-slate-200 bg-white rounded-xl px-4 py-2.5 pl-9 pr-9 text-sm font-medium text-slate-900 appearance-none outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition"
+                    >
+                        <option value="all">All Status</option>
+                        <option value="approved">Approved</option>
+                        <option value="active">Active</option>
+                    </select>
+                    <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+            </div>
+
+            {/* 3) Statistics Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                            <p className="text-sm text-slate-600">Total Doctors</p>
+                            <p className="text-3xl font-bold text-slate-900 mt-2">{doctors.length}</p>
+                        </div>
+                        <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 grid place-items-center text-slate-500 shrink-0">
+                            <Users size={18} />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                            <p className="text-sm text-slate-600">Pending Approvals</p>
+                            <p className="text-3xl font-bold text-slate-900 mt-2">{pendingRequests.length}</p>
+                        </div>
+                        <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 grid place-items-center text-amber-700 shrink-0">
+                            <Clock3 size={18} />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                            <p className="text-sm text-slate-600">Rejected Requests</p>
+                            <p className="text-3xl font-bold text-slate-900 mt-2">{rejectedDoctors.length}</p>
+                        </div>
+                        <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 grid place-items-center text-rose-700 shrink-0">
+                            <TriangleAlert size={18} />
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Pending Approvals Section */}
-            {pendingDoctors.length > 0 && (
-                <div style={{ marginBottom: '3rem' }}>
-                    <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '1.5rem', color: '#b45309', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <ShieldCheck size={24} /> Pending Approvals ({pendingDoctors.length})
-                    </h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
-                        <AnimatePresence>
-                            {pendingDoctors.map((docItem, idx) => (
-                                <motion.div
-                                    key={docItem.id}
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.9 }}
-                                    className="card"
-                                    style={{
-                                        padding: '2rem',
-                                        border: '2px dashed #fcd34d',
-                                        background: '#fffbeb'
-                                    }}
-                                >
-                                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '4px', color: '#92400e' }}>{docItem.name}</h3>
-                                    <div style={{ color: '#d97706', fontWeight: '700', fontSize: '0.85rem', marginBottom: '1rem', textTransform: 'uppercase' }}>
-                                        {docItem.specialty || docItem.specialization || 'General'}
-                                    </div>
-                                    <div style={{ color: '#b45309', fontSize: '0.9rem', marginBottom: '4px' }}>Phone: {docItem.phone}</div>
-                                    <div style={{ color: '#b45309', fontSize: '0.9rem', marginBottom: '1.5rem' }}>{docItem.email}</div>
-
-                                    <div style={{ display: 'flex', gap: '10px' }}>
-                                        <button onClick={() => handleReject(docItem.id)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: '1px solid #f87171', color: '#ef4444', fontWeight: 'bold', background: 'white' }}>Reject</button>
-                                        <button onClick={() => handleApprove(docItem.id)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: '#f59e0b', color: 'white', fontWeight: 'bold' }}>Approve</button>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </AnimatePresence>
+            {/* 4) Approved Doctors */}
+            <div className="mb-8">
+                <div className="flex items-end justify-between gap-4 mb-4">
+                    <div>
+                        <h2 className="text-xl font-semibold text-slate-900">Approved Doctors</h2>
+                        <p className="text-sm text-slate-600 mt-1">Active team members available for staffing</p>
                     </div>
+                    <span className="text-xs font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-full px-3 py-1 shrink-0">
+                        {filteredApprovedDoctors.length} shown
+                    </span>
                 </div>
-            )}
 
-            {/* Rejected Doctors Section */}
-            {rejectedDoctors.length > 0 && (
-                <div style={{ marginBottom: '3rem' }}>
-                    <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '1.5rem', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <ShieldCheck size={24} /> Rejected Requests ({rejectedDoctors.length})
-                    </h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
-                        <AnimatePresence>
-                            {rejectedDoctors.map((docItem, idx) => (
-                                <motion.div
-                                    key={docItem.id}
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.9 }}
-                                    className="card"
-                                    style={{
-                                        padding: '2rem',
-                                        border: '2px dashed #fca5a5',
-                                        background: '#fef2f2'
-                                    }}
-                                >
-                                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '4px', color: '#7f1d1d' }}>{docItem.name}</h3>
-                                    <div style={{ color: '#b91c1c', fontWeight: '700', fontSize: '0.85rem', marginBottom: '1rem', textTransform: 'uppercase' }}>
-                                        {docItem.specialty || docItem.specialization || 'General'}
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                    {/* Pending approvals (kept, but visually nested in the doctors section) */}
+                    {pendingRequests.length > 0 && (
+                        <div className="border-b border-slate-200 p-6">
+                            <div className="flex items-center justify-between gap-4 mb-4">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 grid place-items-center text-amber-700 shrink-0">
+                                        <UserPlus size={16} />
                                     </div>
-                                    <div style={{ color: '#991b1b', fontSize: '0.9rem', marginBottom: '4px' }}>Phone: {docItem.phone}</div>
-                                    <div style={{ color: '#991b1b', fontSize: '0.9rem', marginBottom: '1.5rem' }}>{docItem.email}</div>
-
-                                    <div style={{ display: 'flex', gap: '10px' }}>
-                                        <button onClick={() => handleApprove(docItem.id)} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: '#10b981', color: 'white', fontWeight: 'bold' }}>Re-Approve</button>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-slate-900">Pending approvals</p>
+                                        <p className="text-sm text-slate-600 truncate">Review and approve incoming doctor requests</p>
                                     </div>
-                                </motion.div>
-                            ))}
-                        </AnimatePresence>
-                    </div>
-                </div>
-            )}
-
-            {/* Search Bar for Active Staff */}
-            <div className="card" style={{ marginBottom: '2.5rem', padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--bg-surface)' }}>
-                <Search size={20} color="var(--text-muted)" />
-                <input
-                    type="text"
-                    placeholder="Search active staff by name or specialization..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', outline: 'none', fontSize: '1rem' }}
-                />
-            </div>
-
-            {/* Active Staff Grid */}
-            <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '1.5rem', color: 'var(--text-primary)' }}>
-                Active Staff
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
-                <AnimatePresence>
-                    {activeDoctors.map((docItem, idx) => (
-                        <motion.div
-                            key={docItem.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ delay: idx * 0.05 }}
-                            className="card"
-                            style={{
-                                padding: '2rem',
-                                position: 'relative',
-                                border: '1px solid var(--border-glass)',
-                                background: 'var(--bg-surface)'
-                            }}
-                        >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-                                <div style={{
-                                    width: '60px',
-                                    height: '60px',
-                                    borderRadius: '16px',
-                                    background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-teal))',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: 'white'
-                                }}>
-                                    <User size={30} />
                                 </div>
-                                <button onClick={() => handleDelete(docItem.id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                                    <Trash2 size={18} />
-                                </button>
-                            </div>
-
-                            <h3 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '4px' }}>{docItem.name}</h3>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--brand-primary)', fontWeight: '700', fontSize: '0.85rem', marginBottom: '1rem', textTransform: 'uppercase' }}>
-                                <Stethoscope size={14} /> {docItem.specialty || docItem.specialization || 'General'}
-                            </div>
-
-                            <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Mail size={14} /> {docItem.email}
-                            </div>
-
-                            <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-glass)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span className="pill" style={{ background: 'rgba(34, 197, 94, 0.1)', color: 'var(--success)', fontSize: '0.75rem' }}>
-                                    Active Status
+                                <span className="text-xs font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-full px-3 py-1 shrink-0">
+                                    {pendingRequests.length} pending
                                 </span>
-                                <motion.button whileHover={{ x: 5 }} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem', fontWeight: 'bold' }}>
-                                    View Stats <ChevronRight size={16} />
-                                </motion.button>
                             </div>
-                        </motion.div>
-                    ))}
-                </AnimatePresence>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                {pendingRequests.map((docItem) => (
+                                    <div key={docItem.id} className="rounded-2xl border border-slate-200 bg-white overflow-hidden hover:shadow-lg transition-shadow">
+                                        {/* Doctor Photo — prominent verification image */}
+                                        <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50 h-48 flex items-center justify-center">
+                                            {docItem.photoURL ? (
+                                                <img
+                                                    src={docItem.photoURL}
+                                                    alt={docItem.name || 'Doctor'}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="flex flex-col items-center gap-2 text-blue-300">
+                                                    <div className="w-20 h-20 rounded-full bg-blue-100 border-4 border-blue-200 flex items-center justify-center font-black text-blue-600 text-2xl">
+                                                        {getInitials(docItem.name)}
+                                                    </div>
+                                                    <p className="text-xs font-bold text-blue-400">No photo submitted</p>
+                                                </div>
+                                            )}
+                                            {/* Verification badge overlay */}
+                                            <div className="absolute top-3 right-3">
+                                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase tracking-widest shadow-lg">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                                    Awaiting Review
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Doctor Details */}
+                                        <div className="p-5">
+                                            <div className="mb-4">
+                                                <h3 className="text-base font-black text-slate-900">{docItem.name}</h3>
+                                                <p className="text-sm text-blue-600 font-semibold">{docItem.specialization || docItem.department || 'Specialist'}</p>
+                                            </div>
+
+                                            <div className="space-y-2 mb-4">
+                                                <div className="flex items-center gap-2 text-sm text-slate-600">
+                                                    <Mail size={13} className="text-slate-400 shrink-0" />
+                                                    <span className="truncate">{docItem.email}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-sm text-slate-600">
+                                                    <Phone size={13} className="text-slate-400 shrink-0" />
+                                                    <span>{docItem.phone || 'N/A'}</span>
+                                                </div>
+                                                {docItem.experience && (
+                                                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                                                        <Stethoscope size={13} className="text-slate-400 shrink-0" />
+                                                        <span>{docItem.experience}+ years experience</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                <button
+                                                    disabled={actionLoading === docItem.id}
+                                                    onClick={() => handleApprove(docItem.id)}
+                                                    className="flex-1 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wide transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+                                                >
+                                                    {actionLoading === docItem.id ? (
+                                                        <Loader2 size={14} className="animate-spin" />
+                                                    ) : (
+                                                        <CheckCircle2 size={14} />
+                                                    )}
+                                                    {actionLoading === docItem.id ? 'Processing...' : 'Approve'}
+                                                </button>
+                                                <button
+                                                    disabled={actionLoading === docItem.id}
+                                                    onClick={() => handleReject(docItem.id)}
+                                                    className="h-10 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-black uppercase tracking-wide transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+                                                >
+                                                    <XCircle size={14} />
+                                                    Reject
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                        </div>
+                    )}
+
+                    {/* Approved doctors list */}
+                    {filteredApprovedDoctors.length > 0 ? (
+                        <div className="max-h-[560px] overflow-auto">
+                            <div className="divide-y divide-slate-200">
+                                {filteredApprovedDoctors.map((docItem) => (
+                                    <div
+                                        key={docItem.id}
+                                        className="px-6 h-[72px] flex items-center gap-4"
+                                    >
+                                        {/* Avatar + name */}
+                                        <div className="flex items-center gap-3 min-w-0 flex-[1.1]">
+                                            {docItem.photoURL ? (
+                                                <img
+                                                    src={docItem.photoURL}
+                                                    alt={docItem.name || 'Doctor'}
+                                                    className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0"
+                                                />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600 border border-blue-200 text-xs shrink-0">
+                                                    {getInitials(docItem.name)}
+                                                </div>
+                                            )}
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold text-slate-900 truncate">{docItem.name}</p>
+                                                <p className="text-sm text-slate-600 truncate">
+                                                    {docItem.specialization || docItem.department || 'General'}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Status */}
+                                        <div className="hidden md:flex items-center justify-center flex-[0.35]">
+                                            {getStatusBadge(docItem.status)}
+                                        </div>
+
+                                        {/* Email */}
+                                        <div className="hidden lg:flex items-center gap-2 text-sm text-slate-700 min-w-0 flex-[0.9]">
+                                            <Mail size={14} className="text-slate-400 shrink-0" />
+                                            <span className="truncate">{docItem.email}</span>
+                                        </div>
+
+                                        {/* Phone */}
+                                        <div className="hidden lg:flex items-center gap-2 text-sm text-slate-700 min-w-0 flex-[0.55]">
+                                            <Phone size={14} className="text-slate-400 shrink-0" />
+                                            <span className="truncate">{docItem.phone || 'N/A'}</span>
+                                        </div>
+
+                                        {/* Compact contact on small screens */}
+                                        <div className="flex lg:hidden flex-col gap-1 min-w-0 flex-[0.9]">
+                                            <div className="flex items-center gap-2 text-sm text-slate-700 min-w-0">
+                                                <Mail size={14} className="text-slate-400 shrink-0" />
+                                                <span className="truncate">{docItem.email}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-slate-700 min-w-0">
+                                                <Phone size={14} className="text-slate-400 shrink-0" />
+                                                <span className="truncate">{docItem.phone || 'N/A'}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="ml-auto flex items-center justify-end">
+                                            <button
+                                                onClick={() => handleDelete(docItem.id)}
+                                                className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition"
+                                                title="Remove doctor"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="py-16 px-6 text-center">
+                            <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-100 grid place-items-center mx-auto mb-4">
+                                <Stethoscope size={30} className="text-emerald-600" />
+                            </div>
+                            <h3 className="text-xl font-semibold text-slate-900">No approved doctors yet</h3>
+                            <p className="text-sm text-slate-600 mt-2 max-w-xl mx-auto">
+                                Invite doctors or approve pending requests to start building your hospital team.
+                            </p>
+                            <button
+                                onClick={() => setShowCreateModal(true)}
+                                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-6 py-2.5 shadow-sm transition"
+                            >
+                                <Plus size={16} /> Invite First Doctor
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
+
+            <AnimatePresence>
+                {showCreateModal && (
+                    <CreateDoctorModal
+                        hospitalId={hospitalId}
+                        onClose={() => setShowCreateModal(false)}
+                        onCreated={() => setShowCreateModal(false)}
+                    />
+                )}
+            </AnimatePresence>
         </div>
     );
 };
 
 export default DoctorManagement;
+

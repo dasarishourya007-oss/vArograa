@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap');
 
 :root {
     /* Hyper-Modern Vibrant Palette */
@@ -11,6 +11,12 @@
     --p-500: #2563eb;
     --p-600: #1d4ed8;
     --p-700: #1e40af;
+
+    /* Healthcare Specific Palette */
+    --clinical-blue: #0077B6;
+    --mint-green: #00B4A6;
+    --clinical-blue-light: #e0f2fe;
+    --mint-green-light: #f0fdf4;
 
     /* Base Color Tokens */
     --primary-color: var(--p-500);

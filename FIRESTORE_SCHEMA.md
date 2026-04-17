@@ -1,4 +1,4 @@
-# vArogra Firestore Database Schema
+﻿# vArogra Firestore Database Schema
 
 This document defines the structure of the Firestore database for the vArogra platform.
 
@@ -151,3 +151,4 @@ This document defines the structure of the Firestore database for the vArogra pl
 - `type`: string (`sos` | `appointment` | `chat`)
 - `read`: boolean
 - `createdAt`: timestamp
+

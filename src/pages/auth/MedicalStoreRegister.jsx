@@ -7,6 +7,7 @@ import Input from '../../components/Input';
 import AuthLayout from '../../components/AuthLayout';
 import { motion } from 'framer-motion';
 import ImageUpload from '../../components/ImageUpload';
+import MapComponent from '../../components/MapComponent';
 
 const MedicalStoreRegister = () => {
     const navigate = useNavigate();
@@ -27,14 +28,15 @@ const MedicalStoreRegister = () => {
 
     const [error, setError] = useState('');
     const [generatedCode, setGeneratedCode] = useState(null);
-    const [isLocating, setIsLocating] = useState(false);
+    const [isAddressLoading, setIsAddressLoading] = useState(false);
+    const [mapType, setMapType] = useState('satellite');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
 
         if (!formData.location) {
-            setError('Please locate your medical store on the map first.');
+            setError('Please pinpoint your medical store on the map.');
             return;
         }
 
@@ -60,21 +62,35 @@ const MedicalStoreRegister = () => {
         }
     };
 
-    const simulateMapPicker = () => {
-        setIsLocating(true);
-        setTimeout(() => {
-            const mockLocation = {
-                coords: '17.4400° N, 78.3489° E',
-                address: 'Shop 12, Jubilee Hills, Hyderabad, Telangana 500033'
-            };
+    const fetchAddress = async (lat, lng) => {
+        setIsAddressLoading(true);
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+            const data = await response.json();
+            if (data && data.display_name) {
+                setFormData(prev => ({
+                    ...prev,
+                    selectedAddress: data.display_name,
+                    location: `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+                }));
+            }
+        } catch (error) {
+            console.error('Error fetching address:', error);
             setFormData(prev => ({
                 ...prev,
-                location: mockLocation.coords,
-                selectedAddress: mockLocation.address
+                location: `${lat.toFixed(6)}, ${lng.toFixed(6)}`
             }));
-            setIsLocating(false);
-            alert('Location successfully identified via Google Maps!');
-        }, 2000);
+        } finally {
+            setIsAddressLoading(false);
+        }
+    };
+
+    const handleMapClick = (latlng) => {
+        fetchAddress(latlng.lat, latlng.lng);
+    };
+
+    const handleLocationFound = (loc) => {
+        fetchAddress(loc[0], loc[1]);
     };
 
     if (generatedCode) {
@@ -138,7 +154,7 @@ const MedicalStoreRegister = () => {
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="max-w-[550px] w-full bg-white rounded-[48px] shadow-[0_32px_64px_-16px_rgba(30,41,59,0.1)] border border-slate-100 p-10"
+                className="max-w-[700px] w-full bg-white rounded-[48px] shadow-[0_32px_64px_-16px_rgba(30,41,59,0.1)] border border-slate-100 p-10"
             >
                 <div className="flex justify-between items-start mb-10">
                     <div>
@@ -168,19 +184,11 @@ const MedicalStoreRegister = () => {
                         </motion.div>
                     )}
 
-                    <div className="relative group">
-                        <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3">Store Identity</p>
-                        <ImageUpload
-                            label="Store Front View"
-                            image={formData.image}
-                            onImageChange={(img) => setFormData(prev => ({ ...prev, image: img }))}
-                        />
-                    </div>
 
                     <div className="grid gap-6">
                         <section>
                             <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Store Details</p>
-                            <div className="space-y-4">
+                            <div className="space-y-6">
                                 <Input
                                     label="Display Name"
                                     placeholder="e.g. Apollo Pharmacy"
@@ -189,27 +197,92 @@ const MedicalStoreRegister = () => {
                                     required
                                 />
 
-                                <div className="space-y-3">
-                                    <label className="text-sm font-bold text-slate-700">Official Location</label>
-                                    <button
-                                        type="button"
-                                        onClick={simulateMapPicker}
-                                        disabled={isLocating}
-                                        className={`w-full h-14 rounded-2xl border-2 border-dashed transition-all flex items-center justify-center gap-3 font-black text-sm uppercase tracking-widest ${formData.location
-                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
-                                            : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-blue-400 hover:text-blue-500'
-                                            }`}
-                                    >
-                                        {isLocating ? <Loader2 className="animate-spin" size={20} /> : <MapPin size={20} />}
-                                        {formData.location ? 'Coordinates Secured' : 'Locate on Maps'}
-                                    </button>
-                                    {formData.selectedAddress && (
-                                        <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 flex gap-3">
-                                            <CheckCircle size={18} className="text-emerald-500 shrink-0 mt-0.5" />
-                                            <p className="text-[11px] font-bold text-emerald-700 leading-relaxed capitalize">{formData.selectedAddress}</p>
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-bold text-slate-700">Official Location (Satellite View)</label>
+                                        <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+                                            <button 
+                                                type="button"
+                                                onClick={() => setMapType('street')}
+                                                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${mapType === 'street' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                                            >Street</button>
+                                            <button 
+                                                type="button"
+                                                onClick={() => setMapType('satellite')}
+                                                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${mapType === 'satellite' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                                            >Satellite</button>
                                         </div>
-                                    )}
+                                    </div>
+                                    
+                                    <div className="h-[350px] w-full rounded-[32px] overflow-hidden border border-slate-100 shadow-inner relative group">
+                                        <MapComponent 
+                                            mapType={mapType}
+                                            onMapClick={handleMapClick}
+                                            onLocationFound={handleLocationFound}
+                                            markers={formData.location ? [
+                                                { 
+                                                    position: formData.location.split(', ').map(Number),
+                                                    title: formData.name || 'Store Location'
+                                                }
+                                            ] : []}
+                                        />
+                                        {isAddressLoading && (
+                                            <div className="absolute inset-0 bg-white/40 backdrop-blur-sm z-[2000] flex items-center justify-center">
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <Loader2 className="animate-spin text-blue-600" size={32} />
+                                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Identifying Address...</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <div className={`p-5 rounded-3xl border transition-all ${formData.location ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${formData.location ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                                                    <MapPin size={16} />
+                                                </div>
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Coordinates Identified</p>
+                                            </div>
+                                            <p className="text-sm font-bold text-slate-700">
+                                                {formData.location || 'Click on map to select store location'}
+                                            </p>
+                                        </div>
+
+                                        {formData.selectedAddress && (
+                                            <motion.div 
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                className="p-5 bg-blue-50/50 rounded-3xl border border-blue-100 flex gap-4"
+                                            >
+                                                <CheckCircle size={20} className="text-blue-500 shrink-0 mt-0.5" />
+                                                <div className="min-w-0">
+                                                    <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Detected Address</p>
+                                                    <p className="text-xs font-bold text-slate-600 leading-relaxed linea-clamp-2">{formData.selectedAddress}</p>
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        <p className="text-[10px] text-slate-400 font-bold px-4 text-center leading-relaxed">
+                                            The map will automatically detect your location. You can also click anywhere on the map to pin your store's exact entrance.
+                                        </p>
+                                    </div>
                                 </div>
+                            </div>
+                        </section>
+
+                        <section>
+                            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Store Identity & Verification</p>
+                            <div className="space-y-4">
+                                <ImageUpload
+                                    label="Store FRONT View"
+                                    image={formData.image}
+                                    onImageChange={(img) => setFormData(prev => ({ ...prev, image: img }))}
+                                    className="max-w-full"
+                                />
+                                <p className="text-[10px] text-slate-400 font-bold text-center uppercase tracking-widest px-4">
+                                    Upload a clear photo of your pharmacy's storefront
+                                </p>
                             </div>
                         </section>
 
@@ -269,7 +342,7 @@ const MedicalStoreRegister = () => {
 
                     <button
                         type="submit"
-                        disabled={isLocating}
+                        disabled={isAddressLoading}
                         className="w-full bg-blue-600 text-white font-black py-5 rounded-[24px] shadow-xl shadow-blue-600/20 hover:bg-blue-700 hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-widest text-sm mt-6"
                     >
                         Complete Onboarding

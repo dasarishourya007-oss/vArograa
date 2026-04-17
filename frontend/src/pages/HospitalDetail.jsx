@@ -8,6 +8,9 @@ import {
 import { hospitals as mockHospitals } from '../utils/mockData';
 import { useAuth } from '../context/AuthContext';
 
+const DEFAULT_HOSPITAL_IMAGE = '/images/default-hospital.png';
+const DEFAULT_DOCTOR_AVATAR = '/images/default-doctor.png';
+
 const HospitalDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -15,6 +18,7 @@ const HospitalDetail = () => {
 
     // Priority: 1. Live data from Context/Firestore, 2. Mock fallback
     const hospital = allHospitals.find(h => h.id === id) || mockHospitals.find(h => h.id === id);
+    const heroImage = hospital.photoURL || hospital.image || DEFAULT_HOSPITAL_IMAGE;
 
     if (!hospital) return (
         <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center">
@@ -31,8 +35,9 @@ const HospitalDetail = () => {
             {/* Header Image Section */}
             <div className="relative h-[300px] overflow-hidden">
                 <img
-                    src={hospital.image}
+                    src={heroImage}
                     alt={hospital.name}
+                    loading="lazy"
                     className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/10" />
@@ -152,7 +157,7 @@ const HospitalDetail = () => {
                             >
                                 <div className="flex items-center gap-4">
                                     <div className="relative">
-                                        <img src={doctor.image} alt={doctor.name} className="w-14 h-14 rounded-2xl object-cover shadow-sm" />
+                                        <img src={doctor.photoURL || doctor.image || DEFAULT_DOCTOR_AVATAR} alt={doctor.name} loading="lazy" className="w-14 h-14 rounded-2xl object-cover shadow-sm" />
                                         <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${doctor.status === 'Available' ? 'bg-success' : doctor.status === 'In Consultation' ? 'bg-orange-500' : 'bg-slate-400'}`} />
                                     </div>
                                     <div className="flex flex-col">

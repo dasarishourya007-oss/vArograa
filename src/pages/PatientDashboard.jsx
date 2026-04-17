@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     Calendar, Clock, MapPin, User, LogOut, Package, Video,
-    AlertCircle, Send, Bot, Loader2, ShoppingBag,
-    Search, Upload, Star, Navigation, Plus, FileText, Zap, DollarSign, ChevronRight,
-    Bike, CheckCircle, Map, ArrowLeft, Phone, PhoneOff, MicOff, ShieldCheck,
-    Stethoscope, Heart, Baby, Eye, FlaskConical, Grid, Ear, Megaphone, Settings, Camera, X, Mic, Volume2, Square, Sun
+    AlertCircle, Send, Bot, Loader2, ShoppingBag, ShoppingCart,
+    Search, Upload, Star, Navigation, Navigation2, Plus, Minus, FileText, Zap, DollarSign, ChevronRight, Award,
+    Bike, CheckCircle, Map, ArrowLeft, ArrowRight, Phone, PhoneOff, MicOff, ShieldCheck, CloudUpload, History, HelpCircle,
+    Stethoscope, Heart, Baby, Eye, FlaskConical, Grid, Ear, Megaphone, Settings, Camera, X, Mic, Volume2, Square, Sun, ChevronDown
 } from 'lucide-react';
-
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import ConfirmModal from '../components/ConfirmModal';
@@ -25,35 +24,114 @@ import { useAuth } from '../context/AuthContext';
 import ImageUpload from '../components/ImageUpload';
 import LocationPicker from '../components/LocationPicker';
 import HospitalCard from '../components/HospitalCard';
+import MapComponent from '../components/MapComponent';
 import { AISOSButton, VitalsCard, AITriageHistory } from '../components/patient/vArograFeatures';
+import Button from '../components/Button';
+import AddressSetupModal from '../components/patient/AddressSetupModal';
+import EditProfileView from '../components/patient/tabs/EditProfileView';
+import MedicalHistoryView from '../components/patient/tabs/MedicalHistoryView';
+import SupportView from '../components/patient/tabs/SupportView';
+import SettingsView from '../components/patient/tabs/SettingsView';
+import FeedbackModal from '../components/patient/FeedbackModal';
+import { recordConsultationFeedback } from '../firebase/services';
 
+const ACTIVE_APPOINTMENT_STATUSES = ['pending', 'approved', 'confirmed', 'accepted'];
+const INACTIVE_APPOINTMENT_STATUSES = ['completed', 'rejected', 'cancelled', 'canceled'];
+const ACTIVE_ORDER_STATUSES = ['pending', 'preparing', 'out for delivery', 'confirmed'];
+
+const parseReminderDateTime = (dateValue, timeValue, fallbackValue = null) => {
+    if (dateValue) {
+        const dateStr = String(dateValue).slice(0, 10);
+        const baseDate = new Date(`${dateStr}T00:00:00`);
+        if (!Number.isNaN(baseDate.getTime())) {
+            if (timeValue) {
+                const timeText = String(timeValue).trim();
+                const meridianMatch = timeText.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+
+                if (meridianMatch) {
+                    let hours = Number(meridianMatch[1]);
+                    const minutes = Number(meridianMatch[2]);
+                    const meridian = meridianMatch[3].toUpperCase();
+                    if (meridian === 'PM' && hours < 12) hours += 12;
+                    if (meridian === 'AM' && hours === 12) hours = 0;
+                    baseDate.setHours(hours, minutes, 0, 0);
+                    return baseDate;
+                }
+
+                const directDate = new Date(`${dateStr}T${timeText}`);
+                if (!Number.isNaN(directDate.getTime())) {
+                    return directDate;
+                }
+            }
+
+            return baseDate;
+        }
+    }
+
+    if (!fallbackValue) return null;
+    const fallbackDate = new Date(fallbackValue);
+    return Number.isNaN(fallbackDate.getTime()) ? null : fallbackDate;
+};
+
+const getReminderUrgency = (minutesUntil) => {
+    if (minutesUntil !== null && minutesUntil <= 15) {
+        return { color: 'bg-rose-500', glow: 'shadow-rose-500/20', tagColor: 'text-rose-600' };
+    }
+
+    if (minutesUntil !== null && minutesUntil <= 60) {
+        return { color: 'bg-amber-500', glow: 'shadow-amber-500/20', tagColor: 'text-amber-600' };
+    }
+
+    return { color: 'bg-emerald-500', glow: 'shadow-emerald-500/20', tagColor: 'text-emerald-600' };
+};
 
 // Carousel Component for Today's Reminders
 const ReminderCarousel = ({ onNavigate }) => {
     const { t } = useTranslation();
     const { appointments, orders, medicalCamps, campRegistrations } = useAuth();
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [currentTime, setCurrentTime] = useState(() => new Date());
+    const today = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate());
 
-    const now = new Date();
-    // Reset to start of day for comparison
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+        return () => clearInterval(timer);
+    }, []);
     // 1. Upcoming Appointments
-    const activeAppt = appointments
-        .filter(a => {
-            if (a.status !== 'approved' && a.status !== 'Confirmed' && a.status !== 'Accepted') return false;
-            // Ensure the appointment is today or in the future
-            if (!a.timestamp) return true; // fallback
-            const apptDate = new Date(a.timestamp);
-            return apptDate >= today;
+    const activeAppt = (appointments || [])
+        .map(a => {
+            const normalizedStatus = String(a.status || '').toLowerCase();
+            const scheduleAt = parseReminderDateTime(a.date, a.time, a.timestamp || a.createdAt);
+            const minutesUntil = scheduleAt ? Math.round((scheduleAt.getTime() - currentTime.getTime()) / 60000) : null;
+
+            return {
+                ...a,
+                normalizedStatus,
+                scheduleAt,
+                minutesUntil
+            };
         })
-        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))[0];
-
+        .filter(a => {
+            if (INACTIVE_APPOINTMENT_STATUSES.includes(a.normalizedStatus)) return false;
+            if (!ACTIVE_APPOINTMENT_STATUSES.includes(a.normalizedStatus)) return false;
+            if (!a.scheduleAt) return true;
+            return a.scheduleAt >= today;
+        })
+        .sort((a, b) => {
+            if (a.scheduleAt && b.scheduleAt) return a.scheduleAt - b.scheduleAt;
+            if (a.scheduleAt) return -1;
+            if (b.scheduleAt) return 1;
+            return new Date(b.timestamp || b.createdAt || 0) - new Date(a.timestamp || a.createdAt || 0);
+        })[0];
     // 2. Active Orders
-    const activeOrder = orders
-        .filter(o => o.status !== 'Delivered')
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0]; // Most recent active
-
+    const activeOrder = (orders || [])
+        .map(o => ({
+            ...o,
+            normalizedStatus: String(o.status || '').toLowerCase(),
+            orderedAt: parseReminderDateTime(null, null, o.timestamp || o.createdAt || currentTime)
+        }))
+        .filter(o => ACTIVE_ORDER_STATUSES.includes(o.normalizedStatus))
+        .sort((a, b) => new Date(b.orderedAt || 0) - new Date(a.orderedAt || 0))[0];
     // 3. Registered Upcoming Camps
     // Match registrations with camps to get details, then filter by date
     const registeredCamps = campRegistrations.map(reg => {
@@ -65,17 +143,16 @@ const ReminderCarousel = ({ onNavigate }) => {
         const campDate = new Date(c.timestamp);
         return campDate >= today;
     });
-
     const upcomingCamp = registeredCamps.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))[0];
-
+    const appointmentUrgency = getReminderUrgency(activeAppt?.minutesUntil ?? null);
     const slides = [
         activeAppt && {
             type: 'appointments',
             icon: <Clock size={24} className="text-white animate-pulse" />,
-            color: 'bg-p-600',
-            glow: 'shadow-p-600/20',
-            tag: t('upcoming_appointment'),
-            tagColor: 'text-p-600',
+            color: appointmentUrgency.color,
+            glow: appointmentUrgency.glow,
+            tag: activeAppt.minutesUntil !== null && activeAppt.minutesUntil <= 15 ? 'STARTING SOON' : 'BOOKED APPOINTMENT',
+            tagColor: appointmentUrgency.tagColor,
             bg: 'bg-white',
             borderColor: 'border-slate-100',
             title: `Dr. ${activeAppt?.doctorName || t('specialist')}`,
@@ -86,11 +163,11 @@ const ReminderCarousel = ({ onNavigate }) => {
             icon: <Package size={24} className="text-white animate-pulse" />,
             color: 'bg-emerald-500',
             glow: 'shadow-emerald-500/20',
-            tag: t('active_delivery'),
+            tag: 'BOOKED MEDICINE',
             tagColor: 'text-emerald-600',
             bg: 'bg-white',
             borderColor: 'border-emerald-100',
-            title: t('track_order'),
+            title: activeOrder?.storeName || t('track_order'),
             desc: `${activeOrder?.storeName || ''} • ${activeOrder?.status || ''}`
         },
         upcomingCamp && {
@@ -106,7 +183,6 @@ const ReminderCarousel = ({ onNavigate }) => {
             desc: `${upcomingCamp.date || ''} • ${upcomingCamp.location || ''}`
         }
     ].filter(Boolean);
-
     useEffect(() => {
         if (slides.length <= 1) return;
         const timer = setInterval(() => {
@@ -114,12 +190,11 @@ const ReminderCarousel = ({ onNavigate }) => {
         }, 4000);
         return () => clearInterval(timer);
     }, [slides.length]);
-
     if (slides.length === 0) return (
         <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-6 text-center rounded-[32px] bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-emerald-100/50 flex flex-col items-center justify-center gap-3 shadow-sm"
+            className="p-6 text-center rounded-[32px] bg-white border border-slate-100 flex flex-col items-center justify-center gap-3 shadow-md"
         >
             <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-emerald-500 mb-1">
                 <Sun size={24} className="text-emerald-500" strokeWidth={2.5} />
@@ -130,7 +205,6 @@ const ReminderCarousel = ({ onNavigate }) => {
             </p>
         </motion.div>
     );
-
     return (
         <div className="relative">
             <AnimatePresence mode="wait">
@@ -162,7 +236,6 @@ const ReminderCarousel = ({ onNavigate }) => {
                             <ChevronRight size={22} className="text-slate-400" />
                         </div>
                     </div>
-
                     {/* Dynamic Dots */}
                     {slides.length > 1 && (
                         <div className="absolute bottom-3 right-8 flex gap-1.5 items-center">
@@ -183,36 +256,30 @@ const ReminderCarousel = ({ onNavigate }) => {
     );
 };
 // TABS CONTENT
-const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => {
-    const { user, nearbyHospitals: authNearbyHospitals, loadingHospitals: authLoadingHospitals, allDoctors } = useAuth();
+const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick, viewMode, setViewMode }) => {
+    const { user, nearbyHospitals: authNearbyHospitals, loadingHospitals: authLoadingHospitals, allDoctors, userLoc, detectLocation } = useAuth();
     const [hospitals, setHospitals] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [sortBy, setSortBy] = useState('distance'); // 'distance', 'cost', 'rating'
     const [triageLogs, setTriageLogs] = useState([]);
     const { t } = useTranslation();
-
     // Re-sync with auth discovery state
     useEffect(() => {
         setHospitals(authNearbyHospitals || []);
     }, [authNearbyHospitals]);
-
     const isLoading = authLoadingHospitals;
-
     const handleCategorySelect = (catId) => {
         if (selectedCategory === catId) setSelectedCategory(null);
         else setSelectedCategory(catId);
     };
-
     // Filter logic
     const filteredHospitals = (hospitals || []).filter(h => {
         const textToSearch = searchTerm.toLowerCase();
-
         // 1. Match Search Term (Name or Specialty)
         const nameMatch = (h.name || '').toLowerCase().includes(textToSearch);
         const hospitalSpecialties = h.doctors ? h.doctors.map(d => d.specialty || '') : [];
         const specialtyMatch = hospitalSpecialties.some(s => s.toLowerCase().includes(textToSearch));
-
         // 2. Match Category
         let categoryMatch = true;
         if (selectedCategory) {
@@ -226,23 +293,19 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
                 'ent': ['ent specialist', 'ophthalmologist', 'eye specialist'],
                 'lab': ['pathology', 'diagnostic', 'lab'],
             };
-
             const targetSpecialties = categoryMap[selectedCategory] || [];
             categoryMatch = hospitalSpecialties.some(s =>
                 targetSpecialties.some(t => s.toLowerCase().includes(t))
             ) || (selectedCategory === 'lab' && h.facilities?.some(f => f.toLowerCase().includes('lab')));
         }
-
         return (nameMatch || specialtyMatch) && categoryMatch;
     });
-
     const isBirthday = () => {
         if (!user?.birthDate) return false;
         const today = new Date();
         const birth = new Date(user.birthDate);
         return today.getMonth() === birth.getMonth() && today.getDate() === birth.getDate();
     };
-
     const categories = [
         { id: 'all', name: t('all') || 'All', icon: <Grid size={18} /> },
         { id: 'cardiology', name: t('specialties.cardiology'), icon: <Heart size={18} /> },
@@ -252,7 +315,7 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
         { id: 'neurology', name: t('specialties.neurology'), icon: <FlaskConical size={18} /> },
         { id: 'general', name: t('specialties.general'), icon: <Stethoscope size={18} /> },
     ];
-
+    // Removed shadowing viewMode state
     return (
         <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -269,205 +332,176 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
                 onProfileClick={() => onNavigate('profile')}
                 onNotifClick={() => onNavigate('updates')}
                 onLangClick={() => onNavigate('profile')}
+                viewMode={viewMode}
+                setViewMode={setViewMode}
             />
-
             <div className="px-5">
                 {/* Unified Reminders Section - Today's Priority */}
-                <div className="mb-6">
-                    <div className="flex justify-between items-center mb-3">
-                        <div>
-                            <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-main)', letterSpacing: '-0.5px' }}>
-                                {t('todays_reminders')}
-                            </h3>
-                            <div style={{ height: '3px', width: '20px', backgroundColor: 'var(--p-500)', borderRadius: '2px', marginTop: '2px' }} />
-                        </div>
+                {viewMode === 'map' ? (
+                    <div className="mt-4" style={{ height: 'calc(100vh - 200px)', borderRadius: '32px', overflow: 'hidden', border: '1px solid #f1f5f9', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
+                        <MapComponent
+                            markers={filteredHospitals.map(h => ({
+                                ...h,
+                                position: [h.latitude, h.longitude],
+                                title: h.name,
+                                image: h.image,
+                                distance: h.distance
+                            }))}
+                            userLocation={userLoc ? [userLoc.lat, userLoc.lng] : null}
+                            onLocateMe={detectLocation}
+                            center={userLoc ? [userLoc.lat, userLoc.lng] : (filteredHospitals.length > 0 ? [filteredHospitals[0].latitude, filteredHospitals[0].longitude] : [17.3850, 78.4867])}
+                            zoom={13}
+                        />
                     </div>
-
-                    <div className="relative overflow-hidden px-1">
-                        <ReminderCarousel onNavigate={onNavigate} />
-                    </div>
-                </div>
-
-                <VitalsCard patientId={user?.uid} />
-                <AITriageHistory logs={triageLogs} />
-
-                {searchTerm.length === 0 && (
-                    <div className="mb-6">
-                        <div className="flex justify-between items-end mb-4">
-                            <div>
-                                <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-main)', letterSpacing: '-0.5px' }}>
-                                    {t('find_specialist')}
-                                </h3>
-                                <div style={{ height: '3px', width: '20px', backgroundColor: 'var(--p-500)', borderRadius: '2px', marginTop: '2px' }} />
-                            </div>
-                            <button style={{ color: 'var(--p-600)', fontSize: '12px', fontWeight: '700', padding: '0 4px' }}>{t('see_all')}</button>
-                        </div>
-
-                        {/* Pill Style Category Toolbar */}
-                        <div className="flex overflow-x-auto no-scrollbar gap-2.5 pb-2 -mx-5 px-5">
-                            {categories.map((cat) => {
-                                const isActive = (selectedCategory === cat.id) || (cat.id === 'all' && !selectedCategory);
-                                return (
-                                    <motion.button
-                                        key={cat.id}
-                                        onClick={() => cat.id === 'all' ? setSelectedCategory(null) : handleCategorySelect(cat.id)}
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
-                                        className={`flex items-center gap-2 px-5 py-2.5 rounded-full transition-all border whitespace-nowrap shrink-0 ${isActive
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200'
-                                            : 'bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100'}`}
-                                    >
-                                        <span className={isActive ? 'text-white' : 'text-blue-500'}>
-                                            {cat.icon}
-                                        </span>
-                                        <span className="text-[13px] font-bold tracking-tight">
-                                            {cat.name}
-                                        </span>
-                                    </motion.button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* Floating Glass Filter Bar */}
-                <AnimatePresence>
-                    {selectedCategory && (
-                        <motion.div
-                            initial={{ scale: 0.8, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.8, opacity: 0 }}
-                            className="sticky top-6 z-50 mb-10 flex gap-2 p-1.5 glass rounded-full shadow-lg"
-                        >
-                            {['distance', 'cost', 'rating'].map((option) => (
-                                <button
-                                    key={option}
-                                    onClick={() => setSortBy(option)}
-                                    className={`flex-1 py-3 px-3 rounded-full text-[12px] font-bold capitalize transition-all border-none ${sortBy === option
-                                        ? 'bg-p-600 text-white shadow-md'
-                                        : 'text-muted'
-                                        }`}
-                                >
-                                    {t(option)}
-                                </button>
-                            ))}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                <div className="mt-4">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 style={{ fontSize: '18px', fontWeight: '800' }}>
-                            {searchTerm ? t('search_results') : (selectedCategory ? t('best_specialists') : t('hospitals_nearby'))}
-                        </h3>
-                        <span style={{
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            background: 'var(--p-100)',
-                            color: 'var(--p-700)',
-                            padding: '4px 10px',
-                            borderRadius: '10px'
-                        }}>
-                            {filteredHospitals.length} {t('found')}
-                        </span>
-                    </div>
-
-                    <div className="flex flex-col gap-4">
-                        {isLoading ? (
-                            Array(3).fill(0).map((_, i) => (
-                                <div key={i} className="card-premium h-48 skeleton" />
-                            ))
-                        ) : filteredHospitals.length > 0 ? (
-                            filteredHospitals
-                                .sort((a, b) => {
-                                    if (sortBy === 'distance') return parseFloat(a.distance) - parseFloat(b.distance);
-                                    if (sortBy === 'rating') return b.rating - a.rating;
-                                    return 0;
-                                })
-                                .map((hospital, index) => {
-                                    const hospitalLiveDoctors = (allDoctors || []).filter(d => d.hospitalId === hospital.id && d.status === 'APPROVED');
-                                    const displayDoctors = [...hospitalLiveDoctors, ...(hospital.doctors || [])];
-
-                                    return (
-                                        <motion.div
-                                            key={hospital.id}
-                                            initial={{ opacity: 0, y: 20 }}
-                                            whileInView={{ opacity: 1, y: 0 }}
-                                            viewport={{ once: true, margin: "-50px" }}
-                                            transition={{ duration: 0.3, delay: index * 0.05 }}
-                                            className="mb-8"
-                                        >
-                                            {/* Hospital Section Header */}
-                                            <div className="flex items-center gap-3 mb-4 px-2">
-                                                <div className="w-10 h-10 rounded-xl bg-p-100 flex items-center justify-center text-p-600 shadow-sm">
-                                                    <ShieldCheck size={20} strokeWidth={2.5} />
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none uppercase">{hospital.name}</h3>
-                                                    <span className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">{hospital.location || hospital.address} • {displayDoctors.length} Specialisms</span>
-                                                </div>
-                                            </div>
-
-                                            <HospitalCard
-                                                hospital={hospital}
-                                                onClick={() => navigate(`/hospital/${hospital.id}`)}
-                                            />
-
-                                            {/* Doctors Grouped Under Hospital */}
-                                            {displayDoctors.length > 0 && (
-                                                <div className="grid grid-cols-2 gap-3 mt-4">
-                                                    {displayDoctors.slice(0, 2).map((doctor, dIdx) => (
-                                                        <div key={doctor.id || dIdx} className="glass p-3 rounded-2xl border-slate-100 flex items-center gap-3 active:scale-95 transition-all cursor-pointer">
-                                                            <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden shrink-0">
-                                                                <img src={doctor.image || `https://ui-avatars.com/api/?name=${doctor.name}&background=random`} alt={doctor.name} className="w-full h-full object-cover" />
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <p className="text-[12px] font-black text-slate-900 truncate uppercase tracking-tight">Dr. {doctor.name.split(' ').pop()}</p>
-                                                                <p className="text-[10px] font-bold text-p-600 truncate uppercase">{doctor.specialty || doctor.specialization}</p>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                    {displayDoctors.length > 2 && (
-                                                        <div
-                                                            onClick={() => navigate(`/hospital/${hospital.id}`)}
-                                                            className="glass p-3 rounded-2xl border-slate-100 flex items-center justify-center gap-2 bg-slate-50/50 cursor-pointer active:scale-95 transition-all"
-                                                        >
-                                                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">+{displayDoctors.length - 2} More</p>
-                                                            <ChevronRight size={14} className="text-slate-400" />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </motion.div>
-                                    )
-                                })
-                        ) : (
-                            <div className="text-center py-20 px-8 card-premium glass border-dashed">
-                                <div className="bg-rose-50 w-24 h-24 rounded-[32px] flex items-center justify-center mx-auto mb-8 shadow-sm">
-                                    <MapPin size={40} className="text-rose-500" strokeWidth={2} />
+                ) : (
+                    <>
+                        <div className="mb-6">
+                            <div className="flex justify-between items-center mb-3">
+                                <div>
+                                    <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-main)', letterSpacing: '-0.5px' }}>
+                                        {t('todays_reminders')}
+                                    </h3>
+                                    <div style={{ height: '3px', width: '20px', backgroundColor: 'var(--p-500)', borderRadius: '2px', marginTop: '2px' }} />
                                 </div>
-                                <h4 style={{ fontSize: '20px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px', letterSpacing: '-0.5px' }}>
-                                    No hospitals available in your area.
-                                </h4>
-                                <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '24px', maxWidth: '280px', margin: '0 auto 32px', fontWeight: '500' }}>
-                                    We couldn't find any vArogra-linked hospitals in {user?.location || 'your area'}. Try updating your location in profile.
-                                </p>
-                                <button
-                                    onClick={() => navigate('/profile')}
-                                    className="px-8 py-4 btn-primary rounded-2xl text-sm font-bold border-none transition-all active:scale-95 flex items-center gap-2 mx-auto"
-                                >
-                                    <Settings size={18} />
-                                    Update My Location
-                                </button>
+                            </div>
+                            <div className="relative overflow-hidden px-1">
+                                <ReminderCarousel onNavigate={onNavigate} />
+                            </div>
+                        </div>
+
+                        {searchTerm.length === 0 && (
+                            <div className="mb-6">
+                                <div className="flex justify-between items-end mb-4">
+                                    <div>
+                                        <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-main)', letterSpacing: '-0.5px' }}>
+                                            {t('find_specialist')}
+                                        </h3>
+                                        <div style={{ height: '3px', width: '20px', backgroundColor: 'var(--p-500)', borderRadius: '2px', marginTop: '2px' }} />
+                                    </div>
+                                    <button style={{ color: 'var(--p-600)', fontSize: '12px', fontWeight: '700', padding: '0 4px' }}>{t('see_all')}</button>
+                                </div>
+                                {/* Pill Style Category Toolbar */}
+                                <div className="flex overflow-x-auto no-scrollbar gap-2.5 pb-2 -mx-5 px-5">
+                                    {categories.map((cat) => {
+                                        const isActive = (selectedCategory === cat.id) || (cat.id === 'all' && !selectedCategory);
+                                        return (
+                                            <motion.button
+                                                key={cat.id}
+                                                onClick={() => cat.id === 'all' ? setSelectedCategory(null) : handleCategorySelect(cat.id)}
+                                                whileHover={{ scale: 1.02 }}
+                                                whileTap={{ scale: 0.98 }}
+                                                className={`flex items-center gap-2 px-5 py-2.5 rounded-full transition-all border whitespace-nowrap shrink-0 ${isActive
+                                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200'
+                                                    : 'bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100'}`}
+                                            >
+                                                <span className={isActive ? 'text-white' : 'text-blue-500'}>
+                                                    {cat.icon}
+                                                </span>
+                                                <span className="text-[13px] font-bold tracking-tight">
+                                                    {cat.name}
+                                                </span>
+                                            </motion.button>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         )}
-                    </div>
-                </div>
-            </div >
-        </motion.div >
+                        {/* Floating Glass Filter Bar */}
+                        <AnimatePresence>
+                            {selectedCategory && (
+                                <motion.div
+                                    initial={{ scale: 0.8, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    exit={{ scale: 0.8, opacity: 0 }}
+                                    className="sticky top-6 z-50 mb-10 flex gap-2 p-1.5 glass rounded-full shadow-lg"
+                                >
+                                    {['distance', 'cost', 'rating'].map((option) => (
+                                        <button
+                                            key={option}
+                                            onClick={() => setSortBy(option)}
+                                            className={`flex-1 py-3 px-3 rounded-full text-[12px] font-bold capitalize transition-all border-none ${sortBy === option
+                                                ? 'bg-p-600 text-white shadow-md'
+                                                : 'text-muted'
+                                                }`}
+                                        >
+                                            {t(option)}
+                                        </button>
+                                    ))}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                        <div className="mt-4">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 style={{ fontSize: '18px', fontWeight: '800' }}>
+                                    {searchTerm ? t('search_results') : (selectedCategory ? t('best_specialists') : t('hospitals_nearby'))}
+                                </h3>
+                                <span style={{
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    background: 'var(--p-100)',
+                                    color: 'var(--p-700)',
+                                    padding: '4px 10px',
+                                    borderRadius: '10px'
+                                }}>
+                                    {filteredHospitals.length} {t('found')}
+                                </span>
+                            </div>
+                            <div className="flex flex-col gap-4">
+                                {isLoading ? (
+                                    Array(3).fill(0).map((_, i) => (
+                                        <div key={i} className="card-premium h-48 skeleton" />
+                                    ))
+                                ) : filteredHospitals.length > 0 ? (
+                                    filteredHospitals
+                                        .sort((a, b) => {
+                                            if (sortBy === 'distance') return parseFloat(a.distance) - parseFloat(b.distance);
+                                            if (sortBy === 'rating') return b.rating - a.rating;
+                                            return 0;
+                                        })
+                                        .map((hospital, index) => {
+                                            return (
+                                                <motion.div
+                                                    key={hospital.id}
+                                                    initial={{ opacity: 0, y: 20 }}
+                                                    whileInView={{ opacity: 1, y: 0 }}
+                                                    viewport={{ once: true, margin: "-50px" }}
+                                                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                                                    className="mb-8"
+                                                >
+                                                    <HospitalCard
+                                                        hospital={hospital}
+                                                        onClick={() => navigate(`/hospital/${hospital.id}`)}
+                                                    />
+                                                </motion.div>
+                                            )
+                                        })
+                                ) : (
+                                    <div className="text-center py-20 px-8 card-premium glass border-dashed">
+                                        <div className="bg-rose-50 w-24 h-24 rounded-[32px] flex items-center justify-center mx-auto mb-8 shadow-sm">
+                                            <MapPin size={40} className="text-rose-500" strokeWidth={2} />
+                                        </div>
+                                        <h4 style={{ fontSize: '20px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px', letterSpacing: '-0.5px' }}>
+                                            No hospitals available in your area.
+                                        </h4>
+                                        <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '24px', maxWidth: '280px', margin: '0 auto 32px', fontWeight: '500' }}>
+                                            We couldn't find any vArogra-linked hospitals in {user?.location || 'your area'}. Try updating your location in profile.
+                                        </p>
+                                        <button
+                                            onClick={() => navigate('/profile')}
+                                            className="px-8 py-4 btn-primary rounded-2xl text-sm font-bold border-none transition-all active:scale-95 flex items-center gap-2 mx-auto"
+                                        >
+                                            Update My Location
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </>
+                )}
+            </div>
+        </motion.div>
     );
 };
-
 const AppointmentCountdown = ({ targetTime }) => {
     const { t } = useTranslation();
     const calculateSeconds = (t) => {
@@ -475,41 +509,33 @@ const AppointmentCountdown = ({ targetTime }) => {
         const now = new Date();
         const [time, modifier] = t.split(' ');
         let [hours, minutes] = time.split(':');
-
         if (hours === '12') {
             hours = modifier === 'AM' ? '00' : '12';
         } else if (modifier === 'PM') {
             hours = parseInt(hours, 10) + 12;
         }
-
         const target = new Date();
         target.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
-
         const diff = Math.floor((target.getTime() - now.getTime()) / 1000);
         return diff > 0 ? diff : 0;
     };
     const [timeLeft, setTimeLeft] = useState(calculateSeconds(targetTime));
-
     useEffect(() => {
         // Initial sync
         setTimeLeft(calculateSeconds(targetTime));
-
         const interval = setInterval(() => {
             setTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
         }, 1000);
         return () => clearInterval(interval);
     }, [targetTime]);
-
     const formatDuration = (s) => {
         if (s <= 0) return t('starting_now');
         const h = Math.floor(s / 3600);
         const m = Math.floor((s % 3600) / 60);
         const sec = s % 60;
-
         if (h > 0) return `${h}h ${m}m ${sec}s`;
         return `${m}:${sec.toString().padStart(2, '0')}`;
     };
-
     return (
         <motion.div
             animate={{ scale: [1, 1.015, 1] }}
@@ -538,355 +564,575 @@ const AppointmentCountdown = ({ targetTime }) => {
     );
 };
 
-
 const CheckoutView = ({ store, onConfirm, onCancel }) => {
     const { t } = useTranslation();
-    const itemTotal = 450;
-    const deliveryFee = store.deliveryFee || 25;
-    const taxes = 18.50;
-    const grandTotal = itemTotal + deliveryFee + taxes;
-
+    const [bookingFor, setBookingFor] = useState('self');
+    const [receiverName, setReceiverName] = useState('');
+    const [receiverPhone, setReceiverPhone] = useState('');
+    const [cart, setCart] = useState({});
+    const [activeCategory, setActiveCategory] = useState('All');
+    const [customRequest, setCustomRequest] = useState('');
+    const [prescriptionFile, setPrescriptionFile] = useState(null);
+    const [orderStep, setOrderStep] = useState('selection'); // selection, sent, checkout
+    const [loading, setLoading] = useState(false);
+    const categories = ['All', ...new Set((store.inventory || []).map(i => i.category).filter(Boolean))];
+    const updateCart = (medId, delta) => {
+        setCart(prev => {
+            const current = prev[medId] || 0;
+            const next = Math.max(0, current + delta);
+            if (next === 0) {
+                const { [medId]: _, ...rest } = prev;
+                return rest;
+            }
+            return { ...prev, [medId]: next };
+        });
+    };
+    const cartItems = Object.entries(cart).map(([id, qty]) => {
+        const item = store.inventory?.find(i => i.id === id);
+        return { ...item, qty };
+    });
+    const subtotal = cartItems.reduce((acc, item) => acc + (item.price * item.qty), 0);
+    const deliveryFee = 30;
+    const total = subtotal > 0 ? subtotal + deliveryFee : 0;
+    const handleSendOrder = () => {
+        setLoading(true);
+        // Simulate real store communication network
+        const timer = setTimeout(() => {
+            setLoading(false);
+            setOrderStep('checkout');
+        }, 2200);
+    };
+    const handleFinalConfirm = () => {
+        setLoading(true);
+        setTimeout(() => {
+            onConfirm({
+                storeName: store.name,
+                storeId: store.id,
+                total,
+                items: cartItems.map(i => `${i.name} (${i.qty})`),
+                receiverName: bookingFor === 'other' ? receiverName : null,
+                receiverPhone: bookingFor === 'other' ? receiverPhone : null,
+                customRequest,
+                hasPrescription: !!prescriptionFile
+            });
+            setLoading(false);
+        }, 1500);
+    };
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            style={{ padding: '20px', paddingBottom: '100px', backgroundColor: '#fff', minHeight: '100vh' }}
-        >
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px', paddingTop: '20px' }}>
-                <button onClick={onCancel} style={{ background: 'none', border: 'none', padding: '8px', cursor: 'pointer' }}>
-                    <ArrowLeft size={24} />
-                </button>
-                <h1 style={{ fontSize: '20px', fontWeight: 'bold', marginLeft: '8px' }}>{t('review_order')}</h1>
+        <AnimatePresence>
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={onCancel}
+                    className="absolute inset-0 bg-slate-900/60 backdrop-blur-xl"
+                />
+
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 40 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 40 }}
+                    className="relative bg-white w-full max-w-lg max-h-[85vh] rounded-[48px] overflow-hidden shadow-2xl flex flex-col"
+                >
+                    {/* Header Image Area */}
+                    <div className="relative h-60 shrink-0">
+                        <img src={store.image || 'https://images.unsplash.com/photo-1576602976047-174e57a47881?auto=format&fit=crop&q=80&w=600'} className="w-full h-full object-cover" alt={store.name} onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1576602976047-174e57a47881?auto=format&fit=crop&q=80&w=600'; }} />
+                        <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-black/20" />
+
+                        <button
+                            onClick={onCancel}
+                            className="absolute top-8 right-8 w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/40 transition-all border border-white/20"
+                        >
+                            <X size={20} />
+                        </button>
+                        <div className="absolute bottom-8 left-10 right-10">
+                            <div className="flex justify-between items-end">
+                                <div>
+                                    <h2 className="text-3xl font-black text-slate-900 tracking-tighter mb-1">{store.name}</h2>
+                                    <div className="flex items-center gap-2 text-slate-500 font-bold text-xs uppercase tracking-widest">
+                                        <MapPin size={12} className="text-blue-500" />
+                                        {(store.address || store.location || 'Unknown Location').split(',')[0]}
+                                    </div>
+                                </div>
+                                <div className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-2xl shadow-lg border border-white flex items-center gap-1.5">
+                                    <Star size={14} fill="#f59e0b" className="text-amber-500" />
+                                    <span className="text-sm font-black text-slate-900">{store.rating || '4.5'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto no-scrollbar p-10 pt-6 space-y-8">
+                        {/* Highlights Grid */}
+                        <div className="grid grid-cols-3 gap-4">
+                            {[
+                                { icon: Clock, label: 'Mins', value: store.deliveryTime || '25-35', color: 'text-blue-500' },
+                                { icon: Navigation2, label: 'KM Away', value: store.distance || '2.4', color: 'text-purple-500' },
+                                { icon: DollarSign, label: 'Value', value: `${store.priceScore || '98'}%`, color: 'text-emerald-500' }
+                            ].map((stat, idx) => (
+                                <div key={idx} className="bg-white border border-slate-100 rounded-[24px] p-5 flex flex-col items-center justify-center gap-1 hover:shadow-md transition-all">
+                                    <stat.icon size={18} className={stat.color} />
+                                    <span className="text-sm font-black text-slate-900">{stat.value}</span>
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</span>
+                                </div>
+                            ))}
+                        </div>
+                        {/* Mode Switcher */}
+                        <div className="bg-slate-50 p-1.5 rounded-full flex gap-1 border border-slate-100/50">
+                            <button
+                                onClick={() => setOrderStep('selection')}
+                                className={`flex-1 py-4 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${orderStep === 'selection' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                            >
+                                INVENTORY
+                            </button>
+                            <button
+                                onClick={() => setOrderStep('custom')}
+                                className={`flex-1 py-4 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${orderStep === 'custom' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                            >
+                                REQUEST CUSTOM
+                            </button>
+                        </div>
+                        {orderStep === 'selection' ? (
+                            <div className="space-y-6">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <Zap size={14} className="text-blue-500 fill-blue-500/10" />
+                                        <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em]">POPULAR MEDICINES</h3>
+                                    </div>
+                                    <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-50 px-2 py-0.5 rounded-md">Live Stock</span>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {(store.inventory || []).map((item) => (
+                                        <motion.div
+                                            key={item.id}
+                                            layout
+                                            className="bg-white border border-slate-50 p-4 rounded-[32px] flex items-center gap-5 hover:shadow-xl hover:shadow-slate-200/20 transition-all group"
+                                        >
+                                            <div className="w-16 h-16 rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 flex items-center justify-center shadow-inner">
+                                                <Package size={24} className="text-slate-300" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="text-[18px] font-black text-slate-900 tracking-tight truncate">{item.name.split(' ')[0]}</h4>
+                                                <div className="flex items-center gap-1.5 mt-1">
+                                                    <div className="w-1 h-1 rounded-full bg-slate-300"></div>
+                                                    <p className="text-[14px] font-bold text-slate-500">₹{item.price}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <AnimatePresence>
+                                                    {cart[item.id] > 0 && (
+                                                        <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3">
+                                                            <button onClick={() => updateCart(item.id, -1)} className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"><Minus size={14} /></button>
+                                                            <span className="text-sm font-black text-slate-900">{cart[item.id]}</span>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                                <button
+                                                    onClick={() => updateCart(item.id, 1)}
+                                                    className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center hover:scale-110 active:scale-90 transition-all shadow-lg active:shadow-inner"
+                                                >
+                                                    <Plus size={18} />
+                                                </button>
+                                            </div>
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : orderStep === 'custom' ? (
+                            <div className="space-y-6">
+                                <div className="space-y-4">
+                                    <h3 className="text-[12px] font-black text-slate-400 uppercase tracking-widest px-4">Medicines List / Notes</h3>
+                                    <textarea
+                                        placeholder="Example: Dolo 650 (2 strips), Paracetamol (10 tablets)..."
+                                        value={customRequest}
+                                        onChange={(e) => setCustomRequest(e.target.value)}
+                                        className="w-full h-40 p-8 rounded-[40px] bg-white border border-slate-100 text-[16px] font-bold text-slate-900 placeholder:text-slate-300 focus:ring-4 focus:ring-slate-50 outline-none resize-none shadow-sm"
+                                    />
+                                </div>
+                                <div className="relative">
+                                    <input type="file" id="rx-upload" className="hidden" onChange={(e) => setPrescriptionFile(e.target.files[0])} />
+                                    <label
+                                        htmlFor="rx-upload"
+                                        className="flex flex-col items-center justify-center gap-4 w-full p-12 rounded-[48px] border-2 border-dashed border-slate-200 bg-white hover:bg-slate-50 transition-all cursor-pointer group shadow-sm"
+                                    >
+                                        <div className="w-16 h-16 rounded-[24px] bg-blue-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                            <Camera size={28} className="text-blue-500" />
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-[18px] font-black text-slate-900">{prescriptionFile ? prescriptionFile.name : 'Upload Prescription'}</p>
+                                            <p className="text-[12px] font-bold text-slate-400 mt-2 uppercase tracking-widest">JPG, PNG OR PDF (MAX 5MB)</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        ) : (
+                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6">
+                                <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 space-y-4">
+                                    <h3 className="text-[12px] font-black text-slate-400 uppercase tracking-widest px-2">Delivery Details</h3>
+                                    <div className="flex gap-2 p-1 bg-white rounded-2xl border border-slate-100/50">
+                                        <button
+                                            onClick={() => setBookingFor('self')}
+                                            className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${bookingFor === 'self' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}
+                                        >
+                                            For Myself
+                                        </button>
+                                        <button
+                                            onClick={() => setBookingFor('other')}
+                                            className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all ${bookingFor === 'other' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}
+                                        >
+                                            For Others
+                                        </button>
+                                    </div>
+                                    <AnimatePresence>
+                                        {bookingFor === 'other' && (
+                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="space-y-3 overflow-hidden">
+                                                <input type="text" placeholder="Receiver's Full Name" value={receiverName} onChange={e => setReceiverName(e.target.value)} className="w-full bg-white p-4 rounded-xl border border-slate-100 text-sm font-bold text-slate-900 placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all" />
+                                                <input type="tel" placeholder="Receiver's Phone Number" value={receiverPhone} onChange={e => setReceiverPhone(e.target.value)} className="w-full bg-white p-4 rounded-xl border border-slate-100 text-sm font-bold text-slate-900 placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all" />
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                                <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100">
+                                    <div className="flex items-center gap-4 mb-6">
+                                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-emerald-500 shadow-sm shrink-0">
+                                            <CheckCircle size={20} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-md font-black text-slate-900 tracking-tight">Order Summary</h3>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ready for Shipment</p>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {cartItems.map(item => (
+                                            <div key={item.id} className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-400">x{item.qty}</div>
+                                                    <span className="text-sm font-black text-slate-800">{item.name}</span>
+                                                </div>
+                                                <span className="text-sm font-black text-slate-900">₹{item.price * item.qty}</span>
+                                            </div>
+                                        ))}
+
+                                        <div className="pt-4 mt-4 border-t border-slate-100 space-y-3">
+                                            <div className="flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                                <span>Subtotal</span>
+                                                <span>₹{subtotal}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                                <span>Delivery Fee</span>
+                                                <span>₹{deliveryFee}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center pt-2">
+                                                <span className="text-lg font-black text-slate-900">Grand Total</span>
+                                                <span className="text-2xl font-black text-blue-600 tracking-tighter">₹{total}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="p-5 rounded-[28px] bg-violet-50 border border-violet-100 flex gap-4">
+                                    <AlertCircle size={20} className="text-violet-600 shrink-0" />
+                                    <p className="text-[12px] font-bold text-violet-800 leading-relaxed">
+                                        Our pharmacist will verify your prescription before dispatch. Final price may adjust slightly.
+                                    </p>
+                                </div>
+                            </motion.div>
+                        )}
+                    </div>
+                    {/* Bottom Floating Bar */}
+                    {(subtotal > 0 || orderStep === 'custom' || orderStep === 'checkout') && (
+                        <div className="p-10 pt-0 bg-white sticky bottom-0 border-t border-slate-50">
+                            <motion.button
+                                whileTap={(orderStep === 'custom' && !customRequest && !prescriptionFile) ? {} : { scale: 0.95 }}
+                                onClick={(orderStep === 'custom' && !customRequest && !prescriptionFile) ? null : (orderStep === 'checkout' ? handleFinalConfirm : handleSendOrder)}
+                                disabled={orderStep === 'custom' && !customRequest && !prescriptionFile}
+                                className={`w-full p-6 rounded-[32px] flex items-center transition-all ${
+                                    (orderStep === 'custom' && !customRequest && !prescriptionFile)
+                                        ? 'bg-slate-400 text-white cursor-not-allowed justify-center shadow-none'
+                                        : 'bg-slate-900 text-white shadow-2xl hover:shadow-slate-900/40 justify-between'
+                                }`}
+                            >
+                                {orderStep === 'custom' || subtotal === 0 ? (
+                                    <div className="flex-1 text-center font-black tracking-tight text-lg flex items-center justify-center gap-2">
+                                        {loading ? 'Processing...' : (orderStep === 'checkout' ? 'Confirm Request' : 'Send Order Request')}
+                                        {!loading && <ChevronRight size={20} />}
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="text-left">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Total Order</p>
+                                            <p className="text-2xl font-black tracking-tighter">₹{total}</p>
+                                        </div>
+                                        <div className="flex items-center gap-4 bg-white/10 px-8 py-4 rounded-2xl group-hover:bg-blue-600 transition-all">
+                                            <span className="text-[11px] font-black uppercase tracking-widest">
+                                                {loading ? 'Processing...' : (orderStep === 'checkout' ? 'Confirm Payment' : 'Review & Send')}
+                                            </span>
+                                            {loading ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
+                                        </div>
+                                    </>
+                                )}
+                            </motion.button>
+                        </div>
+                    )}
+                </motion.div>
             </div>
-
-            <div style={{ backgroundColor: '#f9fafb', borderRadius: '24px', padding: '20px', marginBottom: '24px' }}>
-                <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-                    <img src={store.image} alt={store.name} style={{ width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover' }} />
-                    <div>
-                        <h3 style={{ fontWeight: 'bold', fontSize: '18px' }}>{store.name}</h3>
-                        <p style={{ fontSize: '12px', color: '#666' }}>{store.address}</p>
-                    </div>
-                </div>
-
-                <div style={{ borderTop: '1px dashed #ddd', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                        <span style={{ color: '#666' }}>{t('medicine_item_total')}</span>
-                        <span>₹{itemTotal.toFixed(2)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                        <span style={{ color: '#666' }}>{t('delivery_fee')}</span>
-                        <span>₹{deliveryFee.toFixed(2)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                        <span style={{ color: '#666' }}>{t('taxes_gst')}</span>
-                        <span>₹{taxes.toFixed(2)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '18px', fontWeight: 'bold', borderTop: '1px solid #eee', paddingTop: '12px', marginTop: '4px' }}>
-                        <span>{t('grand_total')}</span>
-                        <span style={{ color: 'var(--primary-color)' }}>₹{grandTotal.toFixed(2)}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div style={{ backgroundColor: '#fff7ed', padding: '16px', borderRadius: '16px', border: '1px solid #ffedd5', marginBottom: '32px', display: 'flex', gap: '12px' }}>
-                <div style={{ color: '#f97316' }}><Zap size={20} fill="#f97316" /></div>
-                <p style={{ fontSize: '12px', color: '#9a3412', fontWeight: '500' }}>{t('free_delivery_promo')}</p>
-            </div>
-
-            <Button size="block" onClick={() => onConfirm(store.name)}>{t('place_order_pay')}</Button>
-            <p style={{ textAlign: 'center', fontSize: '11px', color: '#9ca3af', marginTop: '16px' }}>
-                {t('terms_of_service_agreement')}
-            </p>
-        </motion.div>
+        </AnimatePresence>
     );
 };
-
 const DeliveryTrackingView = ({ order, onComplete }) => {
     const { t } = useTranslation();
-    const { orders } = useAuth();
+    const { orders, updateOrderStatus } = useAuth();
     const [isCalling, setIsCalling] = useState(false);
     const [callTime, setCallTime] = useState(0);
-
-    // Get live status from global state
     const liveOrder = orders.find(o => o.id === order.id) || order;
-
-    const statuses = ['Confirmed', 'Preparing', 'Out for delivery', 'Delivered'];
-
-    // Map string status to index
+    const statuses = ['Pending', 'Preparing', 'Out for Delivery', 'Delivered'];
     const statusIndex = Math.max(0, statuses.indexOf(liveOrder.status));
-
     const displayStatuses = [
-        t('order_confirmed'),
-        t('preparing_medicines'),
-        t('out_for_delivery'),
-        t('items_delivered')
+        { id: 'Pending', label: 'Order Received', icon: Clock, color: 'text-blue-500' },
+        { id: 'Preparing', label: 'Store Packing', icon: Package, color: 'text-amber-500' },
+        { id: 'Out for Delivery', label: 'On the Way', icon: MapPin, color: 'text-emerald-500' },
+        { id: 'Delivered', label: 'Fulfilled', icon: CheckCircle, color: 'text-p-600' }
     ];
-
-
-    // Simulated Call Timer
-    React.useEffect(() => {
-        let interval;
+    useEffect(() => {
+        let timer;
         if (isCalling) {
-            interval = setInterval(() => {
-                setCallTime(prev => prev + 1);
-            }, 1000);
-        } else {
-            setCallTime(0);
+            timer = setInterval(() => setCallTime(prev => prev + 1), 1000);
         }
-        return () => clearInterval(interval);
+        return () => clearInterval(timer);
     }, [isCalling]);
 
+    // Simulated Bot Accept for Pharmacy Order
+    useEffect(() => {
+        if (liveOrder.status === 'Pending') {
+            const botAcceptTimer = setTimeout(() => {
+                if (updateOrderStatus) {
+                    updateOrderStatus(liveOrder.id, 'Preparing');
+                }
+            }, 120000); // 2 minutes
+            return () => clearTimeout(botAcceptTimer);
+        }
+    }, [liveOrder.status, liveOrder.id, updateOrderStatus]);
     const formatTime = (seconds) => {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
-
-    const handleCall = () => {
-        setIsCalling(true);
-    };
-
-    const endCall = () => {
-        setIsCalling(false);
-    };
-
-    // Simulated Map Logic
     const progress = (statusIndex / (statuses.length - 1)) * 100;
-
     return (
         <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            style={{ backgroundColor: '#f8f9fa', minHeight: '100vh', paddingBottom: '100px', position: 'relative' }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col bg-slate-50 min-h-screen"
         >
+            {/* Map Area */}
+            <div className="relative h-[45vh] w-full bg-slate-200">
+                <MapComponent markers={[
+                    { id: 'store', lat: 17.4435, lng: 78.3772, type: 'hospital', name: liveOrder.storeName },
+                    { id: 'driver', lat: 17.4500, lng: 78.3800, type: 'doctor', name: 'Delivery Partner' }
+                ]} />
+
+                <button
+                    onClick={onComplete}
+                    className="absolute top-12 left-6 w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-800 shadow-xl active:scale-90 transition-all z-10"
+                >
+                    <ArrowLeft size={20} />
+                </button>
+                <div className="absolute bottom-6 left-6 right-6 p-4 bg-white/80 backdrop-blur-xl rounded-3xl border border-white shadow-2xl flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-white shadow-sm">
+                            <img src={liveOrder.driver?.photo || "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=100"} alt="Driver" className="w-full h-full object-cover" />
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-black text-slate-900">{liveOrder.driver?.name || 'Arjun Sharma'}</h4>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Delivery Partner • 4.9�</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setIsCalling(true)}
+                        className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-200 active:scale-90 transition-all"
+                    >
+                        <Phone size={20} />
+                    </button>
+                </div>
+            </div>
+            {/* Status Panel */}
+            <div className="flex-1 bg-white rounded-t-[48px] -mt-10 px-8 pt-10 shadow-[0_-20px_40px_rgba(0,0,0,0.05)] relative z-20">
+                <div className="flex justify-between items-center mb-10">
+                    <div>
+                        <h2 className="text-2xl font-black text-slate-900 lowercase tracking-tighter">Order {liveOrder.id}</h2>
+                        <p className="text-[10px] font-black text-p-600 uppercase tracking-[0.2em] mt-1">Estimating {liveOrder.deliveryTime || '15 mins'}</p>
+                    </div>
+                    <div className="w-16 h-16 rounded-3xl bg-p-50 flex flex-col items-center justify-center">
+                        <span className="text-[8px] font-black text-p-400 uppercase">Items</span>
+                        <span className="text-xl font-black text-p-600">{liveOrder.items?.length || 0}</span>
+                    </div>
+                </div>
+                {/* Tracking Progress */}
+                <div className="relative mb-12">
+                    <div className="absolute top-5 left-0 right-0 h-1 bg-slate-100 rounded-full">
+                        <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progress}%` }}
+                            className="h-full bg-p-600 rounded-full shadow-[0_0_10px_rgba(124,58,237,0.5)]"
+                        />
+                    </div>
+                    <div className="flex justify-between relative">
+                        {displayStatuses.map((s, i) => {
+                            const Icon = s.icon;
+                            const isActive = i <= statusIndex;
+                            return (
+                                <div key={s.id} className="flex flex-col items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-500 ${isActive ? 'bg-white shadow-xl scale-110 border border-p-100' : 'bg-slate-50'}`}>
+                                        <Icon size={18} className={isActive ? s.color : 'text-slate-200'} />
+                                    </div>
+                                    <span className={`text-[9px] font-black uppercase tracking-wider text-center max-w-[60px] ${isActive ? 'text-slate-900' : 'text-slate-200'}`}>
+                                        {s.label}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+                {/* Details Card */}
+                <div className="p-6 rounded-[32px] bg-slate-50 border border-slate-100">
+                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Delivery Summary</h5>
+                    <div className="space-y-3">
+                        {liveOrder.items?.map((item, i) => (
+                            <div key={i} className="flex justify-between items-center text-sm font-bold text-slate-700">
+                                <span>{item}</span>
+                                <span className="opacity-40">x1</span>
+                            </div>
+                        ))}
+                        <div className="pt-3 border-t border-slate-200 flex justify-between items-center">
+                            <span className="text-[11px] font-black text-slate-900 uppercase">Total Paid</span>
+                            <span className="text-lg font-black text-p-600">₹{liveOrder.total || 0}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
             {/* Calling Overlay */}
             <AnimatePresence>
                 {isCalling && (
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        style={{
-                            position: 'fixed',
-                            inset: 0,
-                            background: 'linear-gradient(160deg, #f0fdf4 0%, #f8fafc 40%, #eff6ff 100%)',
-                            zIndex: 1000,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'var(--text-primary)'
-                        }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[10000] bg-slate-900 flex flex-col items-center justify-between p-20 text-white"
                     >
-                        <div style={{ width: '120px', height: '120px', borderRadius: '50%', overflow: 'hidden', border: '4px solid white', marginBottom: '24px', boxShadow: '0 0 40px rgba(16, 185, 129, 0.2)' }}>
-                            <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=200" alt="Partner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        </div>
-                        <h2 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px' }}>Ramesh Kumar</h2>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '18px', marginBottom: '40px' }}>{callTime > 0 ? formatTime(callTime) : t('calling')}</p>
-
-                        <div style={{ display: 'flex', gap: '40px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                <button style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'white', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <MicOff size={28} />
-                                </button>
-                                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t('mute')}</span>
+                        <div className="flex flex-col items-center gap-8 mt-20">
+                            <div className="relative">
+                                <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-emerald-500 p-2 shadow-2xl shadow-emerald-500/20">
+                                    <img src={liveOrder.driver?.photo || "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=100"} className="w-full h-full object-cover rounded-full" />
+                                </div>
+                                <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center animate-bounce">
+                                    <Phone size={18} />
+                                </div>
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                <button
-                                    onClick={endCall}
-                                    style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#ef4444', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 16px rgba(239, 68, 68, 0.4)', cursor: 'pointer' }}
-                                >
-                                    <PhoneOff size={28} />
-                                </button>
-                                <span style={{ fontSize: '12px', color: '#94a3b8' }}>{t('end')}</span>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Live Map Box */}
-            <div style={{
-                height: '350px',
-                backgroundColor: '#e2e8f0',
-                position: 'relative',
-                overflow: 'hidden',
-                background: 'linear-gradient(rgba(100, 116, 139, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(100, 116, 139, 0.05) 1px, transparent 1px)',
-                backgroundSize: '30px 30px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-            }}>
-                {/* Simulated Path */}
-                <svg style={{ position: 'absolute', width: '100%', height: '100%', pointerEvents: 'none' }}>
-                    <path d="M 50 175 Q 240 100 430 175" fill="none" stroke="#cbd5e1" strokeWidth="4" strokeDasharray="8 8" />
-                </svg>
-
-                {/* Store Point */}
-                <div style={{ position: 'absolute', left: '40px', top: '175px', transform: 'translateY(-50%)', textAlign: 'center' }}>
-                    <div style={{ backgroundColor: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 'bold', marginBottom: '8px', boxShadow: 'var(--shadow-sm)', whiteSpace: 'nowrap' }}>
-                        {order.storeName}
-                    </div>
-                    <div style={{ width: '16px', height: '16px', backgroundColor: '#3b82f6', border: '3px solid white', borderRadius: '50%', boxShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }} />
-                </div>
-
-                {/* Home Point */}
-                <div style={{ position: 'absolute', right: '40px', top: '175px', transform: 'translateY(-50%)', textAlign: 'center' }}>
-                    <div style={{ backgroundColor: 'white', padding: '4px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 'bold', marginBottom: '8px', boxShadow: 'var(--shadow-sm)', whiteSpace: 'nowrap' }}>
-                        {t('your_location')}
-                    </div>
-                    <div style={{ width: '16px', height: '16px', backgroundColor: '#ef4444', border: '3px solid white', borderRadius: '50%', boxShadow: '0 0 10px rgba(239, 68, 68, 0.5)' }} />
-                </div>
-
-                {/* Delivery Driver Icon */}
-                <motion.div
-                    animate={{
-                        left: `${40 + (progress * 3.5)}px`,
-                        top: `${175 - Math.sin((progress / 100) * Math.PI) * 50}px`
-                    }}
-                    transition={{ duration: 1, ease: "linear" }}
-                    style={{
-                        position: 'absolute',
-                        transform: 'translate(-50%, -100%)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center'
-                    }}
-                >
-                    <div style={{
-                        backgroundColor: '#10b981',
-                        color: 'white',
-                        padding: '8px',
-                        borderRadius: '50%',
-                        marginBottom: '4px',
-                        boxShadow: '0 4px 15px rgba(16, 185, 129, 0.5)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                    }}>
-                        <Bike size={24} />
-                    </div>
-                    <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#059669', backgroundColor: 'rgba(255,255,255,0.9)', padding: '2px 6px', borderRadius: '6px' }}>
-                        {statusIndex >= 2 ? t('driving') : t('waiting')}
-                    </div>
-                </motion.div>
-
-                {/* Top Controls Overlay */}
-                <button
-                    onClick={onComplete}
-                    style={{ position: 'absolute', top: '24px', left: '20px', backgroundColor: 'white', border: 'none', padding: '12px', borderRadius: '50%', boxShadow: 'var(--shadow-md)', cursor: 'pointer' }}
-                >
-                    <ArrowLeft size={20} />
-                </button>
-            </div>
-
-            {/* Tracking Card */}
-            <div style={{ marginTop: '-40px', position: 'relative', zIndex: 10, padding: '0 20px' }}>
-                <div style={{ backgroundColor: 'white', borderRadius: '32px', padding: '24px', boxShadow: '0 -10px 40px rgba(0,0,0,0.06)' }}>
-                    <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                        <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1f2937' }}>{displayStatuses[statusIndex]}</h2>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '4px' }}>
-                            <div style={{ width: '8px', height: '8px', backgroundColor: '#10b981', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
-                            <p style={{ color: '#059669', fontSize: '14px', fontWeight: '600' }}>
-                                {statusIndex === 3 ? t('delivered_successfully') : t('estimated_delivery', { minutes: 20 - statusIndex * 5 })}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '32px' }}>
-                        {displayStatuses.map((_, i) => (
-                            <div key={i} style={{
-                                flex: 1,
-                                height: '6px',
-                                borderRadius: '3px',
-                                backgroundColor: i <= statusIndex ? '#10b981' : '#f1f5f9'
-                            }} />
-                        ))}
-                    </div>
-
-
-                    <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '24px', display: 'flex', gap: '16px', alignItems: 'center', border: '1px solid #f1f5f9' }}>
-                        <div style={{ width: '56px', height: '56px', borderRadius: '50%', overflow: 'hidden', border: '2px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
-                            <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=100" alt="Partner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e2937' }}>Ramesh Kumar</p>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Star size={12} fill="#f59e0b" color="#f59e0b" />
-                                <p style={{ fontSize: '12px', color: '#64748b' }}>4.9 • {t('2_5k_deliveries')}</p>
+                            <div className="text-center">
+                                <h3 className="text-3xl font-black lowercase tracking-tighter mb-2">{liveOrder.driver?.name || 'Arjun Sharma'}</h3>
+                                <p className="text-emerald-500 font-black uppercase tracking-[0.3em] text-xs">Calling Security Line...</p>
+                                <p className="text-6xl font-black mt-10 tracking-tighter tabular-nums">{formatTime(callTime)}</p>
                             </div>
                         </div>
                         <button
-                            onClick={handleCall}
-                            style={{ backgroundColor: '#10b981', color: 'white', border: 'none', width: '44px', height: '44px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(16, 185, 129, 0.3)', cursor: 'pointer' }}
+                            onClick={() => setIsCalling(false)}
+                            className="w-24 h-24 rounded-full bg-red-500 flex items-center justify-center shadow-2xl shadow-red-500/30 active:scale-95 transition-all text-white"
                         >
-                            <Phone size={20} fill="white" />
+                            <PhoneOff size={32} />
                         </button>
-                    </div>
-                </div>
-            </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 };
-
-
 const UpdatesTab = ({ onNavigate }) => {
     const { t } = useTranslation();
-    const { appointments, announcements, medicalCamps, registerForCamp } = useAuth();
+    const { appointments, announcements, medicalCamps, registerForCamp, orders } = useAuth();
     const [activeSubTab, setActiveSubTab] = useState('schedule');
     const [filter, setFilter] = useState('all');
-
+    const [activeOrder, setActiveOrder] = useState(null);
+    const activeDeliveries = (orders || []).filter(o => o.status !== 'Delivered');
+    if (activeOrder) {
+        return <DeliveryTrackingView order={activeOrder} onComplete={() => setActiveOrder(null)} />;
+    }
     const handleRegister = (id) => {
         const res = registerForCamp(id);
         if (res.success) alert(t('successfully_registered_for_camp'));
         else alert(res.message);
     };
-
     const combinedFeed = [
         ...announcements.map(a => ({ ...a, feedType: 'announcement' })),
         ...medicalCamps.map(c => ({ ...c, feedType: 'camp' }))
     ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
     const filteredFeed = filter === 'all'
         ? combinedFeed
         : combinedFeed.filter(item => (filter === 'announcements' ? item.feedType === 'announcement' : item.feedType === 'camp'));
+    
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [notification, setNotification] = useState(null);
 
-    // Featured appointment (first one for demo purposes)
-    const featuredAppt = appointments?.[0];
-    const isDataLoading = !appointments || appointments.length === 0;
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
 
-    const upcomingBookings = [
-        { id: 1, title: "MRI Scan", date: "Oct 24, 10:00 AM", status: "Confirmed", icon: <Package size={20} /> },
-        { id: 2, title: "Blood Work", date: "Oct 26, 08:30 AM", status: "Pending", icon: <Heart size={20} /> }
-    ];
+    useEffect(() => {
+        setNotification(null);
+    }, []);
 
+    const activeOrdersList = (orders || []).filter(o => o.status !== 'Delivered').map(o => ({
+        ...o,
+        isPharmacyOrder: true,
+        date: new Date(o.timestamp || Date.now()).toLocaleDateString(),
+        time: new Date(o.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        hospitalName: o.storeName,
+        doctorName: 'Pharmacy Request'
+    }));
+    
+    const allBookings = [...(appointments || []), ...activeOrdersList];
+    
+    const parseBookingDate = (b) => {
+        if (b.timestamp) return new Date(b.timestamp);
+        const parsed = new Date(`${b.date} ${b.time}`);
+        return isNaN(parsed.getTime()) ? new Date(0) : parsed;
+    };
+
+    const futureBookings = allBookings.filter(b => parseBookingDate(b) > currentTime)
+        .sort((a,b) => parseBookingDate(a) - parseBookingDate(b));
+
+    const pastBookings = allBookings.filter(b => parseBookingDate(b) <= currentTime)
+        .sort((a,b) => parseBookingDate(b) - parseBookingDate(a));
+
+    const featuredAppt = futureBookings.length > 0 ? futureBookings[0] : null;
+    const upcomingBookingsList = [...futureBookings.slice(1), ...pastBookings];
+    const isDataLoading = false;
     return (
         <div style={{
             display: 'flex',
             flexDirection: 'column',
             minHeight: '100vh',
-            backgroundColor: '#0A0E1A',
-            color: 'white',
+            backgroundColor: '#f8fafc',
+            color: '#1e293b',
             fontFamily: 'Outfit, sans-serif'
         }}>
             {/* Header Tabs */}
-            <header className="sticky top-0 z-50 bg-[#0A0E1A]/80 backdrop-blur-xl border-b border-white/5 px-6 pt-12 pb-4">
+            <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 pt-12 pb-4">
                 <div className="flex justify-center gap-12">
                     <button
                         onClick={() => setActiveSubTab('schedule')}
-                        className={`text-sm font-black uppercase tracking-widest pb-2 transition-all border-b-2 ${activeSubTab === 'schedule' ? 'text-blue-500 border-blue-500' : 'text-slate-500 border-transparent'}`}
+                        className={`text-sm font-black uppercase tracking-widest pb-2 transition-all border-b-2 ${activeSubTab === 'schedule' ? 'text-blue-600 border-blue-600' : 'text-slate-400 border-transparent'}`}
                     >
                         My Schedule
                     </button>
                     <button
                         onClick={() => setActiveSubTab('feed')}
-                        className={`text-sm font-black uppercase tracking-widest pb-2 transition-all border-b-2 ${activeSubTab === 'feed' ? 'text-blue-500 border-blue-500' : 'text-slate-500 border-transparent'}`}
+                        className={`text-sm font-black uppercase tracking-widest pb-2 transition-all border-b-2 ${activeSubTab === 'feed' ? 'text-blue-600 border-blue-600' : 'text-slate-400 border-transparent'}`}
                     >
                         Health Feed
                     </button>
                 </div>
             </header>
-
             <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
                 <AnimatePresence mode="wait">
                     {activeSubTab === 'schedule' ? (
@@ -897,103 +1143,142 @@ const UpdatesTab = ({ onNavigate }) => {
                             exit={{ opacity: 0, x: 10 }}
                             className="p-6 space-y-8"
                         >
-                            {/* Featured Active Card or Skeleton */}
-                            {isDataLoading ? (
-                                <motion.div className="bg-[#111827] rounded-[32px] p-6 border border-white/10 shadow-2xl animate-pulse">
-                                    <div className="flex justify-between items-start mb-6">
-                                        <div className="flex-1 space-y-3">
-                                            <div className="w-24 h-4 bg-white/10 rounded-full" />
-                                            <div className="w-48 h-8 bg-white/10 rounded-full" />
-                                            <div className="w-32 h-4 bg-white/10 rounded-full" />
-                                        </div>
-                                        <div className="w-20 h-20 rounded-2xl bg-white/5" />
-                                    </div>
-                                    <div className="flex gap-3 mb-8">
-                                        <div className="flex-1 h-12 rounded-2xl bg-white/5" />
-                                        <div className="flex-1 h-12 rounded-2xl bg-white/5" />
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-4">
-                                        {[1, 2, 3].map(i => <div key={i} className="h-20 rounded-2xl bg-white/5" />)}
-                                    </div>
-                                </motion.div>
-                            ) : (
-                                <motion.div
-                                    initial={{ y: 20 }}
-                                    animate={{ y: 0 }}
-                                    className="bg-[#111827] rounded-[32px] p-6 border border-white/10 shadow-2xl relative overflow-hidden"
-                                >
-                                    <div className="flex justify-between items-start mb-6">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 text-blue-400 mb-1">
-                                                <Clock size={16} fill="currentColor" className="fill-blue-400/20" />
-                                                <span className="text-[13px] font-bold">{featuredAppt.date}, {featuredAppt.time}</span>
-                                            </div>
-                                            <h2 className="text-2xl font-black tracking-tight mb-1">Dr. {featuredAppt.doctorName}</h2>
-                                            <p className="text-slate-400 text-sm font-medium">{featuredAppt.specialty || "General Consultation"}</p>
-                                        </div>
-                                        <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-white/10 shrink-0">
-                                            <img src={featuredAppt.image || "https://images.unsplash.com/photo-1559839734-2b71f1536785?auto=format&fit=crop&q=80&w=100"} alt="Doctor" className="w-full h-full object-cover" />
-                                        </div>
-                                    </div>
+                            <AnimatePresence>
+                                {notification && (
+                                    <motion.div 
+                                        initial={{ opacity: 0, y: -20 }} 
+                                        animate={{ opacity: 1, y: 0 }} 
+                                        exit={{ opacity: 0, y: -20 }}
+                                        className="bg-blue-600 text-white px-4 py-3 rounded-2xl shadow-lg shadow-blue-500/30 flex items-center gap-3 text-sm font-bold"
+                                    >
+                                        <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                                        {notification}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
 
-                                    <div className="flex gap-3 mb-8">
-                                        <button className="flex-1 py-3.5 rounded-2xl bg-white/5 border border-white/10 text-[13px] font-black uppercase tracking-wider text-blue-400 hover:bg-white/10 transition-all">
-                                            Reschedule
-                                        </button>
-                                        <button className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white text-[13px] font-black uppercase tracking-wider shadow-lg shadow-blue-600/20 hover:bg-blue-500 transition-all">
-                                            Details
-                                        </button>
-                                    </div>
-
-                                    <div className="pt-6 border-t border-white/5">
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <CountdownBox value="03" label="Hours" />
-                                            <CountdownBox value="45" label="Mins" />
-                                            <CountdownBox value="12" label="Secs" />
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            )}
-
-                            {/* Upcoming Bookings List */}
+                            {/* Today's Priority / Featured Appointment */}
                             <section>
-                                <div className="flex justify-between items-center mb-6">
-                                    <h3 className="text-xl font-black tracking-tight">Upcoming Bookings</h3>
-                                    <button className="text-blue-500 text-[11px] font-black uppercase tracking-widest">View All</button>
-                                </div>
+                                {isDataLoading ? (
+                                    <div className="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm animate-pulse h-32" />
+                                ) : featuredAppt ? (
+                                    (() => {
+                                        const getCountdown = () => {
+                                            try {
+                                                const target = new Date(`${featuredAppt.date} ${featuredAppt.time}`);
+                                                const diff = target - currentTime;
+                                                if (diff <= 0) return { h: '00', m: '00', s: '00', tooSoon: true };
+                                                const h = Math.floor(diff / (1000 * 60 * 60));
+                                                const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                                                const s = Math.floor((diff % (1000 * 60)) / 1000);
+                                                return {
+                                                    h: h.toString().padStart(2, '0'),
+                                                    m: m.toString().padStart(2, '0'),
+                                                    s: s.toString().padStart(2, '0'),
+                                                    tooSoon: h < 2
+                                                };
+                                            } catch {
+                                                return { h: '00', m: '00', s: '00', tooSoon: false };
+                                            }
+                                        };
+                                        const countdown = getCountdown();
+                                        const timeColor = countdown.tooSoon ? 'text-red-500' : 'text-emerald-500';
 
-                                <div className="space-y-4">
-                                    {isDataLoading ? (
-                                        [1, 2].map(i => (
-                                            <div key={i} className="bg-[#111827] p-5 rounded-[28px] border border-white/5 h-20 animate-pulse" />
-                                        ))
-                                    ) : (
-                                        upcomingBookings.map((booking, idx) => (
+                                        return (
                                             <motion.div
-                                                key={booking.id}
+                                                initial={{ y: 20 }}
+                                                animate={{ y: 0 }}
+                                                className="bg-white rounded-[32px] p-6 border border-slate-50 shadow-sm relative overflow-hidden space-y-6 mt-2"
+                                            >
+                                                <div className="flex items-center gap-5">
+                                                    <div className="w-16 h-16 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-600/30">
+                                                        <Clock size={28} />
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-blue-500">
+                                                            {featuredAppt.isPharmacyOrder ? 'Next Delivery' : 'Next Appointment'}
+                                                        </span>
+                                                        <h2 className="text-[22px] font-black tracking-tight text-slate-900 leading-none mt-1 mb-1.5">
+                                                            {featuredAppt.isPharmacyOrder ? featuredAppt.doctorName : `Dr. ${featuredAppt.doctorName}`}
+                                                        </h2>
+                                                        <div className="flex items-center gap-1.5 text-amber-600">
+                                                            <MapPin size={12} fill="currentColor" className="fill-amber-600/20"/>
+                                                            <p className="text-[12px] font-black lowercase">{featuredAppt.hospitalName || "Hospital Consultation"}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex gap-3">
+                                                    <div className="flex-1 bg-slate-50 rounded-2xl p-4 text-center border border-slate-100/50">
+                                                        <p className={`text-2xl font-black tracking-tighter ${timeColor}`}>{countdown.h}</p>
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Hours</p>
+                                                    </div>
+                                                    <div className="flex-1 bg-slate-50 rounded-2xl p-4 text-center border border-slate-100/50">
+                                                        <p className={`text-2xl font-black tracking-tighter ${timeColor}`}>{countdown.m}</p>
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Mins</p>
+                                                    </div>
+                                                    <div className="flex-1 bg-slate-50 rounded-2xl p-4 text-center border border-slate-100/50">
+                                                        <p className={`text-2xl font-black tracking-tighter ${timeColor}`}>{countdown.s}</p>
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Secs</p>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        );
+                                    })()
+                                ) : (
+                                    <div>
+                                        <div className="mb-4 relative inline-block">
+                                            <h3 className="text-[15px] font-black tracking-tight text-slate-900">Today's Reminders</h3>
+                                            <div className="w-1/3 h-0.5 bg-blue-600 rounded-full mt-1" />
+                                        </div>
+                                        <div className="py-16 bg-white rounded-[40px] border border-slate-50 shadow-sm text-center">
+                                            <div className="text-[40px] font-black tracking-tighter text-slate-800 mb-6">
+                                                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                            </div>
+                                            <div className="w-12 h-12 rounded-full border border-emerald-100 mx-auto mb-4 flex items-center justify-center">
+                                                <Sun size={20} className="text-emerald-500" />
+                                            </div>
+                                            <h3 className="text-[16px] font-black text-slate-900 tracking-tight mb-2">Have a great day!</h3>
+                                            <p className="text-[12px] font-bold text-slate-500">You have no upcoming medical<br/>activities today.</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </section>
+                            {/* Rest of the Schedule */}
+                            <section>
+                                <h3 className="text-xl font-black tracking-tight mb-6">Upcoming Visits</h3>
+                                <div className="space-y-4">
+                                    {(upcomingBookingsList.length > 0) ? (
+                                        upcomingBookingsList.map((booking, idx) => (
+                                            <motion.div
+                                                key={booking.id || idx}
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 transition={{ delay: idx * 0.1 }}
-                                                className="bg-[#111827] p-5 rounded-[28px] border border-white/5 flex items-center justify-between group hover:border-blue-500/30 transition-all"
+                                                className="bg-white p-5 rounded-[28px] border border-slate-50 flex items-center justify-between group hover:border-blue-500/30 transition-all shadow-sm"
                                             >
                                                 <div className="flex items-center gap-5">
-                                                    <div className="w-12 h-12 rounded-2xl bg-[#1A2234] flex items-center justify-center text-blue-400 shadow-inner group-hover:scale-110 transition-transform">
-                                                        {booking.icon}
+                                                    <div className="w-12 h-12 rounded-2xl bg-blue-50/50 flex items-center justify-center text-blue-600 shadow-inner group-hover:scale-110 transition-transform">
+                                                        {booking.isPharmacyOrder ? <Package size={20} /> : <Heart size={20} />}
                                                     </div>
                                                     <div>
-                                                        <h4 className="font-black text-[16px] tracking-tight">{booking.title}</h4>
-                                                        <p className="text-slate-500 text-[11px] font-bold mt-0.5">{booking.date}</p>
+                                                        <h4 className="font-black text-[16px] tracking-tight text-slate-800">
+                                                            {booking.isPharmacyOrder ? booking.doctorName : `Dr. ${booking.doctorName}`}
+                                                        </h4>
+                                                        <p className="text-slate-400 text-[11px] font-bold mt-0.5">{booking.date} at {booking.time}</p>
                                                     </div>
                                                 </div>
-                                                <div className={`px-4 py-1.5 rounded-full text-[10px] font-black flex items-center gap-2 border ${booking.status === 'Confirmed'
-                                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                                    : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                                                <div className={`px-4 py-1.5 rounded-full text-[10px] font-black flex items-center gap-2 border ${booking.status === 'Confirmed' || booking.status === 'approved'
+                                                    ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                                    : 'bg-orange-50 text-orange-600 border-orange-100'
                                                     }`}>
-                                                    <div className={`w-1.5 h-1.5 rounded-full ${booking.status === 'Confirmed' ? 'bg-emerald-400 animate-pulse' : 'bg-orange-400'}`} />
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${booking.status === 'Confirmed' || booking.status === 'approved' ? 'bg-emerald-500 animate-pulse' : 'bg-orange-500'}`} />
                                                     {booking.status}
                                                 </div>
                                             </motion.div>
                                         ))
+                                    ) : (
+                                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest text-center py-10">No other upcoming visits.</p>
                                     )}
                                 </div>
                             </section>
@@ -1012,13 +1297,12 @@ const UpdatesTab = ({ onNavigate }) => {
                                     <button
                                         key={f}
                                         onClick={() => setFilter(f)}
-                                        className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap ${filter === f ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-[#111827] border-white/5 text-slate-400'}`}
+                                        className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap ${filter === f ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-400'}`}
                                     >
                                         {f}
                                     </button>
                                 ))}
                             </div>
-
                             <div className="space-y-6">
                                 {(filteredFeed || []).length > 0 ? (
                                     filteredFeed.map((item, idx) => (
@@ -1027,30 +1311,28 @@ const UpdatesTab = ({ onNavigate }) => {
                                             initial={{ opacity: 0, scale: 0.95 }}
                                             animate={{ opacity: 1, scale: 1 }}
                                             transition={{ delay: idx * 0.05 }}
-                                            className={`p-8 rounded-[40px] border shadow-sm ${item.feedType === 'camp' ? 'bg-[#0F1D1A]/50 border-emerald-500/10' : 'bg-[#111827] border-white/5'}`}
+                                            className={`p-8 rounded-[40px] border shadow-md ${item.feedType === 'camp' ? 'bg-emerald-50/30 border-emerald-500/10' : 'bg-white border-slate-50'}`}
                                         >
                                             <div className="flex justify-between items-start mb-6">
                                                 <div className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest ${item.feedType === 'camp' ? 'bg-emerald-500 text-white' : 'bg-blue-600 text-white'}`}>
                                                     {item.feedType === 'camp' ? 'Public Health Event' : item.type || 'Official Update'}
                                                 </div>
-                                                <span className="text-[10px] font-bold text-slate-500">{item.timestamp ? new Date(item.timestamp).toLocaleDateString() : 'Active Now'}</span>
+                                                <span className="text-[10px] font-bold text-slate-400">{item.timestamp ? new Date(item.timestamp).toLocaleDateString() : 'Active Now'}</span>
                                             </div>
-                                            <h4 className="text-xl font-black text-white mb-2 tracking-tight">{item.title}</h4>
-                                            <p className="text-sm font-bold text-slate-400 leading-relaxed mb-8">{item.description || item.services}</p>
-
-                                            <div className="flex flex-wrap gap-4 p-4 bg-white/5 rounded-3xl border border-white/5 mb-6">
+                                            <h4 className="text-xl font-black text-slate-800 mb-2 tracking-tight">{item.title}</h4>
+                                            <p className="text-sm font-bold text-slate-500 leading-relaxed mb-8">{item.description || item.services}</p>
+                                            <div className="flex flex-wrap gap-4 p-4 bg-slate-50 rounded-3xl border border-slate-100 mb-6">
                                                 <div className="flex items-center gap-2">
                                                     <MapPin size={14} className="text-slate-400" />
-                                                    <span className="text-[11px] font-black text-slate-300">{item.location}</span>
+                                                    <span className="text-[11px] font-black text-slate-600">{item.location}</span>
                                                 </div>
                                                 {item.feedType === 'camp' && (
                                                     <div className="flex items-center gap-2">
                                                         <Calendar size={14} className="text-slate-400" />
-                                                        <span className="text-[11px] font-black text-slate-300">{item.date}</span>
+                                                        <span className="text-[11px] font-black text-slate-600">{item.date}</span>
                                                     </div>
                                                 )}
                                             </div>
-
                                             {item.feedType === 'camp' && (
                                                 <button
                                                     onClick={() => handleRegister(item.id)}
@@ -1071,23 +1353,49 @@ const UpdatesTab = ({ onNavigate }) => {
                         </motion.div>
                     )}
                 </AnimatePresence>
+
             </div>
         </div>
     );
 };
-
 const CountdownBox = ({ value, label }) => (
     <div className="flex flex-col items-center">
-        <div className="w-full bg-[#1A2234] border border-white/5 rounded-2xl py-4 flex flex-col items-center justify-center shadow-inner">
-            <span className="text-3xl font-black tracking-tighter text-white">{value}</span>
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 mt-1">{label}</span>
+        <div className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 flex flex-col items-center justify-center shadow-inner">
+            <span className="text-3xl font-black tracking-tighter text-slate-800">{value}</span>
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">{label}</span>
         </div>
     </div>
 );
 
+const COMMON_MEDICINES = [
+    { name: 'Paracetamol', use: 'Fever / Pain' },
+    { name: 'Azithromycin', use: 'Antibiotic' },
+    { name: 'Omeprazole', use: 'Acidity' },
+    { name: 'Cetirizine', use: 'Allergy' },
+    { name: 'Metformin', use: 'Diabetes' },
+    { name: 'Ibuprofen', use: 'Pain / Swelling' },
+    { name: 'Amlodipine', use: 'BP' },
+    { name: 'Pantoprazole', use: 'Gastric' },
+    { name: 'Amoxicillin', use: 'Infection' },
+    { name: 'Vitamin D3', use: 'Supplement' },
+];
+
+const LANGUAGES = [
+    { code: 'en', label: 'EN', full: 'English' },
+    { code: 'hi', label: 'हि', full: 'Hindi' },
+    { code: 'te', label: 'తె', full: 'Telugu' },
+];
+
+const LANG_SYSTEM_PROMPTS = {
+    en: 'You are vArogra AI, a helpful medical assistant. Always respond in English.',
+    hi: 'आप vArogra AI हैं, एक सहायक चिकित्सा सहायक। हमेशा हिंदी में उत्तर दें।',
+    te: 'మీరు vArogra AI, ఒక సహాయక వైద్య సహాయకుడు. ఎల్లప్పుడూ తెలుగులో జవాబు ఇవ్వండి.',
+};
+
 const AIAssistantTab = ({ onNavigate }) => {
     const { t } = useTranslation();
     const { user } = useAuth();
+    const [selectedLang, setSelectedLang] = useState('en');
     const [messages, setMessages] = useState([
         { role: 'model', text: t('ai_assistant_intro') || "Hello! I am your HealthLink AI Assistant. How can I help you today? You can ask me health questions, or upload a prescription to analyze." }
     ]);
@@ -1099,31 +1407,25 @@ const AIAssistantTab = ({ onNavigate }) => {
     const [aiLoading, setAiLoading] = useState(false);
     const scrollRef = React.useRef(null);
     const fileInputRef = React.useRef(null);
-
     // Voice Recognition Setup
     const [recognition, setRecognition] = useState(null);
-
     React.useEffect(() => {
         if (window.webkitSpeechRecognition || window.SpeechRecognition) {
             const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
             const rec = new SpeechRecognition();
             rec.continuous = false;
             rec.interimResults = false;
-            rec.lang = 'en-US';
-
+            rec.lang = selectedLang === 'hi' ? 'hi-IN' : selectedLang === 'te' ? 'te-IN' : 'en-US';
             rec.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
                 setInput(transcript);
                 setIsRecording(false);
             };
-
             rec.onerror = () => setIsRecording(false);
             rec.onend = () => setIsRecording(false);
-
             setRecognition(rec);
         }
-    }, []);
-
+    }, [selectedLang]);
     const toggleRecording = () => {
         if (!recognition) return alert("Speech recognition not supported in this browser.");
         if (isRecording) {
@@ -1133,25 +1435,25 @@ const AIAssistantTab = ({ onNavigate }) => {
             setIsRecording(true);
         }
     };
-
     React.useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [messages]);
-
     const handleSend = async (customText = null) => {
         const textToSend = customText || input;
         if (!textToSend.trim() || isLoading) return;
-
         const userMsg = { role: 'user', text: textToSend };
         setMessages(prev => [...prev, userMsg]);
         setInput('');
         setIsLoading(true);
-
         try {
+            // Call unified AI Service (NVIDIA)
             const { getAIResponse } = await import('../utils/AIService');
-            const aiResponse = await getAIResponse([...messages, userMsg], 'patient');
+            const systemPrompt = LANG_SYSTEM_PROMPTS[selectedLang] || LANG_SYSTEM_PROMPTS.en;
+            const result = await getAIResponse([{ role: 'model', text: systemPrompt }, ...messages, userMsg], 'patient');
+            const aiResponse = result.reply;
+
             setMessages(prev => [...prev, { role: 'model', text: aiResponse }]);
         } catch (error) {
             setMessages(prev => [...prev, { role: 'model', text: t('ai_error_message') }]);
@@ -1159,27 +1461,22 @@ const AIAssistantTab = ({ onNavigate }) => {
             setIsLoading(false);
         }
     };
-
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
         setShowAIModal(true);
         setAiLoading(true);
         setAiAnalysis('');
-
         try {
             const { identifyMedicine, analyzePrescription } = await import('../utils/AIService');
             // Check if user specifically asked for medicine identification or if we should just try prescription
             const isMedicine = window.confirm("Is this a medicine photo? (Click Cancel if it's a prescription)");
-
             let result;
             if (isMedicine) {
                 result = await identifyMedicine(file);
             } else {
                 result = await analyzePrescription(file);
             }
-
             setAiAnalysis(result);
         } catch (error) {
             setAiAnalysis("Sorry, I couldn't process the image. Please try again.");
@@ -1187,12 +1484,11 @@ const AIAssistantTab = ({ onNavigate }) => {
             setAiLoading(false);
         }
     };
-
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f8fafc', position: 'relative' }}>
             {/* Glassmorphism Header */}
-            <header className="sticky top-0 z-50 bg-white/60 backdrop-blur-xl border-b border-slate-100/50 px-6 pt-12 pb-6">
-                <div className="flex items-center justify-between">
+            <header className="sticky top-0 z-50 bg-white/60 backdrop-blur-xl border-b border-slate-100/50 px-6 pt-12 pb-3">
+                <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-4">
                         <div className="relative">
                             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
@@ -1208,9 +1504,34 @@ const AIAssistantTab = ({ onNavigate }) => {
                             </div>
                         </div>
                     </div>
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl">
+                        {LANGUAGES.map(lang => (
+                            <button
+                                key={lang.code}
+                                onClick={() => setSelectedLang(lang.code)}
+                                title={lang.full}
+                                className={`px-3 py-2 rounded-xl text-[11px] font-black tracking-wide transition-all ${selectedLang === lang.code ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-700'}`}
+                            >
+                                {lang.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="overflow-x-auto no-scrollbar -mx-6 px-6">
+                    <div className="flex gap-2 pb-2" style={{ width: 'max-content' }}>
+                        {COMMON_MEDICINES.map(med => (
+                            <button
+                                key={med.name}
+                                onClick={() => handleSend("Tell me about " + med.name + " - uses, dosage and side effects")}
+                                className="flex flex-col items-start px-4 py-2.5 rounded-2xl bg-white border border-slate-100 shadow-sm hover:border-blue-200 hover:bg-blue-50 transition-all active:scale-95 shrink-0"
+                            >
+                                <span className="text-[12px] font-black text-slate-800">{med.name}</span>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">{med.use}</span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </header>
-
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto no-scrollbar pb-40">
                 <div className="p-6 space-y-6">
@@ -1233,9 +1554,34 @@ const AIAssistantTab = ({ onNavigate }) => {
                                     ? 'bg-blue-600 text-white rounded-tr-none shadow-blue-600/10'
                                     : 'bg-white border border-slate-100 text-slate-700 rounded-tl-none hover:shadow-md'
                                     }`}>
-                                    {msg.text.split('\n').map((line, idx) => (
-                                        <p key={idx} className={idx > 0 ? "mt-2" : ""}>{line}</p>
-                                    ))}
+                                    {msg.text.split('\n').map((line, idx) => {
+                                        // Detect Markdown Image: ![title](url)
+                                        const imgMatch = line.match(/!\[(.*?)\]\((.*?)\)/);
+                                        if (imgMatch) {
+                                            const title = imgMatch[1];
+                                            const url = imgMatch[2];
+                                            return (
+                                                <div key={idx} className="my-6 space-y-3">
+                                                    <div className="rounded-[28px] overflow-hidden border-2 border-slate-100 shadow-xl shadow-slate-200/40 bg-slate-50 relative group">
+                                                        <img src={url} alt={title} className="w-full h-auto object-cover transition-transform duration-500 group-hover:scale-105" />
+                                                        <div className="absolute top-4 right-4 px-3 py-1 bg-white/90 backdrop-blur-md rounded-full text-[8px] font-black uppercase tracking-[0.2em] shadow-sm border border-slate-100">
+                                                            Visual Guide
+                                                        </div>
+                                                    </div>
+                                                    {title && (
+                                                        <div className="px-2">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                                                                <h4 className="text-[14px] font-black text-slate-800 uppercase tracking-tight">{title}</h4>
+                                                            </div>
+                                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Procedural Record v2.1 • Authenticated</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        }
+                                        return <p key={idx} className={idx > 0 ? "mt-3" : ""}>{line}</p>;
+                                    })}
                                 </div>
                             </motion.div>
                         ))}
@@ -1264,7 +1610,6 @@ const AIAssistantTab = ({ onNavigate }) => {
                     <div ref={scrollRef} />
                 </div>
             </div>
-
             {/* Futuristic Glass Control Bar */}
             <div className="fixed bottom-32 left-0 right-0 px-6 z-40">
                 <motion.div
@@ -1285,7 +1630,6 @@ const AIAssistantTab = ({ onNavigate }) => {
                     >
                         <Camera size={22} />
                     </button>
-
                     <div className="flex-1 relative flex items-center gap-2 bg-slate-50 rounded-2xl px-5 py-4">
                         <input
                             type="text"
@@ -1303,7 +1647,6 @@ const AIAssistantTab = ({ onNavigate }) => {
                             {isRecording ? <Square size={16} fill="white" /> : <Mic size={20} />}
                         </button>
                     </div>
-
                     <button
                         onClick={() => handleSend()}
                         disabled={!input.trim() || isLoading}
@@ -1322,7 +1665,6 @@ const AIAssistantTab = ({ onNavigate }) => {
                     </motion.p>
                 )}
             </div>
-
             <AIAnalyzerModal
                 isOpen={showAIModal}
                 onClose={() => setShowAIModal(false)}
@@ -1332,939 +1674,756 @@ const AIAssistantTab = ({ onNavigate }) => {
         </div>
     );
 };
-
 const StoreTab = () => {
     const { t } = useTranslation();
-    const { appointments, placeOrder, allMedicalStores: medicalStores } = useAuth();
+    const { appointments, placeOrder, allMedicalStores: medicalStores, user } = useAuth();
     const [showSuccess, setShowSuccess] = useState(false);
     const [storeSearch, setStoreSearch] = useState('');
-    const [uploading, setUploading] = useState(false);
-    const [selectionMode, setSelectionMode] = useState(null); // 'manual' | 'auto'
+    const [activeFilter, setActiveFilter] = useState('all');
     const [checkoutStore, setCheckoutStore] = useState(null);
     const [activeOrder, setActiveOrder] = useState(null);
-
-    // AI Analysis State
-    const [showAIModal, setShowAIModal] = useState(false);
-    const [aiAnalysis, setAiAnalysis] = useState('');
-    const [aiLoading, setAiLoading] = useState(false);
-
-    const prescriptions = (appointments || []).filter(a => a.status === 'Prescribed' && a.prescription);
-
-    const filteredStores = (medicalStores || []).filter(s =>
-        (s.name || '').toLowerCase().includes(storeSearch.toLowerCase()) ||
-        (s.address || '').toLowerCase().includes(storeSearch.toLowerCase())
-    );
-
-    const initiateCheckout = (store) => {
-        setCheckoutStore(store);
-    };
-
-    const handleOrder = (storeName = t('the_selected_store')) => {
-        setCheckoutStore(null);
-        setShowSuccess(true);
-
-        // Save order to global state for Merchant Dashboard
-        const newOrder = placeOrder({
-            storeName,
-            storeId: checkoutStore?.id || 'ms1',
-            total: 493.50, // Simulated total from checkout
-            items: ['Amoxicillin', 'Paracetamol'] // Simulated items
-        });
-
-        setTimeout(() => {
-            setShowSuccess(false);
-            setSelectionMode(null);
-            setActiveOrder(newOrder); // Use the global order object
-        }, 2000);
-    };
-
-
-    const handleAutoSelect = () => {
-        setUploading(true);
-        setSelectionMode('auto');
-        setTimeout(() => {
-            // Find store with highest priceScore (best for customer)
-            const cheapestStore = [...medicalStores].sort((a, b) => b.priceScore - a.priceScore)[0];
-            setUploading(false);
-            initiateCheckout(cheapestStore);
-        }, 2000);
-    };
-
-    const handleUploadPrescription = () => {
-        setUploading(true);
-        setTimeout(() => {
-            setUploading(false);
-            setSelectionMode('manual');
-        }, 1500);
-    };
-
-    const handleAIScan = async () => {
-        setAiLoading(true);
-        setShowAIModal(true);
-        const result = await analyzePrescription('dummy_uri');
-        setAiAnalysis(result);
-        setAiLoading(false);
-    };
-
+    // Filter Logic
+    const filteredStores = (medicalStores || []).filter(s => {
+        const matchesSearch = (s.name || '').toLowerCase().includes(storeSearch.toLowerCase());
+        if (activeFilter === 'open') return matchesSearch && s.isOpen;
+        if (activeFilter === 'rated') return matchesSearch && s.rating >= 4.5;
+        if (activeFilter === 'budget') return matchesSearch && s.priceScore >= 90;
+        return matchesSearch;
+    });
     if (activeOrder) {
         return <DeliveryTrackingView order={activeOrder} onComplete={() => setActiveOrder(null)} />;
     }
-
     if (checkoutStore) {
-        return <CheckoutView store={checkoutStore} onConfirm={handleOrder} onCancel={() => setCheckoutStore(null)} />;
+        return <CheckoutView store={checkoutStore} onConfirm={(summary) => {
+            const newOrder = placeOrder(summary);
+            setShowSuccess(true);
+            setTimeout(() => {
+                setShowSuccess(false);
+                setCheckoutStore(null);
+                setActiveOrder(newOrder);
+            }, 1500);
+        }} onCancel={() => setCheckoutStore(null)} />;
     }
-
     return (
-        <div style={{ paddingBottom: '100px', backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
-            {/* Header / Search */}
-            <div style={{ backgroundColor: '#fff', padding: '40px 20px 20px', borderBottom: '1px solid #eee' }}>
-                <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>{t('pharmacy_store')}</h1>
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    backgroundColor: '#f3f4f6',
-                    padding: '12px 16px',
-                    borderRadius: '12px'
-                }}>
-                    <Search size={20} color="#9ca3af" />
+        <div className="bg-slate-50 min-h-screen pb-40">
+            {/* Premium Glassmorphic Header */}
+            <div className="sticky top-0 z-[100] bg-white/70 backdrop-blur-2xl border-b border-slate-100 px-6 pt-16 pb-8">
+                <div className="mb-8">
+                    <h2 className="text-[32px] font-black text-slate-900 tracking-tighter leading-none mb-1">Find Pharmacy</h2>
+                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <MapPin size={12} className="text-blue-500 fill-blue-500/10" />
+                        Hitech City, Hyderabad
+                    </p>
+                </div>
+                <div className="flex items-center gap-4 bg-white/50 px-6 py-5 rounded-[24px] border border-white shadow-xl shadow-slate-200/40 mb-8 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-50/50 transition-all">
+                    <Search size={22} className="text-slate-400" strokeWidth={3} />
                     <input
                         type="text"
-                        placeholder={t('search_medicines_stores_placeholder')}
+                        placeholder="Search medicines or stores..."
                         value={storeSearch}
                         onChange={(e) => setStoreSearch(e.target.value)}
-                        style={{ background: 'none', border: 'none', outline: 'none', width: '100%', fontSize: '14px' }}
+                        className="bg-transparent border-none outline-none w-full text-[15px] font-black text-slate-900 placeholder:text-slate-300"
                     />
                 </div>
-            </div>
-
-            <div style={{ padding: '20px' }}>
-                {/* Selection Logic Cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '32px' }}>
-                    <div
-                        onClick={handleAutoSelect}
-                        style={{
-                            background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                            borderRadius: '20px',
-                            padding: '16px',
-                            color: '#fff',
-                            boxShadow: '0 4px 12px rgba(79, 70, 229, 0.2)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px'
-                        }}
-                    >
-                        <Zap size={24} fill="white" />
-                        <div>
-                            <p style={{ fontWeight: 'bold', fontSize: '14px' }}>{t('smart_select')}</p>
-                            <p style={{ fontSize: '10px', opacity: 0.8 }}>{t('choose_best_price_automatically')}</p>
-                        </div>
-                    </div>
-
-                    <div
-                        onClick={handleAIScan}
-                        style={{
-                            background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
-                            borderRadius: '20px',
-                            padding: '16px',
-                            color: '#fff',
-                            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.2)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px'
-                        }}
-                    >
-                        <Bot size={24} color="#3b82f6" />
-                        <div>
-                            <p style={{ fontWeight: 'bold', fontSize: '14px' }}>{t('ai_analyzer')}</p>
-                            <p style={{ fontSize: '10px', opacity: 0.8 }}>{t('scan_explain_prescription')}</p>
-                        </div>
-                    </div>
-
-                    <div
-                        onClick={handleUploadPrescription}
-                        style={{
-                            backgroundColor: '#fff',
-                            borderRadius: '20px',
-                            padding: '16px',
-                            color: '#1f2937',
-                            border: '2px dashed #e5e7eb',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px',
-                            gridColumn: 'span 2'
-                        }}
-                    >
-                        <Plus size={24} color="#3b82f6" />
-                        <div>
-                            <p style={{ fontWeight: 'bold', fontSize: '14px', color: '#1f2937' }}>{t('compare_stores')}</p>
-                            <p style={{ fontSize: '10px', color: '#9ca3af' }}>{t('select_store_manually')}</p>
-                        </div>
-                    </div>
-                </div>
-
-                {uploading && (
-                    <div style={{ textAlign: 'center', padding: '20px', backgroundColor: '#e0f2fe', borderRadius: '16px', marginBottom: '24px' }}>
-                        <Loader2 className="animate-spin" style={{ margin: '0 auto', marginBottom: '8px' }} color="#3b82f6" />
-                        <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#0369a1' }}>{t('searching_best_prices')}</p>
-                    </div>
-                )}
-
-                {/* Nearby Stores Section */}
-                <div style={{ marginBottom: '32px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: 'bold' }}>{selectionMode === 'manual' ? t('choose_a_store') : t('nearby_medical_stores')}</h3>
-                        <span style={{ color: '#3b82f6', fontSize: '14px', fontWeight: '600' }}>{selectionMode === 'manual' ? t('select_one') : t('see_all')}</span>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {filteredStores.map(store => (
-                            <div key={store.id} style={{
-                                backgroundColor: '#fff',
-                                borderRadius: '20px',
-                                overflow: 'hidden',
-                                boxShadow: 'var(--shadow-sm)',
-                                border: selectionMode === 'manual' ? '2px solid #3b82f6' : '1px solid #eee',
-                                display: 'flex',
-                                position: 'relative',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s'
-                            }}
-                                onClick={() => selectionMode === 'manual' && initiateCheckout(store)}
-                            >
-                                <img src={store.image} alt={store.name} style={{ width: '100px', height: '100px', objectFit: 'cover' }} />
-                                <div style={{ padding: '12px', flex: 1 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <h4 style={{ fontWeight: 'bold', fontSize: '16px' }}>{store.name}</h4>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#fef3c7', padding: '2px 6px', borderRadius: '6px' }}>
-                                            <Star size={12} fill="#f59e0b" color="#f59e0b" />
-                                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#92400e' }}>{store.rating}</span>
-                                        </div>
-                                    </div>
-                                    <p style={{ color: '#666', fontSize: '12px', marginBottom: '8px' }}>{store.address}</p>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#10b981' }}>{store.deliveryTime}</span>
-                                            <span style={{ fontSize: '11px', color: '#9ca3af' }}>• {store.distance}</span>
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#dcfce7', padding: '4px 8px', borderRadius: '8px' }}>
-                                            <DollarSign size={12} color="#15803d" />
-                                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#15803d' }}>{t('price_match')} {store.priceScore}%</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                {!store.isOpen && (
-                                    <div style={{
-                                        position: 'absolute',
-                                        inset: 0,
-                                        backgroundColor: 'rgba(255,255,255,0.7)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        zIndex: 5
-                                    }}>
-                                        <span style={{ backgroundColor: '#ef4444', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>{t('closed')}</span>
-                                    </div>
-                                )}
-                                {selectionMode === 'manual' && (
-                                    <div style={{ padding: '0 12px', display: 'flex', alignItems: 'center' }}>
-                                        <ChevronRight size={24} color="#3b82f6" />
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* My Active Prescriptions */}
-                <div className="mb-10">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-xl font-black text-main tracking-tight">{t('digital_prescriptions')}</h3>
-                        <button onClick={() => onNavigate('history')} className="text-[10px] font-black text-p-600 uppercase tracking-widest hover:underline">View History</button>
-                    </div>
-                    {prescriptions.length > 0 ? (
-                        <div className="space-y-4">
-                            {prescriptions.map(px => (
-                                <motion.div
-                                    key={px.id}
-                                    whileHover={{ scale: 1.01 }}
-                                    className="p-6 rounded-[32px] bg-white border border-slate-100 shadow-sm flex items-center gap-6 group"
-                                >
-                                    <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 group-hover:bg-emerald-500 group-hover:text-white transition-all">
-                                        <Package size={24} />
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-start mb-1">
-                                            <h4 className="font-black text-main text-base line-clamp-1">{px.medicine || 'Prescribed Meds'}</h4>
-                                            <span className="text-[9px] font-bold text-slate-300 ml-2">{px.createdAt ? new Date(px.createdAt?.seconds * 1000).toLocaleDateString() : 'Just Now'}</span>
-                                        </div>
-                                        <p className="text-xs font-bold text-muted mb-2">Dr. {px.doctorName}</p>
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg uppercase tracking-widest border border-emerald-100">
-                                                {px.dosage || 'Regular Dosage'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => onNavigate('pharmacy')}
-                                        className="h-10 px-4 rounded-xl bg-p-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-p-600/20 active:scale-95 transition-all"
-                                    >
-                                        Order
-                                    </button>
-                                </motion.div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="p-10 rounded-[40px] border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-center">
-                            <Package size={32} className="text-slate-200 mb-4" />
-                            <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">No Active Prescriptions</p>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <AnimatePresence>
-                {showSuccess && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        style={{
-                            position: 'fixed',
-                            top: '20px',
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                            backgroundColor: '#10b981',
-                            color: 'white',
-                            padding: '12px 24px',
-                            borderRadius: '12px',
-                            zIndex: 1000,
-                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-                            fontWeight: 'bold'
-                        }}
-                    >
-                        🚀 {t('order_placed_successfully')}
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            <AIAnalyzerModal
-                isOpen={showAIModal}
-                onClose={() => setShowAIModal(false)}
-                analysis={aiAnalysis}
-                loading={aiLoading}
-            />
-        </div>
-    );
-};
-
-const AIAnalyzerModal = ({ isOpen, onClose, analysis, loading }) => {
-    const { t } = useTranslation();
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 z-[3000] flex items-end sm:items-center justify-center p-4">
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            />
-            <motion.div
-                initial={{ opacity: 0, y: 100 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 100 }}
-                className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
-            >
-                <div className="p-8 pb-4 border-b border-slate-100 flex justify-between items-center bg-p-50/50">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-p-600 flex items-center justify-center">
-                            <Bot className="text-white" size={24} />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-black text-main leading-tight">{t('ai_prescription_analyzer')}</h3>
-                            <p className="text-[10px] font-bold text-p-600 uppercase tracking-widest">{t('varogra_smart_brain')}</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="p-2 rounded-xl bg-white shadow-sm border border-slate-100 text-muted">
-                        <ArrowLeft size={20} />
-                    </button>
-                </div>
-
-                <div className="p-8 overflow-y-auto">
-                    {loading ? (
-                        <div className="py-20 flex flex-col items-center justify-center">
-                            <div className="w-16 h-16 border-4 border-p-100 border-t-p-600 rounded-full animate-spin mb-6" />
-                            <p className="font-bold text-main animate-pulse">{t('analyzing_prescription')}</p>
-                            <p className="text-xs text-muted mt-2">{t('identifying_medicines_instructions')}</p>
-                        </div>
-                    ) : (
-                        <div className="prose prose-slate prose-sm max-w-none">
-                            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 mb-6 font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
-                                {analysis}
-                            </div>
-                            <div className="p-5 rounded-3xl bg-amber-50 border border-amber-100 flex gap-4">
-                                <AlertCircle className="text-amber-600 shrink-0" size={20} />
-                                <p className="text-[11px] font-bold text-amber-800 leading-snug">
-                                    {t('informational_only_disclaimer')}
-                                </p>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="p-8 pt-4 bg-slate-50">
-                    <button
-                        onClick={onClose}
-                        className="w-full py-4 rounded-2xl bg-main text-white font-black text-sm shadow-xl active:scale-95 transition-transform"
-                    >
-                        {t('got_it_thanks')}
-                    </button>
-                </div>
-            </motion.div>
-        </div>
-    );
-};
-
-
-const MedicalHistoryTab = () => {
-    const { t } = useTranslation();
-    const { appointments } = useAuth();
-    const history = appointments.filter(a => a.status === 'Completed' || a.status === 'Prescribed' || a.status === 'Accepted');
-
-    return (
-        <div className="pb-32 px-6 pt-4 animate-entrance">
-            <h2 className="text-3xl font-black text-main tracking-tight mb-8">{t('medical_history')}</h2>
-
-            <motion.div layout className="flex flex-col gap-6">
-                <AnimatePresence mode="popLayout">
-                    {(history || []).length > 0 ? (
-                        history.map((item, index) => (
-                            <motion.div
-                                key={item.id}
-                                layout
-                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                transition={{ type: "spring", stiffness: 300, damping: 30, delay: index * 0.03 }}
-                                className="p-6 rounded-[32px] bg-white border border-slate-100 shadow-sm overflow-hidden relative"
-                            >
-                                <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                        <span className="text-[10px] font-black text-p-600 uppercase tracking-widest mb-1 block">{t('hospital')}</span>
-                                        <h3 className="font-black text-main text-lg">{item.hospitalName || 'Health Center'}</h3>
-                                    </div>
-                                    <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest ${item.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-p-50 text-p-700'}`}>
-                                        {item.status || 'Past'}
-                                    </span>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4 mb-6">
-                                    <div>
-                                        <span className="text-[10px] font-bold text-muted uppercase tracking-widest opacity-50 block mb-1">{t('doctor')}</span>
-                                        <p className="text-sm font-bold text-main">{item.doctorName || 'Dr. Specialist'}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <span className="text-[10px] font-bold text-muted uppercase tracking-widest opacity-50 block mb-1">{t('date_time')}</span>
-                                        <p className="text-sm font-bold text-main">{item.date || 'N/A'}</p>
-                                    </div>
-                                </div>
-
-                                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 mb-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <AlertCircle size={14} className="text-p-600" />
-                                        <span className="text-[10px] font-black text-main uppercase tracking-widest">{t('reason_for_visit')}</span>
-                                    </div>
-                                    <p className="text-xs font-medium text-muted leading-relaxed">
-                                        {item.symptoms || item.reason || 'General health checkup and routine consultation.'}
-                                    </p>
-                                </div>
-
-                                {item.prescription && (
-                                    <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100/50">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <Package size={14} className="text-emerald-600" />
-                                            <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">{t('prescribed_medicines')}</span>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {(item.prescription.medicine || '').split(',').map((med, idx) => (
-                                                <span key={idx} className="px-2 py-1 rounded-lg bg-white border border-emerald-100 text-[10px] font-bold text-emerald-800">
-                                                    {med.trim()}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="mt-6 pt-4 border-t border-slate-50 flex justify-end">
-                                    <button className="flex items-center gap-2 text-p-600 text-xs font-black uppercase tracking-wider active:scale-95 transition-transform">
-                                        {t('view_summary')}
-                                        <ChevronRight size={14} />
-                                    </button>
-                                </div>
-                            </motion.div>
-                        ))
-                    ) : (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-20 flex flex-col items-center opacity-30 text-center">
-                            <FileText size={48} className="mb-4" />
-                            <p className="font-bold">{t('no_history')}</p>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </motion.div>
-        </div>
-    );
-};
-
-const ProfileTab = ({ user, logout }) => {
-    const { t, i18n } = useTranslation();
-    const [isEditingPhoto, setIsEditingPhoto] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [tempPhoto, setTempPhoto] = useState(null);
-    const [error, setError] = useState('');
-
-    const changeLanguage = (lng) => {
-        i18n.changeLanguage(lng);
-    };
-
-    const handlePhotoSave = async () => {
-        console.log("Attempting to save photo...");
-        console.log("User:", user);
-        console.log("Photo:", tempPhoto);
-
-        if (!tempPhoto) {
-            console.warn("No photo to save");
-            return;
-        }
-
-        const userId = user?.uid || user?.id; // Fallback for legacy/demo users
-
-        if (!userId) {
-            console.error("No user ID found");
-            setError("User identification failed");
-            return;
-        }
-
-        setError('');
-        try {
-            const downloadURL = await uploadProfilePhoto(userId, tempPhoto, (progress) => {
-                setUploadProgress(progress);
-            });
-            await updateUserProfilePhoto(userId, downloadURL);
-            setIsEditingPhoto(false);
-            setUploadProgress(0);
-            setTempPhoto(null);
-        } catch (err) {
-            console.error("Upload failed", err);
-            setError(`Failed to upload photo: ${err.message}`);
-            setUploadProgress(0);
-        }
-    };
-
-    return (
-        <div className="pb-32 animate-entrance">
-            {/* Profile Header */}
-            <div className="relative mb-8">
-                <div className="h-40 bg-gradient-to-r from-p-600 to-p-500 rounded-b-[40px] shadow-lg shadow-p-600/20" />
-                <div className="px-6 -mt-12 flex flex-col items-center">
-                    <div className="relative group">
-                        <div className="w-24 h-24 rounded-full bg-white p-1 shadow-xl mb-4 overflow-hidden">
-                            <div className="w-full h-full rounded-full bg-slate-100 flex items-center justify-center overflow-hidden">
-                                {user?.photoURL ? (
-                                    <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
-                                ) : (
-                                    <User size={40} className="text-slate-400" />
-                                )}
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => setIsEditingPhoto(true)}
-                            className="absolute bottom-4 right-0 w-8 h-8 rounded-full bg-p-600 text-white flex items-center justify-center shadow-lg hover:scale-110 transition-transform active:scale-90"
-                        >
-                            <Camera size={16} />
-                        </button>
-                    </div>
-                    <h2 className="text-2xl font-black text-main">{user?.name || user?.displayName}</h2>
-                    <p className="text-sm font-bold text-muted opacity-80">{user?.phone || user?.email || '+91 98765 43210'}</p>
-                </div>
-            </div>
-
-            {/* Photo Upload Modal */}
-            <AnimatePresence>
-                {isEditingPhoto && (
-                    <div className="fixed inset-0 z-[3000] flex items-end sm:items-center justify-center p-4">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => !uploadProgress && setIsEditingPhoto(false)}
-                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-                        />
-                        <motion.div
-                            initial={{ y: "100%" }}
-                            animate={{ y: 0 }}
-                            exit={{ y: "100%" }}
-                            className="relative w-full max-w-md bg-white rounded-t-[40px] sm:rounded-[40px] p-8 shadow-2xl overflow-hidden"
-                        >
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-xl font-black text-main">Update Profile Photo</h3>
-                                <button
-                                    disabled={uploadProgress > 0}
-                                    onClick={() => setIsEditingPhoto(false)}
-                                    className="p-2 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 disabled:opacity-30"
-                                >
-                                    <X size={20} />
-                                </button>
-                            </div>
-
-                            <ImageUpload
-                                image={tempPhoto}
-                                onImageChange={setTempPhoto}
-                                progress={uploadProgress}
-                                className="mb-6"
-                            />
-
-                            {error && <p className="text-red-500 text-xs font-bold mb-4 text-center">{error}</p>}
-
-                            <div className="flex gap-4">
-                                <button
-                                    disabled={uploadProgress > 0}
-                                    onClick={() => setIsEditingPhoto(false)}
-                                    className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold text-sm"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    disabled={!tempPhoto || uploadProgress > 0}
-                                    onClick={handlePhotoSave}
-                                    className="flex-1 py-4 rounded-2xl bg-p-600 text-white font-bold text-sm shadow-lg shadow-p-200 disabled:opacity-50"
-                                >
-                                    {uploadProgress > 0 ? 'Saving...' : 'Save Photo'}
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            {/* Language Switcher */}
-            <div className="px-6 mb-8">
-                <h3 className="text-sm font-black text-main uppercase tracking-widest mb-4 opacity-50 px-2">{t('language')}</h3>
-                <div className="flex gap-2">
+                <div className="flex overflow-x-auto no-scrollbar gap-3">
                     {[
-                        { code: 'en', label: 'English' },
-                        { code: 'te', label: 'తెలుగు' },
-                        { code: 'hi', label: 'हिन्दी' }
-                    ].map((lang) => (
+                        { id: 'near', label: 'Nearby', icon: MapPin },
+                        { id: 'budget', label: 'Budget', icon: DollarSign },
+                        { id: 'open', label: 'Open Now', icon: Clock },
+                        { id: 'rated', label: 'Top Rated', icon: Star }
+                    ].map(f => (
                         <button
-                            key={lang.code}
-                            onClick={() => changeLanguage(lang.code)}
-                            className={`flex-1 py-3 rounded-2xl text-xs font-bold transition-all ${i18n.language === lang.code ? 'bg-p-600 text-white shadow-lg' : 'bg-white text-muted border border-slate-100'}`}
+                            key={f.id}
+                            onClick={() => setActiveFilter(f.id)}
+                            className={`flex items-center gap-2.5 px-6 py-4 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap border transition-all ${activeFilter === f.id ? 'bg-slate-900 border-slate-900 text-white shadow-2xl shadow-slate-900/10' : 'bg-white/80 text-slate-400 border-white shadow-sm hover:border-slate-200'}`}
                         >
-                            {lang.label}
+                            {f.icon && <f.icon size={14} className={activeFilter === f.id ? 'text-blue-400' : 'text-slate-300'} />}
+                            {f.label}
                         </button>
                     ))}
                 </div>
             </div>
-
-            {/* Menu Items */}
-            <div className="px-6 flex flex-col gap-4">
-                {[
-                    { icon: User, label: t('edit_profile') || 'Edit Profile' },
-                    { icon: FileText, label: t('medical_history') },
-                    { icon: ShieldCheck, label: t('privacy_security') || 'Privacy & Security' },
-                    { icon: Bot, label: t('help_support') || 'Help & Support' },
-                ].map((item, i) => (
-                    <button key={i} className="flex items-center gap-4 p-4 rounded-[24px] bg-white border border-slate-100 shadow-sm hover:bg-slate-50 transition-colors active:scale-95 group">
-                        <div className="w-10 h-10 rounded-2xl bg-p-50 flex items-center justify-center group-hover:bg-p-100 transition-colors">
-                            <item.icon size={20} className="text-p-600" />
-                        </div>
-                        <span className="flex-1 text-left text-sm font-bold text-main">{item.label}</span>
-                        <ChevronRight size={18} className="text-slate-300" />
-                    </button>
-                ))}
-                <div className="flex flex-col gap-2">
-                    <button className="flex items-center justify-between p-5 rounded-3xl bg-white border border-slate-100/50 shadow-sm active:scale-[0.98] transition-all">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">
-                                <Search size={20} />
-                            </div>
-                            <span className="font-bold text-main">{t('find_specialist')}</span>
-                        </div>
-                        <ChevronRight size={18} className="text-slate-300" />
-                    </button>
-
-                    <button className="flex items-center justify-between p-5 rounded-3xl bg-white border border-slate-100/50 shadow-sm active:scale-[0.98] transition-all">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">
-                                <Settings size={20} />
-                            </div>
-                            <span className="font-bold text-main">{t('settings')}</span>
-                        </div>
-                        <ChevronRight size={18} className="text-slate-300" />
-                    </button>
-                </div>
-                {/* Logout Button */}
-                <button
-                    onClick={logout}
-                    className="mt-4 flex items-center gap-4 p-4 rounded-[24px] bg-red-50 border border-red-100 shadow-sm active:scale-95 transition-transform group"
-                >
-                    <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center">
-                        <LogOut size={20} className="text-red-500" />
+            <div className="p-8">
+                <div className="flex justify-between items-end mb-8 px-2">
+                    <div>
+                        <h2 className="text-[20px] font-black text-slate-900 tracking-tighter mb-1">Nearby Pharmacies</h2>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Verified by vArogra Network</p>
                     </div>
-                    <span className="flex-1 text-left text-sm font-bold text-red-600">{t('logout')}</span>
-                </button>
+                    <button className="text-[10px] font-black text-blue-600 underline decoration-blue-200 underline-offset-8 uppercase tracking-[0.2em] hover:text-blue-700 transition-colors">See All</button>
+                </div>
+                <div className="space-y-4">
+                    {/* Store Cards */}
+                    {filteredStores.length > 0 ? (
+                        filteredStores.map(store => (
+                            <motion.div
+                                key={store.id}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => setCheckoutStore(store)}
+                                className="bg-white rounded-[24px] overflow-hidden border border-slate-100 shadow-sm flex items-stretch gap-0 hover:shadow-xl transition-all group cursor-pointer relative"
+                            >
+                                <div className="w-32 h-32 shrink-0 bg-slate-100 relative">
+                                    <img
+                                        src={store.image || 'https://images.unsplash.com/photo-1576602976047-174e57a47881?auto=format&fit=crop&q=80&w=200'}
+                                        alt={store.name}
+                                        className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                                        onError={(e) => {
+                                            e.target.src = 'https://images.unsplash.com/photo-1576602976047-174e57a47881?auto=format&fit=crop&q=80&w=200';
+                                        }}
+                                    />
+                                    <div className="absolute top-2 left-2 bg-emerald-100/90 backdrop-blur-md px-2 py-0.5 rounded-md border border-emerald-200 shadow-sm">
+                                        <span className="text-[8px] font-black text-emerald-800 uppercase tracking-widest">OPEN</span>
+                                    </div>
+                                </div>
 
-                <p className="text-center text-[10px] font-bold text-muted opacity-40 mt-4">
-                    Version 2.4.0 • Build 2026.02
-                </p>
+                                <div className="flex-1 p-5 flex flex-col justify-between min-w-0">
+                                    <div>
+                                        <div className="flex justify-between items-start">
+                                            <h4 className="font-black text-slate-900 text-[16px] truncate pr-2 leading-none">{store.name}</h4>
+                                            <div className="flex items-center gap-1">
+                                                <Star size={10} fill="#f59e0b" className="text-amber-500" />
+                                                <span className="text-[12px] font-black text-slate-900">{store.rating}</span>
+                                            </div>
+                                        </div>
+                                        <p className="text-[11px] font-bold text-slate-400 mt-1 mb-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                                            {store.address}
+                                        </p>
+                                    </div>
+                                    <div className="flex justify-end items-center gap-4">
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Price Index: {store.priceScore}%</span>
+                                            <div className="h-1 w-20 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
+                                                <motion.div
+                                                    initial={{ width: 0 }}
+                                                    animate={{ width: `${store.priceScore}%` }}
+                                                    className="h-full bg-emerald-500"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                            <ChevronRight size={16} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        ))
+                    ) : (
+                        <div className="py-20 text-center">
+                            <Package size={40} className="mx-auto text-slate-200 mb-4" />
+                            <p className="text-slate-400 font-bold">No stores found matches your search</p>
+                        </div>
+                    )}
+                </div>
+                <AnimatePresence>
+                    {showSuccess && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 50 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="fixed bottom-32 left-1/2 -translate-x-1/2 bg-emerald-500 text-white px-8 py-4 rounded-full font-black shadow-2xl z-[5000] flex items-center gap-3"
+                        >
+                            <CheckCircle size={24} />
+                            Order Placed!
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );
 };
+            const AIAnalyzerModal = ({isOpen, onClose, analysis, loading}) => {
+    const {t} = useTranslation();
+            if (!isOpen) return null;
+            return (
+            <div className="fixed inset-0 z-[3000] flex items-end sm:items-center justify-center p-4">
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={onClose}
+                    className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                />
+                <motion.div
+                    initial={{ opacity: 0, y: 100 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 100 }}
+                    className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+                >
+                    <div className="p-8 pb-4 border-b border-slate-100 flex justify-between items-center bg-p-50/50">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-p-600 flex items-center justify-center">
+                                <Bot className="text-white" size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-main leading-tight">{t('ai_prescription_analyzer')}</h3>
+                                <p className="text-[10px] font-bold text-p-600 uppercase tracking-widest">{t('varogra_smart_brain')}</p>
+                            </div>
+                        </div>
+                        <button onClick={onClose} className="p-2 rounded-xl bg-white shadow-sm border border-slate-100 text-muted">
+                            <ArrowLeft size={20} />
+                        </button>
+                    </div>
+                    <div className="p-8 overflow-y-auto">
+                        {loading ? (
+                            <div className="py-20 flex flex-col items-center justify-center">
+                                <div className="w-16 h-16 border-4 border-p-100 border-t-p-600 rounded-full animate-spin mb-6" />
+                                <p className="font-bold text-main animate-pulse">{t('analyzing_prescription')}</p>
+                                <p className="text-xs text-muted mt-2">{t('identifying_medicines_instructions')}</p>
+                            </div>
+                        ) : (
+                            <div className="prose prose-slate prose-sm max-w-none">
+                                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 mb-6 font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                    {analysis}
+                                </div>
+                                <div className="p-5 rounded-3xl bg-amber-50 border border-amber-100 flex gap-4">
+                                    <AlertCircle className="text-amber-600 shrink-0" size={20} />
+                                    <p className="text-[11px] font-bold text-amber-800 leading-snug">
+                                        {t('informational_only_disclaimer')}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="p-8 pt-4 bg-slate-50">
+                        <button
+                            onClick={onClose}
+                            className="w-full py-4 rounded-2xl bg-main text-white font-black text-sm shadow-xl active:scale-95 transition-transform"
+                        >
+                            {t('got_it_thanks')}
+                        </button>
+                    </div>
+                </motion.div>
+            </div>
+            );
+};
 
+const MedicalHistoryTab = () => {
+    const {t} = useTranslation();
+            const {appointments} = useAuth();
+    const history = appointments.filter(a => a.status === 'Completed' || a.status === 'Prescribed' || a.status === 'Accepted');
+            return (
+            <div className="pb-32 px-6 pt-4 animate-entrance">
+                <h2 className="text-3xl font-black text-main tracking-tight mb-8">{t('medical_history')}</h2>
+                <motion.div layout className="flex flex-col gap-6">
+                    <AnimatePresence mode="popLayout">
+                        {(history || []).length > 0 ? (
+                            history.map((item, index) => (
+                                <motion.div
+                                    key={item.id}
+                                    layout
+                                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    transition={{ type: "spring", stiffness: 300, damping: 30, delay: index * 0.03 }}
+                                    className="p-6 rounded-[32px] bg-white border border-slate-100 shadow-sm overflow-hidden relative"
+                                >
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <span className="text-[10px] font-black text-p-600 uppercase tracking-widest mb-1 block">{t('hospital')}</span>
+                                            <h3 className="font-black text-main text-lg">{item.hospitalName || 'Health Center'}</h3>
+                                        </div>
+                                        <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest ${item.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-p-50 text-p-700'}`}>
+                                            {item.status || 'Past'}
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4 mb-6">
+                                        <div>
+                                            <span className="text-[10px] font-bold text-muted uppercase tracking-widest opacity-50 block mb-1">{t('doctor')}</span>
+                                            <p className="text-sm font-bold text-main">{item.doctorName || 'Dr. Specialist'}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-[10px] font-bold text-muted uppercase tracking-widest opacity-50 block mb-1">{t('date_time')}</span>
+                                            <p className="text-sm font-bold text-main">{item.date || 'N/A'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 mb-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <AlertCircle size={14} className="text-p-600" />
+                                            <span className="text-[10px] font-black text-main uppercase tracking-widest">{t('reason_for_visit')}</span>
+                                        </div>
+                                        <p className="text-xs font-medium text-muted leading-relaxed">
+                                            {item.symptoms || item.reason || 'General health checkup and routine consultation.'}
+                                        </p>
+                                    </div>
+                                    {item.prescription && (
+                                        <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100/50">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Package size={14} className="text-emerald-600" />
+                                                <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">{t('prescribed_medicines')}</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {(item.prescription.medicine || '').split(',').map((med, idx) => (
+                                                    <span key={idx} className="px-2 py-1 rounded-lg bg-white border border-emerald-100 text-[10px] font-bold text-emerald-800">
+                                                        {med.trim()}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className="mt-6 pt-4 border-t border-slate-50 flex justify-end">
+                                        <button className="flex items-center gap-2 text-p-600 text-xs font-black uppercase tracking-wider active:scale-95 transition-transform">
+                                            {t('view_summary')}
+                                            <ChevronRight size={14} />
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            ))
+                        ) : (
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-20 flex flex-col items-center opacity-30 text-center">
+                                <FileText size={48} className="mb-4" />
+                                <p className="font-bold">{t('no_history')}</p>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </motion.div>
+            </div>
+            );
+};
+            const ProfileTab = ({user, logout, profileSubTab, setProfileSubTab, onVoiceAssistant, onLogoutClick}) => {
+    const {t, i18n} = useTranslation();
+            const [tempPhoto, setTempPhoto] = useState(null);
+            const [uploadProgress, setUploadProgress] = useState(0);
+            const [error, setError] = useState('');
+            const [isEditingPhoto, setIsEditingPhoto] = useState(false);
+    const changeLanguage = (lng) => i18n.changeLanguage(lng);
+    const handlePhotoSave = async () => {
+        if (!tempPhoto) return;
+            setUploadProgress(10);
+            try {
+            const {uploadProfilePhoto: up } = await import('../firebase/services');
+            const {updateUserProfilePhoto: ua } = await import('../firebase/auth');
+            const downloadURL = await up(user.uid, tempPhoto);
+            await ua(user.uid, downloadURL);
+            setIsEditingPhoto(false);
+            setUploadProgress(0);
+            setTempPhoto(null);
+        } catch (err) {
+                console.error(err);
+            setError(`Failed to save: ${err.message}`);
+            setUploadProgress(0);
+        }
+    };
+            if (profileSubTab === 'edit') return <EditProfileView user={user} onBack={() => setProfileSubTab('menu')} />;
+            if (profileSubTab === 'history') return <MedicalHistoryView user={user} onBack={() => setProfileSubTab('menu')} />;
+            if (profileSubTab === 'support') return <SupportView onBack={() => setProfileSubTab('menu')} onVoiceAssistant={onVoiceAssistant} />;
+            if (profileSubTab === 'settings') return <SettingsView onBack={() => setProfileSubTab('menu')} />;
+            return (
+            <div className="pb-32 animate-entrance bg-slate-50/10 min-h-screen">
+                <div className="relative mb-8">
+                    <div className="h-40 bg-gradient-to-r from-p-600 to-p-500 rounded-b-[40px] shadow-lg shadow-p-600/20" />
+                    <div className="px-6 -mt-12 flex flex-col items-center">
+                        <div className="relative group">
+                            <div className="w-24 h-24 rounded-full bg-white p-1 shadow-xl mb-4 overflow-hidden">
+                                <div className="w-full h-full rounded-full bg-slate-100 flex items-center justify-center overflow-hidden">
+                                    {user?.photoURL ? <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" /> : <User size={40} className="text-slate-400" />}
+                                </div>
+                            </div>
+                            <button onClick={() => setIsEditingPhoto(true)} className="absolute bottom-4 right-0 w-8 h-8 rounded-full bg-p-600 text-white flex items-center justify-center shadow-lg hover:scale-110 active:scale-90"><Camera size={16} /></button>
+                        </div>
+                        <h2 className="text-2xl font-black text-main">{user?.displayName || user?.name || t('user')}</h2>
+                        <p className="text-sm font-bold text-muted opacity-80">{user?.phone || user?.email}</p>
+                    </div>
+                </div>
+                <AnimatePresence>
+                    {isEditingPhoto && (
+                        <div className="fixed inset-0 z-[3000] flex items-end sm:items-center justify-center p-4">
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !uploadProgress && setIsEditingPhoto(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+                            <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} className="relative w-full max-w-md bg-white rounded-t-[40px] sm:rounded-[40px] p-8 shadow-2xl overflow-hidden">
+                                <div className="flex justify-between mb-6">
+                                    <h3 className="text-xl font-black text-main">Update Photo</h3>
+                                    <button onClick={() => setIsEditingPhoto(false)} className="p-2 bg-slate-100 text-slate-400 rounded-lg"><X size={20} /></button>
+                                </div>
+                                <ImageUpload image={tempPhoto} onImageChange={setTempPhoto} progress={uploadProgress} className="mb-6" />
+                                {error && <p className="text-red-500 text-xs font-bold mb-4 text-center">{error}</p>}
+                                <div className="flex gap-4">
+                                    <button onClick={() => setIsEditingPhoto(false)} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold text-sm">Cancel</button>
+                                    <button onClick={handlePhotoSave} className="flex-1 py-4 rounded-2xl bg-p-600 text-white font-bold text-sm shadow-lg shadow-p-200 disabled:opacity-50">{uploadProgress > 0 ? 'Saving...' : 'Save Photo'}</button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
+                <div className="px-6 mb-8">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Language</h3>
+                    <div className="flex gap-2">
+                        {[{ code: 'en', label: 'English' }, { code: 'te', label: 'తెలుగు' }, { code: 'hi', label: 'हिन्दी' }].map((lang) => (
+                            <button key={lang.code} onClick={() => changeLanguage(lang.code)} className={`flex-1 py-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all ${i18n.language === lang.code ? 'bg-p-600 text-white shadow-lg' : 'bg-white text-muted border border-slate-100'}`}>{lang.label}</button>
+                        ))}
+                    </div>
+                </div>
+                <div className="px-6 space-y-4">
+                    {[
+                        { icon: User, label: 'Edit Profile', id: 'edit' },
+                        { icon: History, label: 'Medical History', id: 'history' },
+                        { icon: HelpCircle, label: 'Help & Support', id: 'support' },
+                        { icon: Settings, label: 'Settings', id: 'settings' },
+                    ].map((item, i) => (
+                        <button key={i} onClick={() => setProfileSubTab(item.id)} className="w-full flex items-center gap-4 p-5 rounded-[28px] bg-white border border-slate-100 shadow-sm active:scale-[0.98] transition-all group">
+                            <div className="w-11 h-11 rounded-2xl bg-slate-50 text-slate-400 group-hover:bg-p-50 group-hover:text-p-600 transition-colors flex items-center justify-center">
+                                <item.icon size={22} />
+                            </div>
+                            <span className="flex-1 text-left font-bold text-main">{item.label}</span>
+                            <ChevronRight size={18} className="text-slate-300" />
+                        </button>
+                    ))}
+                    <button
+                        onClick={onLogoutClick}
+                        className="w-full flex items-center gap-4 p-5 rounded-[28px] bg-rose-50 border border-rose-100/50 shadow-sm active:scale-[0.98] transition-all"
+                    >
+                        <div className="w-11 h-11 rounded-2xl bg-rose-100 text-rose-500 flex items-center justify-center">
+                            <LogOut size={22} />
+                        </div>
+                        <span className="flex-1 text-left font-bold text-rose-600">Logout Dashboard</span>
+                    </button>
+                    <p className="text-center text-[10px] font-bold text-muted opacity-40 mt-6 uppercase tracking-[0.2em]">Version 2.5.0 • Build 2026.04</p>
+                </div>
+            </div>
+            );
+};
 
 const PatientDashboard = () => {
     const navigate = useNavigate();
-    const { user, logout, loading, appointments } = useAuth();
-    const { t } = useTranslation();
-    const [activeTab, setActiveTab] = useState('home');
-    const [notif, setNotif] = useState(null);
-    const [isLocationOpen, setIsLocationOpen] = useState(false);
-    const [selectedLocation, setSelectedLocation] = useState('Mancherial, Telangana');
-    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-    const [showVoice, setShowVoice] = useState(false);
-    const [showPayment, setShowPayment] = useState(false);
-    const [showDetails, setShowDetails] = useState(false);
-    const [activeVoiceBooking, setActiveVoiceBooking] = useState(null);
-
+            const {user, logout, loading, appointments, orders, nearbyHospitals, refreshNearbyHospitals} = useAuth();
+            const {t} = useTranslation();
+            const [activeTab, setActiveTab] = useState('home');
+            const [viewMode, setViewMode] = useState('list');
+            const [notif, setNotif] = useState(null);
+            const [isLocationOpen, setIsLocationOpen] = useState(false);
+            const [selectedLocation, setSelectedLocation] = useState('Mancherial, Telangana');
+            const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+            const [showVoice, setShowVoice] = useState(false);
+            const [showPayment, setShowPayment] = useState(false);
+            const [showDetails, setShowDetails] = useState(false);
+            const [activeVoiceBooking, setActiveVoiceBooking] = useState(null);
+            const [showAddressSetup, setShowAddressSetup] = useState(false);
+            const [profileSubTab, setProfileSubTab] = useState('menu'); // 'menu' | 'edit' | 'history' | 'support' | 'settings'
+            const [showFeedback, setShowFeedback] = useState(false);
+            const [completedAppt, setCompletedAppt] = useState(null);
+            // AI Assistant States
+            const [messages, setMessages] = useState([
+            {role: 'model', text: t('ai_welcome_message') || "Hello! I'm vArogra AI. How can I assist you with your health today?" }
+            ]);
+            const [aiInput, setAiInput] = useState('');
+            const [isAiLoading, setIsAiLoading] = useState(false);
+            const [showAIModal, setShowAIModal] = useState(false);
+            const [aiAnalysis, setAiAnalysis] = useState('');
+            const [aiLoading, setAiLoading] = useState(false);
+            // Store/Pharmacy States
+            const [storeSearch, setStoreSearch] = useState('');
+            const [activeFilter, setActiveFilter] = useState('near');
+            const [checkoutStore, setCheckoutStore] = useState(null);
+            const [showSuccess, setShowSuccess] = useState(false);
+            // Feed States
+            const [activeSubTab, setActiveSubTab] = useState('schedule');
+            const [feedFilter, setFeedFilter] = useState('all');
     // 5-Minute Reminder Logic
     useEffect(() => {
-        if (!appointments || appointments.length === 0) return;
-
-        const checkReminders = () => {
+        return;
+        /* const checkReminders = () => {
             const now = new Date();
             appointments.forEach(appt => {
                 if (appt.status === 'approved' || appt.status === 'Confirmed' || appt.status === 'pending') {
                     try {
                         // Very basic time parsing for "HH:MM AM/PM"
                         const [timeStr, period] = appt.time.split(' ');
-                        const [hoursStr, minutesStr] = timeStr.split(':');
-                        let hours = parseInt(hoursStr);
-                        let minutes = parseInt(minutesStr);
-
-                        if (period === 'PM' && hours < 12) hours += 12;
-                        if (period === 'AM' && hours === 12) hours = 0;
-
-                        const apptDate = new Date();
-                        apptDate.setHours(hours, minutes, 0, 0);
-
-                        const diffMinutes = Math.floor((apptDate - now) / (1000 * 60));
-
-                        if (diffMinutes === 5) {
-                            setNotif(`🔔 Reminder: Your appointment with ${appt.doctorName} starts in 5 minutes!`);
+            const [hoursStr, minutesStr] = timeStr.split(':');
+            let hours = parseInt(hoursStr);
+            let minutes = parseInt(minutesStr);
+            if (period === 'PM' && hours < 12) hours += 12;
+            if (period === 'AM' && hours === 12) hours = 0;
+            const apptDate = new Date();
+            apptDate.setHours(hours, minutes, 0, 0);
+            const diffMinutes = Math.floor((apptDate - now) / (1000 * 60));
+            if (diffMinutes === 5) {
+                setNotif(`🔔 Reminder: Your appointment with ${appt.doctorName} starts in 5 minutes!`);
                             // Persistent for 10 seconds
                             setTimeout(() => setNotif(null), 10000);
                         }
                     } catch (e) {
-                        console.error("Reminder parsing failed:", e);
+                console.error("Reminder parsing failed:", e);
                     }
                 }
             });
         };
-
-        const interval = setInterval(checkReminders, 60000); // Check every minute
+            const interval = setInterval(checkReminders, 60000); // Check every minute
         return () => clearInterval(interval);
     }, [appointments]);
 
-    const handleVoiceAssistant = () => {
-        console.log("SOS Voice Assistant Triggered");
-        setShowVoice(true);
-    };
+    useEffect(() => {
+        const activeAppointments = (appointments || []).filter((appt) => {
+            const normalizedStatus = String(appt.status || '').toLowerCase();
+            return ACTIVE_APPOINTMENT_STATUSES.includes(normalizedStatus) && !INACTIVE_APPOINTMENT_STATUSES.includes(normalizedStatus);
+        });
 
+        const activeOrders = (orders || []).filter((order) =>
+            ACTIVE_ORDER_STATUSES.includes(String(order.status || '').toLowerCase())
+        );
+
+        if (activeAppointments.length === 0 && activeOrders.length === 0) return;
+
+        const triggerReminder = (key, message) => {
+            const storageKey = `varogra_dashboard_notice_${key}`;
+            const lastSent = Number(localStorage.getItem(storageKey) || 0);
+            const nowMs = Date.now();
+
+            if (nowMs - lastSent < 10 * 60 * 1000) return;
+
+            setNotif(message);
+            setTimeout(() => setNotif(null), 10000);
+            localStorage.setItem(storageKey, String(nowMs));
+        };
+
+        const checkReminders = () => {
+            const now = new Date();
+
+            activeAppointments.forEach((appt) => {
+                const appointmentAt = parseReminderDateTime(appt.date, appt.time, appt.timestamp || appt.createdAt);
+                if (!appointmentAt) return;
+
+                const diffMinutes = Math.round((appointmentAt.getTime() - now.getTime()) / (1000 * 60));
+                if (diffMinutes >= 0 && diffMinutes <= 10) {
+                    triggerReminder(
+                        `appointment_${appt.id || appt.timestamp || appt.doctorName}`,
+                        `Reminder: Your booking with ${appt.doctorName || 'the doctor'} at ${appt.hospitalName || 'the hospital'} is in ${diffMinutes} minute${diffMinutes === 1 ? '' : 's'}.`
+                    );
+                }
+            });
+
+            activeOrders.forEach((order) => {
+                triggerReminder(
+                    `order_${order.id || order.timestamp || order.storeName}`,
+                    `Reminder: Medicine order booked at ${order.storeName || 'the pharmacy'} is currently ${order.status || 'Pending'}.`
+                );
+            });
+        };
+
+        checkReminders();
+        const interval = setInterval(checkReminders, 60000);
+        return () => clearInterval(interval); */
+    }, [appointments, orders]);
+
+    const handleVoiceAssistant = () => {
+                console.log("SOS Voice Assistant Triggered");
+            setShowVoice(true);
+    };
+    // Appointment Completion Listener for Feedback
+    useEffect(() => {
+        if (!appointments) return;
+        const lastCompleted = appointments.find(a =>
+            (a.status === 'Completed' || a.status === 'completed') &&
+            !a.feedbackRecorded
+            );
+            if (lastCompleted) {
+                setCompletedAppt(lastCompleted);
+            setShowFeedback(true);
+        }
+    }, [appointments]);
     const handleTabChange = (tab) => {
         if (tab === 'voice') {
-            setShowVoice(true);
+                setShowVoice(true);
             return;
         }
-        setActiveTab(tab);
+            setActiveTab(tab);
     };
-
-    // Tab Sync Logic
-    const location = useLocation();
+            // Tab Sync Logic
+            const location = useLocation();
     useEffect(() => {
         const params = new URLSearchParams(location.search);
-        const tab = params.get('tab');
-        if (tab && ['home', 'appointments', 'doctor', 'store', 'profile'].includes(tab)) {
-            setActiveTab(tab);
+            const tab = params.get('tab');
+            if (tab && ['home', 'appointments', 'doctor', 'store', 'profile'].includes(tab)) {
+                setActiveTab(tab);
         }
     }, [location.search]);
-
     // Request Location Permission on Mount
     useEffect(() => {
         if ("geolocation" in navigator) {
-            navigator.geolocation.getCurrentPosition(
-                async (position) => {
-                    const { latitude, longitude } = position.coords;
-                    console.log("Location obtained:", latitude, longitude);
-
-                    try {
-                        // Using OpenStreetMap's Nominatim API for free reverse geocoding
-                        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`);
-                        const data = await response.json();
-
-                        if (data && data.address) {
-                            const city = data.address.city || data.address.town || data.address.village || data.address.county || 'Unknown';
-                            const state = data.address.state || '';
-                            const locationString = state ? `${city}, ${state}` : city;
-
-                            setSelectedLocation(locationString);
-                            setNotif(t('location_enabled') || `Location updated to ${locationString}`);
-                        } else {
-                            setNotif(t('location_enabled') || "Location services enabled");
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        const { latitude, longitude } = position.coords;
+                        console.log("Location obtained:", latitude, longitude);
+                        try {
+                            // Using OpenStreetMap's Nominatim API for free reverse geocoding
+                            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`);
+                            const data = await response.json();
+                            if (data && data.address) {
+                                const city = data.address.city || data.address.town || data.address.village || data.address.county || 'Unknown';
+                                const stateName = data.address.state || '';
+                                const locationString = stateName ? `${city}, ${stateName}` : city;
+                                setSelectedLocation(locationString);
+                                // Only show if it matches the current theme and doesn't disappear too fast
+                                setNotif(`ACCESS SECURED: Location updated to ${locationString}`);
+                            } else {
+                                setNotif("ACCESS SECURED: Location services precisely calibrated.");
+                            }
+                        } catch (geocodingError) {
+                            console.error("Geocoding failed:", geocodingError);
+                            setNotif("ACCESS SECURED: Location services calibrated.");
                         }
-                    } catch (geocodingError) {
-                        console.error("Geocoding failed:", geocodingError);
-                        setNotif(t('location_enabled') || "Location services enabled");
+                        // Removed the auto-timeout to let user see the "GOT IT" button
+                    },
+                    (error) => {
+                        console.warn("Location permission denied or error:", error);
+                        setNotif("Location access restricted. Area results may be limited.");
                     }
-
-                    setTimeout(() => setNotif(null), 3000);
-                },
-                (error) => {
-                    console.warn("Location permission denied or error:", error);
-                }
-            );
+                );
         }
     }, [t]);
-
     // Redirect to login if not authenticated
     useEffect(() => {
-        if (!loading && !user) {
-            navigate('/login/patient');
+        if (!loading && user) {
+            if (user.role === 'patient') {
+                const needsLocation = !user.district || !user.state || !user.latitude;
+            if (needsLocation) {
+                setShowAddressSetup(true);
+                }
+            }
         }
+    }, [user, loading]);
+    useEffect(() => {
+        if (!loading && !user) {
+                navigate('/login/patient')
+            }
     }, [user, loading, navigate]);
-
     const handleLogout = () => {
-        logout();
-        navigate('/login/patient');
+                logout();
+            navigate('/login/patient');
     };
-
-    if (loading) {
+            if (loading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-slate-50">
                 <Loader2 className="animate-spin text-p-600" size={32} />
             </div>
-        );
+            );
     }
-
-    if (!user) return null; // Should be handled by useEffect redirect
-
-    return (
-        <div className="container overflow-x-hidden">
-            <AnimatePresence>
-                {notif && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -50 }}
-                        animate={{ opacity: 1, y: 10 }}
-                        exit={{ opacity: 0, y: -50 }}
-                        className="fixed top-5 left-1/2 -translate-x-1/2 w-[calc(100%-40px)] z-[2000] p-4 rounded-2xl bg-slate-900 text-white shadow-2xl flex items-center gap-3 border border-white/10 glass"
-                    >
-                        <div className="w-10 h-10 rounded-xl bg-p-500/20 flex items-center justify-center">
-                            <Bot size={20} className="text-p-400" />
+            if (!user) return null; // Should be handled by useEffect redirect
+            return (
+            <div className="container overflow-x-hidden">
+                <AnimatePresence>
+                    {notif && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[3000] flex items-center justify-center p-6">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                                className="notification-card"
+                            >
+                                <div className="notification-icon-box">
+                                    <CheckCircle size={36} className="text-white" strokeWidth={3} />
+                                </div>
+                                <h2 className="text-[24px] font-black text-slate-900 mb-2">Notification</h2>
+                                <p className="text-[16px] font-bold text-slate-500 leading-relaxed mb-4 px-4">{notif}</p>
+                                <button
+                                    onClick={() => setNotif(null)}
+                                    className="notification-btn"
+                                >
+                                    GOT IT
+                                </button>
+                            </motion.div>
                         </div>
-                        <p className="text-xs font-bold">{notif}</p>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            <AnimatePresence>
-                {showVoice && (
-                    <VoiceAssistant
-                        isOpen={showVoice}
-                        onClose={() => setShowVoice(false)}
-                        onBookingSuccess={(bookingData) => {
-                            setActiveVoiceBooking(bookingData || { doctor: "Dr. Sharma", hospital: "Apollo", slot: "10:30 AM" });
-                            setShowVoice(false);
-                            setShowPayment(true);
+                    )}
+                </AnimatePresence>
+                <AnimatePresence>
+                    {showVoice && (
+                        <VoiceAssistant
+                            isOpen={showVoice}
+                            onClose={() => setShowVoice(false)}
+                            onBookingSuccess={(bookingData) => {
+                                setActiveVoiceBooking(bookingData || { doctor: "Dr. Sharma", hospital: "Apollo", slot: "10:30 AM" });
+                                setShowVoice(false);
+                                setShowPayment(true);
+                            }}
+                        />
+                    )}
+                </AnimatePresence>
+                {showPayment && (
+                    <PaymentScreen
+                        appointment={activeVoiceBooking}
+                        onBack={() => setShowPayment(false)}
+                        onPaymentSuccess={() => {
+                            setShowPayment(false);
+                            setShowDetails(true);
                         }}
                     />
                 )}
-            </AnimatePresence>
-
-            {showPayment && (
-                <PaymentScreen
-                    appointment={activeVoiceBooking}
-                    onBack={() => setShowPayment(false)}
-                    onPaymentSuccess={() => {
-                        setShowPayment(false);
-                        setShowDetails(true);
+                {showDetails && (
+                    <AppointmentDetails
+                        appointment={activeVoiceBooking}
+                        onBack={() => setShowDetails(false)}
+                        onCancel={() => {
+                            setShowDetails(false);
+                            setNotif("Appointment cancelled");
+                            setTimeout(() => setNotif(null), 3000);
+                        }}
+                    />
+                )}
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={activeTab}
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -10 }}
+                        transition={{ duration: 0.3 }}
+                    >
+                        <SafeErrorBoundary>
+                            {activeTab === 'home' && (
+                                <HomeTab
+                                    navigate={navigate}
+                                    onNavigate={setActiveTab}
+                                    currentLocation={selectedLocation}
+                                    onLocationClick={() => setIsLocationOpen(true)}
+                                    viewMode={viewMode}
+                                    setViewMode={setViewMode}
+                                />
+                            )}
+                            {activeTab === 'ai-assistant' && <AIAssistantTab onNavigate={setActiveTab} />}
+                            {activeTab === 'updates' && <UpdatesTab onNavigate={setActiveTab} />}
+                            {activeTab === 'store' && <StoreTab />}
+                            {activeTab === 'profile' && <ProfileTab
+                                user={user}
+                                logout={logout}
+                                profileSubTab={profileSubTab}
+                                setProfileSubTab={setProfileSubTab}
+                                onVoiceAssistant={handleVoiceAssistant}
+                                onLogoutClick={() => setShowLogoutConfirm(true)}
+                            />}
+                        </SafeErrorBoundary>
+                    </motion.div>
+                </AnimatePresence>
+                <BottomNav activeTab={activeTab} onTabChange={handleTabChange} onVoiceAssistant={handleVoiceAssistant} />
+                <LocationPicker
+                    isOpen={isLocationOpen}
+                    onClose={() => setIsLocationOpen(false)}
+                    onSelect={(loc) => {
+                        setSelectedLocation(loc);
+                        setNotif(t('location_updated') || `Location updated to ${loc}`);
+                    }}
+                    currentCity={selectedLocation}
+                />
+                <ConfirmModal
+                    isOpen={showLogoutConfirm}
+                    onClose={() => setShowLogoutConfirm(false)}
+                    onConfirm={handleLogout}
+                    title={t('confirm_logout')}
+                    message={t('logout_message')}
+                    confirmText={t('logout')}
+                    cancelText={t('cancel')}
+                />
+                <FeedbackModal
+                    isOpen={showFeedback}
+                    onClose={() => setShowFeedback(false)}
+                    appointment={completedAppt}
+                    onSave={async (id, data) => {
+                        await recordConsultationFeedback(id, data);
                     }}
                 />
-            )}
-
-            {showDetails && (
-                <AppointmentDetails
-                    appointment={activeVoiceBooking}
-                    onBack={() => setShowDetails(false)}
-                    onCancel={() => {
-                        setShowDetails(false);
-                        setNotif("Appointment cancelled");
-                        setTimeout(() => setNotif(null), 3000);
+                <AddressSetupModal
+                    isOpen={showAddressSetup}
+                    onClose={() => setShowAddressSetup(false)}
+                    onSave={() => {
+                        setShowAddressSetup(false);
+                        refreshNearbyHospitals();
                     }}
                 />
-            )}
-
-            <AnimatePresence mode="wait">
-                <motion.div
-                    key={activeTab}
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    transition={{ duration: 0.3 }}
-                >
-                    <SafeErrorBoundary>
-                        {activeTab === 'home' && (
-                            <HomeTab
-                                navigate={navigate}
-                                onNavigate={setActiveTab}
-                                currentLocation={selectedLocation}
-                                onLocationClick={() => setIsLocationOpen(true)}
-                            />
-                        )}
-                        {activeTab === 'ai-assistant' && <AIAssistantTab onNavigate={setActiveTab} />}
-                        {activeTab === 'updates' && <UpdatesTab onNavigate={setActiveTab} />}
-                        {activeTab === 'store' && <StoreTab />}
-                        {activeTab === 'profile' && <ProfileTab user={user} logout={() => setShowLogoutConfirm(true)} />}
-
-                    </SafeErrorBoundary>
-                </motion.div>
-            </AnimatePresence>
-
-            <BottomNav activeTab={activeTab} onTabChange={handleTabChange} onVoiceAssistant={handleVoiceAssistant} />
-
-            <LocationPicker
-                isOpen={isLocationOpen}
-                onClose={() => setIsLocationOpen(false)}
-                onSelect={setSelectedLocation}
-                currentCity={selectedLocation}
-            />
-
-            <ConfirmModal
-                isOpen={showLogoutConfirm}
-                onClose={() => setShowLogoutConfirm(false)}
-                onConfirm={handleLogout}
-                title={t('confirm_logout')}
-                message={t('logout_message')}
-                confirmText={t('logout')}
-                cancelText={t('cancel')}
-            />
-
-            <AISOSButton patientId={user?.uid} hospitalId={hospitals[0]?.id} />
-        </div>
-    );
+                {/* Removed the extra floating security/SOS button as requested */}
+            </div>
+            );
 };
-
-export default PatientDashboard;
+            export default PatientDashboard;

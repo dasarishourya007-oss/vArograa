@@ -1,10 +1,60 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+console.log("TOP: AuthContext.jsx loading...");
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { hospitals as mockHospitals } from '../utils/mockData';
 import { subscribeToAuthChanges, getUserProfile, loginUser, registerUser, signInWithGoogle, signInWithApple, signInWithX } from '../firebase/auth';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
 const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
+
+const normalizeRole = (role) => {
+    if (!role) return null;
+    const lower = String(role).toLowerCase();
+    if (lower.includes('hospital')) return 'hospital';
+    if (lower.includes('doctor')) return 'doctor';
+    if (lower.includes('patient')) return 'patient';
+    return lower;
+};
+
+const userFromProfile = (firebaseUser, profile = {}) => {
+    const normalizedRole = normalizeRole(profile.role || firebaseUser?.role || 'patient') || 'patient';
+    return {
+        uid: firebaseUser?.uid,
+        email: firebaseUser?.email,
+        displayName: profile?.displayName || profile?.name || firebaseUser?.displayName,
+        photoURL: profile?.photoURL || firebaseUser?.photoURL,
+        ...profile,
+        role: normalizedRole
+    };
+};
+
+const fetchHospitalByAdminId = async (adminId) => {
+    if (!db || !adminId) return null;
+    try {
+        const hospitalQuery = query(
+            collection(db, 'hospitals'),
+            where('adminId', '==', adminId)
+        );
+        const hospitalSnapshot = await getDocs(hospitalQuery);
+        if (hospitalSnapshot.empty) return null;
+        const docSnap = hospitalSnapshot.docs[0];
+        const data = docSnap.data() || {};
+        return {
+            id: docSnap.id,
+            hospitalId: docSnap.id,
+            hospitalName: data.hospitalName || data.name || '',
+            address: data.address || data.location || '',
+            district: data.district || '',
+            state: data.state || '',
+            ...data
+        };
+    } catch (error) {
+        console.error('Error fetching hospital by adminId:', error);
+        return null;
+    }
+};
 
 const safeJsonParse = (key, fallback) => {
     try {
@@ -19,6 +69,18 @@ const safeJsonParse = (key, fallback) => {
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [currentHospital, setCurrentHospital] = useState(null);
+    const hospitalFetchRef = useRef(null);
+
+    const normalizeAndSetUser = (payload) => {
+        if (!payload) {
+            setUser(null);
+            return null;
+        }
+        const normalized = { ...payload, role: normalizeRole(payload.role) || 'patient' };
+        setUser(normalized);
+        return normalized;
+    };
 
     // Dynamic Data States
     const [allHospitals, setAllHospitals] = useState([]);
@@ -44,24 +106,24 @@ export const AuthProvider = ({ children }) => {
             if (firebaseUser) {
                 try {
                     const profile = await getUserProfile(firebaseUser.uid);
-                    setUser({
+                    const preparedUser = userFromProfile(firebaseUser, profile);
+                    normalizeAndSetUser(preparedUser);
+                } catch (error) {
+                    console.error("Error fetching profile:", error);
+                    normalizeAndSetUser({
                         uid: firebaseUser.uid,
                         email: firebaseUser.email,
                         displayName: firebaseUser.displayName,
-                        ...profile
+                        photoURL: firebaseUser.photoURL,
+                        role: 'patient'
                     });
-                } catch (error) {
-                    console.error("Error fetching profile:", error);
-                    setUser(firebaseUser);
                 }
             } else {
-                // Only clear user if there's no local mock user
                 const storedMockUser = localStorage.getItem('varogra_user');
                 if (!storedMockUser) {
                     setUser(null);
                 } else if (!user) {
-                    // Recover mock user if state was lost but localStorage persists
-                    setUser(JSON.parse(storedMockUser));
+                    normalizeAndSetUser(JSON.parse(storedMockUser));
                 }
             }
             setLoading(false);
@@ -134,11 +196,92 @@ export const AuthProvider = ({ children }) => {
         return () => unsubscribe();
     }, []);
 
+    useEffect(() => {
+        if (!user || user.role !== 'hospital') {
+            hospitalFetchRef.current = null;
+            return;
+        }
+        const adminId = user.uid;
+        if (!adminId) return;
+        if (hospitalFetchRef.current === adminId) return;
+        hospitalFetchRef.current = adminId;
+        let active = true;
+
+        (async () => {
+            const hospitalDoc = await fetchHospitalByAdminId(adminId);
+            if (!active || !hospitalDoc) return;
+            setCurrentHospital(hospitalDoc);
+            setUser(prev => prev ? {
+                ...prev,
+                hospitalId: hospitalDoc.id,
+                hospitalName: hospitalDoc.hospitalName || hospitalDoc.name || prev.hospitalName,
+                address: hospitalDoc.address || prev.address,
+                district: hospitalDoc.district || prev.district,
+                state: hospitalDoc.state || prev.state
+            } : prev);
+        })();
+
+        return () => {
+            active = false;
+        };
+    }, [user?.uid, user?.role]);
+
+    useEffect(() => {
+        if (user?.role !== 'doctor') return;
+        const hospitalIdCandidate = user.hospitalId || user?.hospital?.hospitalId || user?.hospital?.id;
+        const hospitalNameCandidate = user.hospitalName || user?.hospital?.name;
+        if (!hospitalIdCandidate && !hospitalNameCandidate) return;
+
+        const matchedHospital = (allHospitals || []).find((h) => {
+            const normalizedHospitalName = (h.hospitalName || h.name || '').toLowerCase();
+            const targetName = hospitalNameCandidate?.toLowerCase();
+            const targetId = hospitalIdCandidate;
+            return (targetId && (h.id === targetId || h.hospitalId === targetId)) ||
+                (targetName && normalizedHospitalName === targetName);
+        });
+
+        if (matchedHospital) {
+            setCurrentHospital(matchedHospital);
+        }
+    }, [user?.role, user?.hospitalId, user?.hospitalName, allHospitals]);
+
+    useEffect(() => {
+        if (!user || (user.role !== 'hospital' && user.role !== 'doctor')) {
+            setCurrentHospital(null);
+            hospitalFetchRef.current = null;
+        }
+    }, [user]);
+
     const loginPatient = async (email, password) => {
+        // Master Login Bypass for Patients
+        if (email === '123' || email === '123@123.com' || password === '123') {
+            const mockUser = {
+                uid: 'demo-patient-123',
+                email: 'patient@varogra.com',
+                displayName: 'Demo Patient',
+                role: 'patient',
+                city: 'Mancherial',
+                state: 'Telangana',
+                latitude: 18.8752,
+                longitude: 79.4591,
+                address: 'Mancherial, Telangana',
+                defaultAddress: {
+                    city: 'Mancherial',
+                    state: 'Telangana',
+                    mandal: 'Mancherial',
+                    district: 'Mancherial',
+                    fullAddress: 'Mancherial, Telangana'
+                }
+            };
+            const normalized = normalizeAndSetUser(mockUser);
+            localStorage.setItem('varogra_user', JSON.stringify(normalized));
+            return { success: true };
+        }
+
         try {
             const userData = await loginUser(email, password);
-            setUser(userData);
-            localStorage.setItem('varogra_user', JSON.stringify(userData));
+            const normalizedUser = normalizeAndSetUser(userData);
+            localStorage.setItem('varogra_user', JSON.stringify(normalizedUser));
             return { success: true };
         } catch (error) {
             console.error("Patient login error:", error);
@@ -157,8 +300,8 @@ export const AuthProvider = ({ children }) => {
                 role: 'patient',
                 ...extraData
             };
-            setUser(userObj);
-            localStorage.setItem('varogra_user', JSON.stringify(userObj));
+            const normalizedPatient = normalizeAndSetUser(userObj);
+            localStorage.setItem('varogra_user', JSON.stringify(normalizedPatient));
             return { success: true };
         } catch (error) {
             console.error("Patient registration error:", error);
@@ -174,8 +317,8 @@ export const AuthProvider = ({ children }) => {
             else if (provider === 'x') userData = await signInWithX();
 
             if (userData) {
-                setUser(userData);
-                localStorage.setItem('varogra_user', JSON.stringify(userData));
+                const normalizedSocial = normalizeAndSetUser(userData);
+                localStorage.setItem('varogra_user', JSON.stringify(normalizedSocial));
                 return { success: true };
             }
         } catch (error) {
@@ -423,13 +566,16 @@ export const AuthProvider = ({ children }) => {
 
     const updateProfile = (data) => {
         const updatedUser = { ...user, ...data };
-        setUser(updatedUser);
-        localStorage.setItem('varogra_user', JSON.stringify(updatedUser)); // Keeping for legacy
+        const normalized = normalizeAndSetUser(updatedUser);
+        localStorage.setItem('varogra_user', JSON.stringify(normalized)); // Keeping for legacy
         return { success: true };
     };
 
-    const logout = () => { setUser(null); localStorage.removeItem('varogra_user'); };
-    const completeLogin = (u) => { setUser(u); localStorage.setItem('varogra_user', JSON.stringify(u)); return true; };
+
+    const logout = () => { setCurrentHospital(null); hospitalFetchRef.current = null; setUser(null); localStorage.removeItem('varogra_user'); };
+
+    const completeLogin = (u) => { const normalized = normalizeAndSetUser(u); localStorage.setItem('varogra_user', JSON.stringify(normalized)); return true; };
+
     const approveDoctor = (did) => { return { success: true } };
     const checkDoctorStatus = (ph) => { const d = allDoctors.find(doc => doc.phone === ph); return d ? { found: true, status: d.status, code: d.code } : { found: false }; };
     const setupDoctorPassword = (ph, pw) => {
@@ -442,11 +588,11 @@ export const AuthProvider = ({ children }) => {
 
     return (
         <AuthContext.Provider value={{
-            user, loading, appointments, orders, bloodRequests,
+            user, loading, currentHospital, appointments, orders, bloodRequests,
             announcements, medicalCamps, campRegistrations,
             allHospitals, allDoctors, allMedicalStores,
             doctorStatus, doctorSchedule, autoApprove, notifications,
-            setUser, completeLogin, setDoctorStatus, setDoctorSchedule, setAutoApprove,
+            setUser, setCurrentHospital, completeLogin, setDoctorStatus, setDoctorSchedule, setAutoApprove,
             loginPatient, registerPatient, registerMedicalStore, loginDoctor, loginMedicalStore,
             registerDoctor, approveDoctor, checkDoctorStatus, setupDoctorPassword, resetDoctorPasskey,
             bookAppointment, updateAppointmentStatus, addPrescription, placeOrder, updateOrderStatus,

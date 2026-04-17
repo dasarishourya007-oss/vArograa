@@ -13,4 +13,15 @@ The React Compiler is not enabled on this template because of its impact on dev 
 
 ## Expanding the ESLint configuration
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and typescript-eslint (https://typescript-eslint.io) in your project.
+
+## AI Configuration
+
+vArogra Health's assistant uses **NVIDIA NIM** (meta/llama3-70b-instruct).
+
+1. Obtain an API Key from the [NVIDIA API Catalog](https://build.nvidia.com/meta/llama3-70b/api).
+2. Add the key to your `.env` file in the root directory:
+   ```env
+   NVIDIA_API_KEY=your_real_key_here
+   ```
+3. Ensure the backend server is running (`node backend/server.js`) to proxy requests securely.

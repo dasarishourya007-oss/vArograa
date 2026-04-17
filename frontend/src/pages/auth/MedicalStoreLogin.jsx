@@ -5,7 +5,7 @@ import { Store, Key, ShieldCheck, ArrowLeft, Loader2 } from 'lucide-react';
 import Button from '../../components/Button';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const MedicalStoreLogin = () => {
+const MedicalStoreLogin = ({ isEmbedded = false }) => {
     const navigate = useNavigate();
     const { loginMedicalStore, completeLogin } = useAuth();
 
@@ -24,21 +24,22 @@ const MedicalStoreLogin = () => {
 
         // Master Login Shortcut
         if (code === '123' && pin === 'dsa') {
-            setTimeout(() => {
-                const res = loginMedicalStore(code, pin);
+            setTimeout(async () => {
+                const res = await loginMedicalStore(code, pin);
                 setLoading(false);
                 if (res && res.success) {
                     const userObj = { ...res.store, role: 'medical_store' };
+                    localStorage.setItem('userRole', 'medical_store');
                     completeLogin(userObj);
-                    navigate('/');
+                    navigate('/dashboard/pharmacy');
                 }
             }, 500);
             return;
         }
 
         // Simulate initial check
-        setTimeout(() => {
-            const res = loginMedicalStore(code.toUpperCase(), pin);
+        setTimeout(async () => {
+            const res = await loginMedicalStore(code.toUpperCase(), pin);
             if (res && res.success) {
                 setStoreData(res.store);
                 setStep(2);
@@ -84,8 +85,9 @@ const MedicalStoreLogin = () => {
         setTimeout(() => {
             if (otp.join('') === '1234') {
                 const userObj = { ...storeData, role: 'medical_store' };
+                localStorage.setItem('userRole', 'medical_store');
                 completeLogin(userObj);
-                navigate('/');
+                navigate('/dashboard/pharmacy');
             } else {
                 setLoading(false);
                 setError('Invalid OTP. Please try again.');
@@ -94,8 +96,8 @@ const MedicalStoreLogin = () => {
     };
 
     return (
-        <div className="auth-wrapper">
-            <div className="auth-card p-6">
+        <div className={isEmbedded ? "" : "auth-wrapper"}>
+            <div className={isEmbedded ? "" : "auth-card p-6"}>
                 <button
                     onClick={() => step === 1 ? navigate('/login') : setStep(1)}
                     style={{ background: 'none', border: 'none', padding: '12px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b' }}
@@ -105,11 +107,11 @@ const MedicalStoreLogin = () => {
                 </button>
 
                 <div style={{ textAlign: 'center', marginBottom: '32px', marginTop: '16px' }}>
-                    <div style={{ display: 'inline-flex', padding: '20px', backgroundColor: '#ecfdf5', borderRadius: '24px', color: '#10b981', marginBottom: '16px' }}>
+                    <div style={{ display: 'inline-flex', padding: '20px', backgroundColor: 'var(--brand-secondary)', borderRadius: '24px', color: 'var(--brand-primary)', marginBottom: '16px' }}>
                         <Store size={32} />
                     </div>
-                    <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a' }}>Pharmacy Portal</h1>
-                    <p style={{ color: '#64748b', fontSize: '14px' }}>Medical Store Management</p>
+                    <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>Pharmacy Portal</h1>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Medical Store Management</p>
                 </div>
 
                 <AnimatePresence mode="wait">

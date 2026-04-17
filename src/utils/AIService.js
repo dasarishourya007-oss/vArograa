@@ -1,31 +1,51 @@
-// Gemini AI Service — Direct API calls (no backend needed)
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyDYSovKeJOuHeYTjIXF2zXESWHV6qahSJA';
-// Using gemini-2.0-flash for better reliability and performance with newer keys
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+const AI_PROXY_CANDIDATES = ['/_/backend/api/ai/chat', '/api/ai/chat'];
 
-const MEDICINE_SYSTEM_PROMPT = `You are HealthLink AI, a virtual RMP (Registered Medical Practitioner) and Medicine Information Assistant for the HealthLink healthcare app.
+const postToAiProxy = async (payload) => {
+    let lastError = null;
 
-YOUR ROLE:
-- Provide general medicine information only
-- Suggest commonly used OTC (over-the-counter) medicines
-- Explain what each medicine is used for
-- Keep responses short, clear, and easy to understand
+    for (const url of AI_PROXY_CANDIDATES) {
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
 
-STRICT SAFETY RULES:
-- Do NOT diagnose diseases
-- Do NOT prescribe specific dosages
-- Do NOT replace doctor consultation
-- Always include the disclaimer: "This is general information. Please consult a doctor."
-- If the query is about a serious condition, advise seeing a doctor immediately
-- Be friendly, calm, and reassuring
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `Proxy Error: ${response.status}`);
+            }
 
-RESPONSE FORMAT (use this for symptom queries):
-For mild [symptom], commonly used medicines include:
+            return await response.json();
+        } catch (error) {
+            lastError = error;
+        }
+    }
 
-• **Medicine Name** – what it is used for
-• **Medicine Name** – what it is used for
+    throw lastError || new Error('AI proxy unavailable');
+};
 
-⚠️ *This is general information only. Please consult a doctor before taking any medication.*`;
+const MEDICINE_SYSTEM_PROMPT = `You are the vArogra Pharmacy Assistant — a smart, calm, and highly efficient guide that helps users discover, order, and track medicines seamlessly.
+
+YOUR GOAL: 
+Provide a structured, step-by-step experience that feels like a smooth product flow. Use visual cues (✅, 📍, 💊, 🚚).
+
+BOT RECORDS (VISUAL TUTORIALS):
+When users ask "How it works", "Show me the flow", or are new, you MUST present these 4 steps with their visual records:
+1. SEARCH: "Start by searching for your medicine or a nearby store."
+   ![Pharmacy Discovery Search](/tutorials/step1_discovery.png)
+2. SELECT: "Choose a highly-rated pharmacy and add items to your cart."
+   ![Pharmacy Store Selection](/tutorials/step2_stores.png)
+3. UPLOAD: "Upload your prescription for our AI to analyze and verify."
+   ![AI Prescription Analysis](/tutorials/step3_analysis.png)
+4. TRACK: "Once confirmed, track your delivery live on the map."
+   ![Real-time Live Tracking](/tutorials/step4_tracking.png)
+
+UX RULES:
+- Be concise and action-driven. Never leave the user without a next step.
+- Use the Markdown syntax ![Title](/tutorials/filename.png) to show visual records.
+- Always guide the next step (e.g., "Ready to search for a medicine?").
+- End with: "This is general information only. Please consult a doctor."`;
 
 const checkDailyLimit = () => {
     try {
@@ -38,96 +58,50 @@ const checkDailyLimit = () => {
             return true;
         }
 
-        if (data.count >= 100) {
-            return false;
-        }
+        if (data.count >= 100) return false;
 
         localStorage.setItem(storageKey, JSON.stringify({ date: today, count: (data.count || 0) + 1 }));
         return true;
     } catch (e) {
-        console.warn("Storage error:", e);
         return true;
     }
 };
 
-const delay = (ms) => new Promise(res => setTimeout(res, ms));
-
-export const getAIResponse = async (history, role = 'patient') => {
+export const getAIResponse = async (messages, role = 'patient') => {
     try {
         if (!checkDailyLimit()) {
-            return "You've reached your daily AI usage limit (100 queries). Please try again tomorrow.";
+            return { reply: "You've reached your daily AI limit. Please try again tomorrow." };
         }
 
-        // Filter and format history to strictly alternate user/model
-        const formattedHistory = [];
-        let lastRole = null;
+        console.log(`[NVIDIA AI] Generating response for ${role}...`);
 
-        for (const msg of history) {
-            const currentRole = msg.role === 'user' ? 'user' : 'model';
-            if (currentRole === lastRole) continue;
-
-            if (msg.text && msg.text.trim()) {
-                formattedHistory.push({
-                    role: currentRole,
-                    parts: [{ text: msg.text }]
-                });
-                lastRole = currentRole;
-            }
+        // Format history for the backend proxy (OpenAI format)
+        let history = [];
+        if (Array.isArray(messages)) {
+            history = messages.map(msg => ({
+                role: msg.role === 'model' || msg.role === 'assistant' ? 'assistant' : 'user',
+                content: msg.text || msg.content || ""
+            }));
+        } else {
+            history = [{ role: "user", content: messages }];
         }
 
-        const requestBody = {
-            contents: formattedHistory,
-            systemInstruction: {
-                parts: [{ text: MEDICINE_SYSTEM_PROMPT }]
-            },
-            generationConfig: {
-                temperature: 0.7,
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 500,
-            }
-        };
+        const data = await postToAiProxy({
+            messages: [
+                { role: "system", content: MEDICINE_SYSTEM_PROMPT },
+                ...history
+            ]
+        });
+        return { reply: data.reply };
 
-        // Exponential Backoff Logic for 429 errors
-        let retryCount = 0;
-        const maxRetries = 3;
-        let waitTime = 2000; // Start with 2s
-
-        while (retryCount <= maxRetries) {
-            const response = await fetch(GEMINI_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
-            });
-
-            if (response.status === 429 && retryCount < maxRetries) {
-                console.warn(`AI Rate Limited (429). Retrying in ${waitTime}ms... (Attempt ${retryCount + 1}/${maxRetries})`);
-                await delay(waitTime);
-                retryCount++;
-                waitTime *= 2; // Double the wait time
-                continue;
-            }
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('Gemini API Error Status:', response.status);
-                throw new Error(`Gemini API error: ${response.status}`);
-            }
-
-            const data = await response.json();
-            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-            if (!text) {
-                throw new Error('Empty response from Gemini');
-            }
-
-            return text;
-        }
     } catch (error) {
-        console.error("AI Service Error Details:", error);
-        return "I apologize, but I'm having trouble connecting to the AI system. Please try again or consult a human doctor for urgent matters.";
+        console.error("[NVIDIA AI] Service Error:", error);
+        return { 
+            reply: "⚠️ I'm having trouble connecting to the AI system. Please try again later." 
+        };
     }
 };
+
 
 // Helper to convert file to base64
 async function fileToBase64(file) {
@@ -138,66 +112,15 @@ async function fileToBase64(file) {
     });
 }
 
+
 export const identifyMedicine = async (imageFile) => {
-    try {
-        if (!(imageFile instanceof File)) throw new Error("Invalid image file");
-
-        const base64Data = await fileToBase64(imageFile);
-
-        const response = await fetch(GEMINI_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                systemInstruction: { parts: [{ text: MEDICINE_SYSTEM_PROMPT }] },
-                contents: [{
-                    role: 'user',
-                    parts: [
-                        { text: 'Identify this medicine from the image. Provide: medicine name, what it is commonly used for, and a reminder to consult a doctor. Keep it short and clear.' },
-                        { inlineData: { mimeType: imageFile.type, data: base64Data } }
-                    ]
-                }],
-                generationConfig: { temperature: 0.3, maxOutputTokens: 300 }
-            }),
-        });
-
-        if (!response.ok) throw new Error('API error');
-        const data = await response.json();
-        return data?.candidates?.[0]?.content?.parts?.[0]?.text || "Could not identify the medicine.";
-    } catch (error) {
-        console.error("Medicine ID Error:", error);
-        return "Connection issue. Please try again.";
-    }
+    // Note: Migration to NVIDIA Vision models (Llama 3.2 Vision) is in progress in the backend.
+    return "Vision analysis (image identification) is currently being migrated to NVIDIA NIM. Please use the text chat for medicine explanations in the meantime.";
 };
 
 export const analyzePrescription = async (imageFile) => {
-    try {
-        if (!(imageFile instanceof File)) throw new Error("Invalid image file");
-
-        const base64Data = await fileToBase64(imageFile);
-
-        const response = await fetch(GEMINI_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                systemInstruction: { parts: [{ text: MEDICINE_SYSTEM_PROMPT }] },
-                contents: [{
-                    role: 'user',
-                    parts: [
-                        { text: 'Analyze this prescription image. List each medicine mentioned, what it is typically used for, and any general notes. Always remind the user to follow their doctor\'s instructions.' },
-                        { inlineData: { mimeType: imageFile.type, data: base64Data } }
-                    ]
-                }],
-                generationConfig: { temperature: 0.3, maxOutputTokens: 500 }
-            }),
-        });
-
-        if (!response.ok) throw new Error('API error');
-        const data = await response.json();
-        return data?.candidates?.[0]?.content?.parts?.[0]?.text || "Could not analyze the prescription.";
-    } catch (error) {
-        console.error("Prescription Error:", error);
-        return "Connection issue. Please try again.";
-    }
+    // Note: Migration to NVIDIA Vision models (Llama 3.2 Vision) is in progress in the backend.
+    return "Prescription analysis is currently being migrated to NVIDIA NIM. Please consult a doctor for official prescription guidance.";
 };
 
 export const extractAppointmentDetails = async (text) => {
@@ -205,20 +128,13 @@ export const extractAppointmentDetails = async (text) => {
         const prompt = `Extract appointment details from the following text into a JSON object. 
         Fields: intent (book, cancel, reschedule), doctor, hospital, date, time, specialty.
         If a field is missing, set it as null.
+        Return ONLY valid JSON.
         Text: "${text}"`;
 
-        const response = await fetch(GEMINI_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.1, maxOutputTokens: 200 }
-            }),
+        const data = await postToAiProxy({
+            messages: [{ role: "user", content: prompt }]
         });
-
-        if (!response.ok) throw new Error('API error');
-        const data = await response.json();
-        const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const responseText = data.reply;
         const jsonMatch = responseText?.match(/\{[\s\S]*\}/);
         return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
     } catch (error) {

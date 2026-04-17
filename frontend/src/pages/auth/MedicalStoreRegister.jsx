@@ -29,7 +29,7 @@ const MedicalStoreRegister = () => {
     const [generatedCode, setGeneratedCode] = useState(null);
     const [isLocating, setIsLocating] = useState(false);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
 
@@ -43,15 +43,20 @@ const MedicalStoreRegister = () => {
             return;
         }
 
-        const res = registerMedicalStore({
-            ...formData,
-            address: formData.selectedAddress || formData.address
-        });
+        try {
+            const res = await registerMedicalStore({
+                ...formData,
+                address: formData.selectedAddress || formData.address
+            });
 
-        if (typeof res === 'object' && res.success === false) {
-            setError(res.message);
-        } else {
-            setGeneratedCode(res);
+            if (typeof res === 'object' && res.success === false) {
+                setError(res.message);
+            } else {
+                setGeneratedCode(res);
+            }
+        } catch (err) {
+            setError('Registration failed. Please try again.');
+            console.error(err);
         }
     };
 

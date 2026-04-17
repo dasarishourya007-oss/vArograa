@@ -1,114 +1,303 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Hospital, Stethoscope, Store, Lock, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Settings, ShieldCheck, Star, ArrowRight, Database, Loader2, CheckCircle2 } from 'lucide-react';
+import { migrateDataToFirestore } from '../../firebase/migration';
 
+/* ─── Portal Data ─── */
+const portals = [
+    {
+        id: 'patient',
+        title: 'Patient',
+        description: 'Personal health records',
+        route: '/login/patient',
+        recommended: true,
+        color: '#16a34a',          // green
+        bgColor: '#dcfce7',
+        svg: (
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width="36" height="36">
+                <path d="M20 6C14.477 6 10 10.477 10 16c0 3.993 2.195 7.472 5.441 9.328L20 34l4.559-8.672C27.805 23.472 30 19.993 30 16c0-5.523-4.477-10-10-10z" stroke="#16a34a" strokeWidth="2" strokeLinejoin="round" />
+                <path d="M16 16h8M20 12v8" stroke="#16a34a" strokeWidth="2.2" strokeLinecap="round" />
+            </svg>
+        ),
+    },
+    {
+        id: 'doctor',
+        title: 'Doctor',
+        description: 'Clinical tools',
+        route: '/login/doctor',
+        color: '#2563eb',          // blue
+        bgColor: '#dbeafe',
+        accentLine: '#2563eb',
+        svg: (
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+                <circle cx="20" cy="14" r="5" stroke="#2563eb" strokeWidth="2" />
+                <path d="M20 19c-5 0-9 2.5-9 6v1h18v-1c0-3.5-4-6-9-6z" stroke="#2563eb" strokeWidth="2" strokeLinejoin="round" />
+                <circle cx="30" cy="30" r="5" stroke="#2563eb" strokeWidth="2" />
+                <path d="M28 30h4M30 28v4" stroke="#2563eb" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+        ),
+    },
+    {
+        id: 'hospital',
+        title: 'Hospital',
+        description: 'Administration',
+        route: '/login/hospital',
+        color: '#16a34a',          // green
+        bgColor: '#dcfce7',
+        accentLine: '#16a34a',
+        svg: (
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+                <rect x="8" y="14" width="24" height="20" rx="2" stroke="#16a34a" strokeWidth="2" />
+                <path d="M15 34V26h10v8" stroke="#16a34a" strokeWidth="2" strokeLinejoin="round" />
+                <path d="M18 20h4M20 18v4" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" />
+                <path d="M12 14V10a8 8 0 0116 0v4" stroke="#16a34a" strokeWidth="2" />
+            </svg>
+        ),
+    },
+    {
+        id: 'pharmacy',
+        title: 'Pharmacy',
+        description: 'Inventory & Sales',
+        route: '/login/medical-store',
+        color: '#ea580c',          // orange
+        bgColor: '#ffedd5',
+        accentLine: '#ea580c',
+        svg: (
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+                <rect x="8" y="18" width="24" height="16" rx="2" stroke="#ea580c" strokeWidth="2" />
+                <path d="M14 18v-4a6 6 0 1112 0v4" stroke="#ea580c" strokeWidth="2" />
+                <path d="M16 26h8M20 23v6" stroke="#ea580c" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+        ),
+    },
+];
+
+/* ─── Main Component ─── */
 const LoginSelection = () => {
     const navigate = useNavigate();
-    const [selectedRole, setSelectedRole] = useState('patient');
+    const patient = portals[0];
+    const others = portals.slice(1);
+    const [isSeeding, setIsSeeding] = React.useState(false);
+    const [seedStatus, setSeedStatus] = React.useState(null); // 'success' | 'error' | null
 
-    const handleLogin = () => {
-        if (selectedRole === 'patient') navigate('/login/patient');
+    const handleSeedData = async () => {
+        setIsSeeding(true);
+        setSeedStatus(null);
+        const success = await migrateDataToFirestore();
+        setIsSeeding(false);
+        if (success) {
+            setSeedStatus('success');
+            setTimeout(() => setSeedStatus(null), 3000);
+        } else {
+            setSeedStatus('error');
+            setTimeout(() => setSeedStatus(null), 3000);
+        }
     };
 
     return (
-        <div className="min-h-screen bg-[#F8F9FB] flex flex-col font-main relative overflow-hidden font-sans">
+        <div
+            style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", background: 'linear-gradient(160deg, #f0fdf4 0%, #f8fafc 40%, #eff6ff 100%)' }}
+            className="min-h-screen w-full flex flex-col overflow-hidden relative"
+        >
+            {/* Decorative blobs */}
+            <div style={{ position: 'absolute', top: -60, left: -60, width: 220, height: 220, borderRadius: '50%', background: 'radial-gradient(circle, #bbf7d0 0%, transparent 70%)', opacity: 0.6, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: 80, right: -40, width: 180, height: 180, borderRadius: '50%', background: 'radial-gradient(circle, #bfdbfe 0%, transparent 70%)', opacity: 0.5, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: -30, left: '30%', width: 120, height: 120, borderRadius: '50%', background: 'radial-gradient(circle, #fed7aa 0%, transparent 70%)', opacity: 0.55, pointerEvents: 'none' }} />
 
-            {/* A. Header Section */}
-            <div className="w-full h-[180px] bg-gradient-to-r from-[#0052D4] to-[#20BD9D] flex flex-col items-center justify-center relative z-0">
-                <div className="flex items-center justify-center gap-3 mb-2">
-                    <img src="/logo.jpg" alt="vArogra Logo" className="h-12 w-auto" />
-                    <h1 className="text-[30px] font-bold text-white tracking-tight leading-none">
-                        vArogra
-                    </h1>
+            {/* Top Nav */}
+            <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <img src="/logo.png" alt="vArogra" style={{ height: 38, width: 'auto', objectFit: 'contain' }} />
+                    <span style={{ fontWeight: 800, fontSize: 20, color: '#0f172a', letterSpacing: '-0.5px' }}>vArogra</span>
                 </div>
-                <p className="text-white/90 text-[14px] font-medium tracking-wide">
-                    Your unified digital healthcare platform
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 6, borderRadius: 8, display: 'flex' }}>
+                    <Settings size={22} />
+                </button>
+            </nav>
+
+            {/* Hero */}
+            <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55 }}
+                style={{ textAlign: 'center', padding: '28px 24px 20px' }}
+            >
+                <h1 style={{ fontSize: 30, fontWeight: 900, color: '#0f172a', margin: '0 0 8px', lineHeight: 1.2, letterSpacing: '-0.8px' }}>
+                    Choose Your <span style={{ color: '#16a34a' }}>Portal</span>
+                </h1>
+                <p style={{ fontSize: 14, color: '#64748b', margin: 0, fontWeight: 500 }}>
+                    Select the interface that best describes your role
                 </p>
+                <div style={{ width: 40, height: 3, background: '#e2e8f0', borderRadius: 99, margin: '14px auto 0' }} />
+            </motion.div>
+
+            {/* Cards */}
+            <div style={{ flex: 1, padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 480, width: '100%', margin: '0 auto' }}>
+
+                {/* Patient – Large Featured Card */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1, duration: 0.5 }}
+                    whileHover={{ scale: 1.015 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate(patient.route)}
+                    style={{
+                        background: '#fff',
+                        borderRadius: 22,
+                        border: '2px solid #bbf7d0',
+                        boxShadow: '0 4px 24px #16a34a18',
+                        padding: '22px 22px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 18,
+                        cursor: 'pointer',
+                        position: 'relative',
+                        overflow: 'hidden',
+                    }}
+                >
+                    {/* Recommended badge */}
+                    <div style={{
+                        position: 'absolute', top: 14, right: 14,
+                        background: '#16a34a', color: '#fff',
+                        borderRadius: 99, padding: '4px 10px',
+                        fontSize: 11, fontWeight: 700,
+                        display: 'flex', alignItems: 'center', gap: 4,
+                    }}>
+                        <Star size={10} fill="#fff" /> Recommended
+                    </div>
+
+                    {/* Icon circle */}
+                    <div style={{
+                        width: 70, height: 70, borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                        boxShadow: '0 2px 12px #16a34a22',
+                    }}>
+                        {patient.svg}
+                    </div>
+
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 800, fontSize: 22, color: '#0f172a', marginBottom: 2 }}>Patient</div>
+                        <div style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>Personal health records</div>
+                    </div>
+
+                    {/* Arrow */}
+                    <div style={{
+                        width: 36, height: 36, borderRadius: '50%',
+                        background: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 2px 8px #16a34a33', flexShrink: 0,
+                    }}>
+                        <ArrowRight size={18} color="#fff" />
+                    </div>
+
+                    {/* Background shimmer */}
+                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #f0fdf4 0%, transparent 60%)', borderRadius: 22, pointerEvents: 'none', opacity: 0.5 }} />
+                </motion.div>
+
+                {/* Grid: Doctor | Hospital | Pharmacy */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                    {others.map((p, i) => (
+                        <motion.div
+                            key={p.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 + i * 0.08, duration: 0.45 }}
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => navigate(p.route)}
+                            style={{
+                                background: '#fff',
+                                borderRadius: 18,
+                                border: '1.5px solid #f1f5f9',
+                                boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
+                                padding: '18px 10px 14px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                cursor: 'pointer',
+                                position: 'relative',
+                                overflow: 'hidden',
+                            }}
+                        >
+                            {/* Icon */}
+                            <div style={{
+                                width: 54, height: 54, borderRadius: '50%',
+                                background: p.bgColor,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                marginBottom: 10,
+                            }}>
+                                {p.svg}
+                            </div>
+
+                            <div style={{ fontWeight: 800, fontSize: 14, color: '#0f172a', marginBottom: 2 }}>{p.title}</div>
+                            <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, marginBottom: 10 }}>{p.description}</div>
+
+                            {/* Small arrow */}
+                            <ArrowRight size={16} color={p.color} />
+
+                            {/* Bottom accent line */}
+                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: p.accentLine, borderRadius: '0 0 18px 18px' }} />
+                        </motion.div>
+                    ))}
+                </div>
             </div>
 
-            {/* B. Main Container */}
-            <div className="w-full px-5 flex flex-col items-center -mt-2">
-
-                {/* C. Section Label */}
-                <h2 className="text-[12px] font-bold text-[#888888] uppercase tracking-[1px] mt-6 mb-4 text-center">
-                    SELECT YOUR ROLE
-                </h2>
-
-                {/* D. Role Selection Cards (Row) */}
-                <div className="flex justify-center w-full">
-
-                    {/* Card 1: Patient */}
-                    <button
-                        onClick={() => setSelectedRole('patient')}
-                        className={`w-full max-w-[320px] rounded-[16px] py-8 px-4 flex flex-col items-center text-center relative transition-all duration-300 ${selectedRole === 'patient'
-                            ? 'bg-white shadow-[0_4px_20px_rgba(0,0,0,0.12)] border border-[#2D8EFF] transform scale-[1.02]'
-                            : 'bg-white shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-transparent hover:transform hover:scale-[1.02]'
-                            }`}
-                    >
-                        {/* Icon */}
-                        <div className="w-[60px] h-[60px] rounded-full bg-[#2D8EFF] flex items-center justify-center mb-4 shadow-md">
-                            <User size={30} className="text-white" fill="currentColor" />
-                        </div>
-
-                        {/* Title */}
-                        <h3 className="text-[20px] font-bold text-[#1A2B3C] mb-2">Patient</h3>
-
-                        {/* Description */}
-                        <p className="text-[14px] text-[#6B7280] font-normal leading-tight mb-6 px-1">
-                            Access your medical records, book appointments, and chat with vArogra AI.
-                        </p>
-
-                        {/* Badge */}
-                        <span className="px-4 py-1.5 bg-[#E3F2FD] text-[#1565C0] text-[12px] font-bold rounded-full">
-                            Patient Login
-                        </span>
-                    </button>
-
-                </div>
-
-                {/* E. Login Button */}
-                <motion.button
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleLogin}
-                    className="w-full max-w-[320px] h-[54px] rounded-[27px] bg-gradient-to-r from-[#0061FF] to-[#00C896] text-white text-[18px] font-bold shadow-[0_4px_10px_rgba(32,189,157,0.3)] mt-[30px] mb-[30px] flex items-center justify-center border-none cursor-pointer"
+            {/* Footer – Secure & HIPAA Compliant + Seed Data */}
+            <div style={{ padding: '0 24px 28px' }}>
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.7 }}
+                    style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        color: '#475569', fontSize: 13, fontWeight: 600,
+                        marginBottom: 16
+                    }}
                 >
-                    Continue
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                    <ShieldCheck size={16} color="#16a34a" />
+                    <span>Secure &amp; HIPAA Compliant</span>
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                </motion.div>
+
+                {/* Seed Data Button */}
+                <motion.button
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.8 }}
+                    onClick={handleSeedData}
+                    disabled={isSeeding}
+                    style={{
+                        width: '100%',
+                        padding: '12px',
+                        borderRadius: '14px',
+                        background: seedStatus === 'success' ? '#dcfce7' : seedStatus === 'error' ? '#fee2e2' : '#f8fafc',
+                        border: '1.5px dashed',
+                        borderColor: seedStatus === 'success' ? '#16a34a' : seedStatus === 'error' ? '#ef4444' : '#e2e8f0',
+                        color: seedStatus === 'success' ? '#16a34a' : seedStatus === 'error' ? '#ef4444' : '#64748b',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        cursor: isSeeding ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.3s ease'
+                    }}
+                >
+                    {isSeeding ? (
+                        <><Loader2 size={14} className="animate-spin" /> Seeding Dummy Records...</>
+                    ) : seedStatus === 'success' ? (
+                        <><CheckCircle2 size={14} /> Database Seeded Successfully!</>
+                    ) : seedStatus === 'error' ? (
+                        <>Failed to seed database. Check Console.</>
+                    ) : (
+                        <><Database size={14} /> Populate Database with Demo Records</>
+                    )}
                 </motion.button>
-
-                {/* F. Staff Section */}
-                <div className="w-full flex items-center gap-3 mb-4">
-                    <div className="h-[1px] bg-[#E5E7EB] flex-1" />
-                    <span className="text-[12px] font-medium text-[#6B7280] uppercase tracking-wide">FOR HEALTHCARE STAFF</span>
-                    <div className="h-[1px] bg-[#E5E7EB] flex-1" />
-                </div>
-
-                <div className="flex gap-[15px] w-full mb-8">
-                    {/* Doctor Login Button */}
-                    <button
-                        onClick={() => navigate('/login/doctor')}
-                        className="flex-1 p-[12px] rounded-[12px] bg-transparent border border-[#2D8EFF] text-[#0d4e5c] font-semibold text-[13px] flex items-center justify-center gap-2 active:bg-blue-50 transition-colors"
-                    >
-                        <Stethoscope size={18} className="text-[#2D8EFF]" />
-                        Doctor Login
-                    </button>
-
-                    {/* Medical Store Button */}
-                    <button
-                        onClick={() => navigate('/login/medical-store')}
-                        className="flex-1 p-[12px] rounded-[12px] bg-transparent border border-[#00C896] text-[#0d4e5c] font-semibold text-[13px] flex items-center justify-center gap-2 active:bg-teal-50 transition-colors"
-                    >
-                        <Store size={18} className="text-[#00C896]" />
-                        Medical Store
-                    </button>
-                </div>
-
-                {/* G. Footer */}
-                <div className="mt-auto pb-8 flex items-center gap-2 text-[#6B7280] opacity-80">
-                    <Lock size={12} />
-                    <span className="text-[11px] font-normal">Secured with end-to-end encryption</span>
-                </div>
-
             </div>
         </div>
     );

@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../../../context/AuthContext';
+import WhatsAppChat from '../../../components/WhatsAppChat';
 import { LogOut, User, Shield, ChevronDown } from 'lucide-react';
 
 const Header = () => {
@@ -27,6 +28,7 @@ const Header = () => {
     const [isVisible, setIsVisible] = React.useState(true);
     const [selectedIndex, setSelectedIndex] = React.useState(0);
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
+    const [showChat, setShowChat] = React.useState(false);
     const searchInputRef = React.useRef(null);
     const { scrollY } = useScroll();
 
@@ -100,6 +102,7 @@ const Header = () => {
     };
 
     return (
+        <>
         <motion.header
             initial={{ y: 0 }}
             animate={{ y: isVisible ? 0 : -120 }}
@@ -221,34 +224,12 @@ const Header = () => {
                         </motion.div>
                     )}
                 </div>
-
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    padding: '8px 16px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
-                    boxShadow: '0 0 15px rgba(16, 185, 129, 0.1)'
-                }}>
-                    <motion.div
-                        animate={{ scale: [1, 1.2, 1] }}
-                        transition={{ repeat: Infinity, duration: 1.5 }}
-                        style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 8px var(--success)' }}
-                    />
-                    <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                        System Pulse: 72ms
-                    </span>
-                </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
                 <div style={{ display: 'flex', gap: '8px', paddingRight: '2rem', borderRight: '1px solid var(--border-glass)' }}>
                     {[
                         { icon: Globe, label: 'Global Network', action: () => navigate('/hospital/blood-bank'), color: 'var(--brand-teal)' },
-                        { icon: MessageSquare, label: 'Secure Comms', action: () => alert('[vArogra System] Opening encrypted communication channel...'), color: 'var(--brand-primary)' },
-                        { icon: Bell, label: 'Priority Alerts', action: () => alert('[vArogra System] 3 pending critical laboratory results.'), hasPing: true, color: 'var(--critical)' }
                     ].map((item, idx) => (
                         <motion.div
                             key={idx}
@@ -279,6 +260,27 @@ const Header = () => {
                             )}
                         </motion.div>
                     ))}
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setShowChat(true)}
+                        style={{
+                            padding: '12px 24px',
+                            background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '12px',
+                            fontSize: '0.85rem',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)'
+                        }}>
+                        <MessageSquare size={18} />
+                        Secure Comms
+                    </motion.button>
                 </div>
 
                 <div style={{ position: 'relative' }}>
@@ -286,27 +288,27 @@ const Header = () => {
                         style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
                         onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                     >
-                        <div style={{ textAlign: 'right' }}>
-                            <p style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-primary)' }}>Central Command</p>
-                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
-                                Admin Access <ChevronDown size={12} style={{ transform: isUserMenuOpen ? 'rotate(180deg)' : 'none', transition: '0.3s' }} />
-                            </p>
+                        <div style={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
+                            <p style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-primary)', lineHeight: 1.2 }}>{user?.hospitalName || 'Dashboard'}</p>
+                            <p style={{ fontSize: '11px', fontWeight: '700', color: 'var(--brand-primary)' }}>{user?.adminName || 'Manager'}</p>
                         </div>
                         <motion.div
                             whileHover={{ scale: 1.1 }}
                             style={{
                                 width: '40px',
                                 height: '40px',
-                                borderRadius: 'var(--radius-lg)',
-                                background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-teal))',
+                                borderRadius: '12px',
+                                background: 'var(--brand-primary)',
+                                color: 'white',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                fontWeight: 'bold',
-                                position: 'relative'
+                                fontSize: '14px',
+                                fontWeight: '800',
+                                boxShadow: '0 4px 12px rgba(0, 82, 212, 0.2)'
                             }}
                         >
-                            <span style={{ fontSize: '0.9rem', color: 'white', margin: 'auto' }}>A</span>
+                            {(user?.adminName || 'A')[0]}
                         </motion.div>
                     </div>
 
@@ -369,7 +371,13 @@ const Header = () => {
                     </AnimatePresence>
                 </div>
             </div>
+
         </motion.header>
+        <WhatsAppChat 
+            isOpen={showChat} 
+            onClose={() => setShowChat(false)} 
+        />
+        </>
     );
 };
 

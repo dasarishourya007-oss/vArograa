@@ -1,0 +1,336 @@
+﻿
+> healthlink@0.0.0 lint
+> eslint .
+
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\ai\AIService.js
+  24:14  error  'checkDailyLimit' is not defined  no-undef
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\components\BottomNav.jsx
+  3:10  error  'useTranslation' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\components\DoctorNavbar.jsx
+  8:11  error  'navigate' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\components\Header.jsx
+   10:19  error  'logout' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u    no-unused-vars
+   11:11  error  'navigate' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+  135:28  error  'handleLogout' is not defined                                                                      no-undef
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\components\LocationPicker.jsx
+   10:54  error  'currentCity' is defined but never used  no-unused-vars
+  117:26  error  'error' is defined but never used        no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\components\VoiceAssistant.jsx
+   17:12  error    'transcript' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u                                    no-unused-vars
+   17:24  error    'setTranscript' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u                                 no-unused-vars
+   34:8   warning  React Hook useEffect has missing dependencies: 'messages.length' and 'user?.name'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+   80:8   warning  React Hook useEffect has a missing dependency: 'handleUserVoiceInput'. Either include it or remove the dependency array                react-hooks/exhaustive-deps
+  149:25  error    'hospital' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u                                      no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\components\patient\PatientDashboard.jsx
+  11:30  error  Error: Cannot access variable before it is declared
+
+`mungeCoords` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+   9 |     const stored = JSON.parse(localStorage.getItem('healthlink_hospitals') || '[]');
+  10 |     return stored.map(h => ({
+> 11 |       position: h.location ? mungeCoords(h.location) : [17.4483, 78.3915],
+     |                              ^^^^^^^^^^^ `mungeCoords` accessed before it is declared
+  12 |       title: h.name,
+  13 |       description: h.address
+  14 |     }));
+
+  17 |   const [currentLocName, setCurrentLocName] = useState("Detecting...");
+  18 |
+> 19 |   function mungeCoords(coordStr) {
+     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 20 |     // Simple parser for "17.4483┬░ N, 78.3915┬░ E" format
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 21 |     const parts = coordStr.split(',');
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 22 |     if (parts.length < 2) return [17.4483, 78.3915];
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 23 |     const lat = parseFloat(parts[0]);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 24 |     const lng = parseFloat(parts[1]);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 25 |     return [lat, lng];
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 26 |   }
+     | ^^^^ `mungeCoords` is declared here
+  27 |   return (
+  28 |     <div className="min-h-screen bg-gray-100">
+  29 |       {/* Header */}  react-hooks/immutability
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\context\AuthContext.jsx
+   39:27  error    'setNotifications' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+  135:8   warning  React Hook useEffect has a missing dependency: 'user'. Either include it or remove the dependency array    react-hooks/exhaustive-deps
+  433:28  error    'did' is defined but never used                                                                            no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\firebase\auth.js
+   33:5  error  Unnecessary try/catch wrapper  no-useless-catch
+   96:5  error  Unnecessary try/catch wrapper  no-useless-catch
+  130:5  error  Unnecessary try/catch wrapper  no-useless-catch
+  158:5  error  Unnecessary try/catch wrapper  no-useless-catch
+  181:5  error  Unnecessary try/catch wrapper  no-useless-catch
+  206:5  error  Unnecessary try/catch wrapper  no-useless-catch
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\firebase\config.js
+  3:31  error  'getFirestore' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\firebase\migration.js
+  6:7  error  'clearCollection' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\firebase\services.js
+   4:5  error  'getDoc' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+  34:5  error  Unnecessary try/catch wrapper                                                           no-useless-catch
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\i18n.js
+  317:13  error  Duplicate key 'varogra_smart_brain'  no-dupe-keys
+  474:13  error  Duplicate key 'varogra_smart_brain'  no-dupe-keys
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\pages\DoctorDashboard.jsx
+  74:19  error  'historyWithContext' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\pages\DoctorProfile.jsx
+   1:17  error  'useState' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+  16:42  error  'useAuth' is not defined                                                                  no-undef
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\pages\Home.jsx
+   2:10  error  'useNavigate' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       no-unused-vars
+  17:20  error  Error: Avoid constructing JSX within try/catch
+
+React does not immediately render components when JSX is rendered, so any errors from this component will not be caught by the try/catch. To catch errors in rendering a given component, wrap that component in an error boundary. (https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary).
+
+  15 |         // Not logged in -> Show Login Selection directly
+  16 |         if (!user) {
+> 17 |             return <LoginSelection />;
+     |                    ^^^^^^^^^^^^^^^^^^ Avoid constructing JSX within try/catch
+  18 |         }
+  19 |
+  20 |         // Doctor Logged In                                   react-hooks/error-boundaries
+  22:20  error  Error: Avoid constructing JSX within try/catch
+
+React does not immediately render components when JSX is rendered, so any errors from this component will not be caught by the try/catch. To catch errors in rendering a given component, wrap that component in an error boundary. (https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary).
+
+  20 |         // Doctor Logged In
+  21 |         if (user.role === 'doctor') {
+> 22 |             return <DoctorDashboard />;
+     |                    ^^^^^^^^^^^^^^^^^^^ Avoid constructing JSX within try/catch
+  23 |         }
+  24 |
+  25 |         // Medical Store Logged In                                       react-hooks/error-boundaries
+  27:20  error  Error: Avoid constructing JSX within try/catch
+
+React does not immediately render components when JSX is rendered, so any errors from this component will not be caught by the try/catch. To catch errors in rendering a given component, wrap that component in an error boundary. (https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary).
+
+  25 |         // Medical Store Logged In
+  26 |         if (user.role === 'medical_store') {
+> 27 |             return <MedicalStoreDashboard />;
+     |                    ^^^^^^^^^^^^^^^^^^^^^^^^^ Avoid constructing JSX within try/catch
+  28 |         }
+  29 |
+  30 |         // Patient Logged In -> NEW DASHBOARD  react-hooks/error-boundaries
+  31:16  error  Error: Avoid constructing JSX within try/catch
+
+React does not immediately render components when JSX is rendered, so any errors from this component will not be caught by the try/catch. To catch errors in rendering a given component, wrap that component in an error boundary. (https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary).
+
+  29 |
+  30 |         // Patient Logged In -> NEW DASHBOARD
+> 31 |         return <PatientDashboard />;
+     |                ^^^^^^^^^^^^^^^^^^^^ Avoid constructing JSX within try/catch
+  32 |     } catch (error) {
+  33 |         console.error("Home Component Crash:", error);
+  34 |         return (                react-hooks/error-boundaries
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\pages\PatientDashboard.jsx
+    12:35  error  'useMotionValue' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u          no-unused-vars
+    12:51  error  'useSpring' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u               no-unused-vars
+    12:62  error  'useTransform' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u            no-unused-vars
+    18:10  error  'getAIResponse' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u           no-unused-vars
+    21:55  error  'mockMedicalStores' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u       no-unused-vars
+    22:24  error  'getDoctors' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u              no-unused-vars
+    32:13  error  'allHospitals' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u   no-unused-vars
+    32:82  error  'medicalStores' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+   215:11  error  'isBirthday' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u     no-unused-vars
+   919:27  error  'onNavigate' is defined but never used                                                                  no-unused-vars
+   920:13  error  'user' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u           no-unused-vars
+   995:18  error  'error' is defined but never used                                                                       no-unused-vars
+  1021:18  error  'error' is defined but never used                                                                       no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\pages\auth\DoctorRegister.jsx
+  13:13  error  'registerDoctor' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\pages\auth\PatientLogin.jsx
+    1:27  error  'useRef' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u            no-unused-vars
+   12:23  error  'mockHospitals' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u     no-unused-vars
+  336:18  error  'setStep' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+  383:18  error  'error' is defined but never used                                                                 no-unused-vars
+  402:18  error  'error' is defined but never used                                                                 no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\frontend\src\utils\AIService.js
+  53:46  error  'role' is assigned a value but never used  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\parse_eslint.js
+  1:12  error  'require' is not defined  no-undef
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\components\Header.jsx
+  11:11  error  'location' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\components\patient\vArograFeatures.jsx
+  27:11  warning  The 'handleSOS' function makes the dependencies of useEffect Hook (at line 54) change on every render. Move it inside the useEffect callback. Alternatively, wrap the definition of 'handleSOS' in its own useCallback() Hook  react-hooks/exhaustive-deps
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\context\AuthContext.jsx
+  637:28  error  '_did' is defined but never used  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\firebase\auth.js
+  199:5   error  'uid' is not defined  no-undef
+  206:9   error  'uid' is not defined  no-undef
+  219:35  error  'uid' is not defined  no-undef
+  221:60  error  'uid' is not defined  no-undef
+  222:13  error  'uid' is not defined  no-undef
+  226:33  error  'uid' is not defined  no-undef
+  227:13  error  'uid' is not defined  no-undef
+  231:14  error  'uid' is not defined  no-undef
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\firebase\services.js
+  303:13  error  Empty block statement                       no-empty
+  330:57  error  '_hospitalId' is defined but never used     no-unused-vars
+  330:70  error  '_date' is defined but never used           no-unused-vars
+  330:77  error  '_time' is defined but never used           no-unused-vars
+  352:60  error  '_preferredTime' is defined but never used  no-unused-vars
+  366:60  error  '_patientId' is defined but never used      no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\DoctorDashboard.jsx
+  69:19  error  'clinicalContext' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\MedicalStoreDashboard.jsx
+  86:15  error  'duration' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\auth\PatientLogin.jsx
+    1:27  error  'useRef' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u            no-unused-vars
+   12:23  error  'mockHospitals' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u     no-unused-vars
+  336:18  error  'setStep' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+  384:18  error  'error' is defined but never used                                                                 no-unused-vars
+  402:18  error  'error' is defined but never used                                                                 no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\auth\UnifiedAuth.jsx
+  79:18  error  'err' is defined but never used  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\doctor\DoctorDashboard.jsx
+  21:44  error  'Icon' is defined but never used  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\doctor\PrescriptionManager.jsx
+  589:31  error  'setActiveAppointment' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 no-unused-vars
+  605:13  error  Error: Cannot access variable before it is declared
+
+`setActiveTemplate` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  603 |     useEffect(() => {
+  604 |         if (activeAppointment) {
+> 605 |             setActiveTemplate(DEFAULT_TEMPLATES[0]); // Default to first template
+      |             ^^^^^^^^^^^^^^^^^ `setActiveTemplate` accessed before it is declared
+  606 |         }
+  607 |     }, [activeAppointment]);
+  608 |
+
+  608 |
+  609 |     const [searchTerm, setSearchTerm] = useState('');
+> 610 |     const [activeTemplate, setActiveTemplate] = useState(null);
+      |                            ^^^^^^^^^^^^^^^^^ `setActiveTemplate` is declared here
+  611 |     const [viewPrescription, setViewPrescription] = useState(null);
+  612 |     const [showCreateTemplate, setShowCreateTemplate] = useState(false);
+  613 |     const [successMsg, setSuccessMsg] = useState('');  react-hooks/immutability
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\doctor\SmartScript.jsx
+  40:12  error  'selectedPatient' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u                                                                                                                                                                                                                                                                                                                                                                                                         no-unused-vars
+  66:9   error  Error: This value cannot be modified
+
+Modifying a value returned from 'useState()', which should not be modified directly. Use the setter function to update instead.
+
+  64 |         setIsDrawing(true);
+  65 |         const { offsetX, offsetY } = e.nativeEvent;
+> 66 |         ctx.strokeStyle = isEraser ? "#111" : "#ffffff";
+     |         ^^^ `ctx` cannot be modified
+  67 |         ctx.lineWidth = isEraser ? 20 : 3;
+  68 |         ctx.beginPath();
+  69 |         ctx.moveTo(offsetX, offsetY);  react-hooks/immutability
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\doctor\components\ContactSpecialistModal.jsx
+  112:148  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  110 |                                 </div>
+  111 |                                 <h4 style={{ color: 'white', marginBottom: '0.5rem' }}>Transmission Success</h4>
+> 112 |                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Message encrypted and delivered via node {Math.floor(Math.random() * 900) + 100}x.</p>
+      |                                                                                                                                                    ^^^^^^^^^^^^^ Cannot call impure function
+  113 |                             </motion.div>
+  114 |                         ) : (
+  115 |                             <form onSubmit={handleSend}>  react-hooks/purity
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\doctor\components\Sidebar.jsx
+  1:17  error  'useState' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\hospital\components\ContactSpecialistModal.jsx
+  112:148  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  110 |                                 </div>
+  111 |                                 <h4 style={{ color: 'white', marginBottom: '0.5rem' }}>Transmission Success</h4>
+> 112 |                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Message encrypted and delivered via node {Math.floor(Math.random() * 900) + 100}x.</p>
+      |                                                                                                                                                    ^^^^^^^^^^^^^ Cannot call impure function
+  113 |                             </motion.div>
+  114 |                         ) : (
+  115 |                             <form onSubmit={handleSend}>  react-hooks/purity
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\hospital\components\Header.jsx
+  24:21  error  'user' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\hospital\context\AppointmentContext.jsx
+  51:46  error  'finalDuration' is defined but never used  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\hospital\context\AuthContext.jsx
+  16:12  error  'loading' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u     no-unused-vars
+  16:21  error  'setLoading' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\hospital\pages\Appointments.jsx
+  199:30  error  'addDoc' is not defined           no-undef
+  201:28  error  'serverTimestamp' is not defined  no-undef
+  202:28  error  'serverTimestamp' is not defined  no-undef
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\hospital\pages\BloodBank.jsx
+  46:8   warning  React Hook React.useEffect has a missing dependency: 'hospitals'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  93:11  error    'handleCancel' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u               no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\hospital\pages\Dashboard.jsx
+   31:10  error    'auth' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u                           no-unused-vars
+  100:7   error    'analyticData' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u          no-unused-vars
+  145:11  error    'navigate' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u              no-unused-vars
+  192:8   warning  React Hook React.useEffect has a missing dependency: 'next'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\pages\hospital\pages\LiveConsultations.jsx
+  23:54  error  'startTime' is defined but never used  no-unused-vars
+  23:75  error  'progress' is defined but never used   no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\scripts\test_firestore_schema.js
+  5:38  error  'doc' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u       no-unused-vars
+  5:54  error  'query' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u     no-unused-vars
+  5:61  error  'where' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u     no-unused-vars
+  5:68  error  'getDocs' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u   no-unused-vars
+  7:16  error  'runTests' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\services\aiService.js
+  11:43  error  'imageURL' is defined but never used  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\services\doctorService.js
+  12:5  error  'limit' is defined but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+C:\Users\Sreenath\OneDrive\Desktop\v\poiuy\healthlink\src\utils\AIService.js
+   55:46  error  'role' is assigned a value but never used                                                           no-unused-vars
+  112:23  error  'errorData' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]|^motion$/u  no-unused-vars
+
+Γ£û 115 problems (109 errors, 6 warnings)
+

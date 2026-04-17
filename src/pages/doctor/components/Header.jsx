@@ -20,6 +20,7 @@ import {
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
+import WhatsAppChat from '../../../components/WhatsAppChat';
 
 const Header = () => {
     const navigate = useNavigate();
@@ -29,6 +30,7 @@ const Header = () => {
     const [isVisible, setIsVisible] = React.useState(true);
     const [selectedIndex, setSelectedIndex] = React.useState(0);
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
+    const [showChat, setShowChat] = React.useState(false);
     const searchInputRef = React.useRef(null);
     const { scrollY } = useScroll();
 
@@ -204,29 +206,31 @@ const Header = () => {
                     </AnimatePresence>
                 </div>
 
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    padding: '8px 16px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
-                    boxShadow: '0 0 15px rgba(16, 185, 129, 0.1)'
-                }}>
-                    <motion.div
-                        animate={{ scale: [1, 1.2, 1] }}
-                        transition={{ repeat: Infinity, duration: 1.5 }}
-                        style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success, #22C55E)', boxShadow: '0 0 8px var(--success, #22C55E)' }}
-                    />
-                    <span style={{ fontSize: '0.75rem', color: 'var(--success, #22C55E)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                        Clinical Link Active
-                    </span>
-                </div>
+
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-                <div style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setShowChat(true)}
+                        style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '12px',
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#3B82F6',
+                            border: '1px solid rgba(59, 130, 246, 0.2)',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <MessageSquare size={18} />
+                    </motion.button>
+
+                    <div style={{ position: 'relative' }}>
                     <div
                         style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
                         onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
@@ -293,6 +297,11 @@ const Header = () => {
                     </AnimatePresence>
                 </div>
             </div>
+
+            <WhatsAppChat 
+                isOpen={showChat} 
+                onClose={() => setShowChat(false)} 
+            />
         </motion.header>
     );
 };

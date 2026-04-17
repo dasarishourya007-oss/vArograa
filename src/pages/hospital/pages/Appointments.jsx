@@ -11,12 +11,17 @@ import {
     Activity,
     CheckCircle,
     AlertTriangle,
-    UserCheck
+    UserCheck,
+    Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeToAppointments, updateAppointmentStatus } from '../../../firebase/services';
-import { db, auth } from '../../../firebase/config';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { 
+    subscribeToAppointments, 
+    updateAppointmentStatus 
+} from '../../../firebase/services';
+import { db } from '../../../firebase/config';
+import { collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 
 const HistoricalItem = ({ item, idx }) => (
     <motion.div
@@ -38,7 +43,7 @@ const HistoricalItem = ({ item, idx }) => (
         </div>
         <div style={{ flex: 1 }}>
             <h5 style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--text-primary)' }}>{item.patientName || item.name}</h5>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.doctorName || item.doctor} • Completed at {new Date(item.updatedAt?.seconds * 1000).toLocaleTimeString()}</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.doctorName || item.doctor} â€¢ Completed at {new Date(item.updatedAt?.seconds * 1000).toLocaleTimeString()}</p>
         </div>
         <div style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-muted)', background: 'var(--bg-main)', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-glass)' }}>
             DONE
@@ -46,7 +51,7 @@ const HistoricalItem = ({ item, idx }) => (
     </motion.div>
 );
 
-const QueueItem = ({ item, idx, doctors, onAssign, isEmergency }) => {
+const QueueItem = ({ item, idx, doctors, onAssign, onReject, isEmergency }) => {
     const [selectedDoc, setSelectedDoc] = useState('');
 
     return (
@@ -54,18 +59,37 @@ const QueueItem = ({ item, idx, doctors, onAssign, isEmergency }) => {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: idx * 0.1 }}
-            whileHover={{ x: 5, background: 'rgba(59, 130, 246, 0.05)' }}
+            whileHover={!isEmergency ? { x: 5, background: 'rgba(59, 130, 246, 0.05)' } : {}}
             style={{
                 display: 'flex',
                 alignItems: 'center',
                 padding: '1.25rem 2rem',
                 borderRadius: 'var(--radius-lg)',
-                border: '1px solid var(--border-glass)',
+                border: item.status === 'assigned' ? '1px solid var(--brand-primary)' : '1px solid var(--border-glass)',
                 marginBottom: '1rem',
-                background: 'var(--bg-surface)',
-                transition: 'var(--transition)'
+                background: item.status === 'assigned' ? 'rgba(59, 130, 246, 0.02)' : 'var(--bg-surface)',
+                transition: 'var(--transition)',
+                position: 'relative',
+                overflow: 'hidden'
             }}
         >
+            {item.status === 'assigned' && (
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    padding: '4px 12px',
+                    background: 'var(--brand-primary)',
+                    color: 'white',
+                    fontSize: '0.65rem',
+                    fontWeight: '900',
+                    borderBottomLeftRadius: '10px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                }}>
+                    Assigned
+                </div>
+            )}
             <div style={{
                 minWidth: '60px',
                 height: '60px',
@@ -89,8 +113,13 @@ const QueueItem = ({ item, idx, doctors, onAssign, isEmergency }) => {
                         <Clock size={14} /> {item.time || 'ASAP'}
                     </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--brand-primary)', fontWeight: '700' }}>
-                        {item.type || 'General'} Appointment
+                        {(item.appointmentType || item.type || 'General')} Appointment
                     </span>
+                    {item.status === 'assigned' && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--brand-teal)', fontWeight: '800' }}>
+                            <UserCheck size={14} /> Assigned to {item.doctorName || 'Clinician'}
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -116,23 +145,43 @@ const QueueItem = ({ item, idx, doctors, onAssign, isEmergency }) => {
 
             <div style={{ display: 'flex', gap: '10px' }}>
                 <motion.button
-                    title="Approve & Dispatch"
-                    whileHover={!isEmergency && selectedDoc ? { scale: 1.05 } : {}}
-                    whileTap={!isEmergency && selectedDoc ? { scale: 0.95 } : {}}
-                    onClick={() => !isEmergency && selectedDoc && onAssign(item.id, selectedDoc)}
+                    title={item.status === 'assigned' ? "Reassign Mission" : "Dispatch Mission to Doctor"}
+                    whileHover={!isEmergency ? { scale: 1.05 } : {}}
+                    whileTap={!isEmergency ? { scale: 0.95 } : {}}
+                    onClick={() => !isEmergency && onAssign(item.id, selectedDoc || item.doctorRefId || item.doctorId)}
                     className="btn-premium"
-                    disabled={isEmergency || !selectedDoc}
+                    disabled={isEmergency || (!selectedDoc && !item.doctorRefId && !item.doctorId)}
                     style={{
                         padding: '12px 20px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: '8px',
-                        cursor: (isEmergency || !selectedDoc) ? 'not-allowed' : 'pointer',
-                        opacity: (isEmergency || !selectedDoc) ? 0.5 : 1
+                        cursor: (isEmergency || (!selectedDoc && !item.doctorRefId && !item.doctorId)) ? 'not-allowed' : 'pointer',
+                        opacity: (isEmergency || (!selectedDoc && !item.doctorRefId && !item.doctorId)) ? 0.5 : 1,
+                        background: item.status === 'assigned' ? 'var(--brand-teal)' : 'var(--brand-primary)'
                     }}
                 >
-                    <UserCheck size={18} /> Approve
+                    <Zap size={18} /> {item.status === 'assigned' ? 'Reassign' : 'Dispatch'}
+                </motion.button>
+                <motion.button
+                    title="Reject"
+                    whileHover={!isEmergency ? { scale: 1.03 } : {}}
+                    whileTap={!isEmergency ? { scale: 0.97 } : {}}
+                    onClick={() => !isEmergency && onReject(item.id)}
+                    disabled={isEmergency}
+                    style={{
+                        padding: '12px 16px',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        color: 'var(--critical)',
+                        fontWeight: 800,
+                        cursor: isEmergency ? 'not-allowed' : 'pointer',
+                        opacity: isEmergency ? 0.5 : 1
+                    }}
+                >
+                    Reject
                 </motion.button>
             </div>
         </motion.div>
@@ -140,46 +189,142 @@ const QueueItem = ({ item, idx, doctors, onAssign, isEmergency }) => {
 };
 
 const Appointments = () => {
+    const { user } = useAuth();
     const [pendingQueue, setPendingQueue] = useState([]);
     const [history, setHistory] = useState([]);
     const [doctors, setDoctors] = useState([]);
     const [isEmergency, setIsEmergency] = useState(false);
     const [showLogs, setShowLogs] = useState(false);
 
-    const hospitalId = auth?.currentUser?.uid || 'demo-hospital-id';
+    const hospitalPrimaryId = user?.hospitalId || user?.uid || localStorage.getItem('varogra_hospital_id') || 'demo-hospital-id';
+    const hospitalRefId = localStorage.getItem('varogra_hospital_id') || user?.uid || null;
+    const hospitalIdCandidates = Array.from(new Set([hospitalPrimaryId, hospitalRefId].filter(Boolean)));
+
 
     useEffect(() => {
-        // Fetch Doctors for assignment
         const fetchDoctors = async () => {
-            if (!db || !hospitalId) return;
-            const q = query(collection(db, "hospitals", hospitalId, "doctors"), where("status", "==", "APPROVED"));
-            const snap = await getDocs(q);
-            setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            if (!db || hospitalIdCandidates.length === 0) return;
+            const primary = query(collection(db, "hospitals", hospitalPrimaryId, "doctors"), where("status", "==", "APPROVED"));
+            const primarySnap = await getDocs(primary);
+            let docs = primarySnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            if (docs.length === 0 && hospitalRefId && hospitalRefId !== hospitalPrimaryId) {
+                const fallback = query(collection(db, "hospitals", hospitalRefId, "doctors"), where("status", "==", "APPROVED"));
+                const fallbackSnap = await getDocs(fallback);
+                docs = fallbackSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            }
+
+            setDoctors(docs);
         };
+
         fetchDoctors();
 
-        // Subscribe to Pending Appointments
-        const unsubPending = subscribeToAppointments({ hospitalId, status: 'pending' }, setPendingQueue);
+        const sourceRows = new Map();
+        const recompute = () => {
+            const merged = Array.from(sourceRows.values()).flat();
+            const seen = new Set();
+            const unique = merged.filter((item) => {
+                if (!item?.id || seen.has(item.id)) return false;
+                seen.add(item.id);
+                return true;
+            });
+            setPendingQueue(unique.filter((a) => {
+                const s = String(a.status || '').toLowerCase();
+                return s === 'pending' || s === 'assigned';
+            }));
+            setHistory(unique.filter((a) => String(a.status || '').toLowerCase() === 'completed').slice(0, 10));
+        };
 
-        // Subscribe to Completed Appointments
-        const unsubHistory = subscribeToAppointments({ hospitalId, status: 'completed' }, (data) => setHistory(data.slice(0, 10)));
+        // BUG FIX: Subscribe to BOTH hospitalId AND hospitalRefId keys so all patient bookings appear
+        const allKeys = [
+            ...hospitalIdCandidates.map(id => ({ hospitalId: id })),
+            ...hospitalIdCandidates.map(id => ({ hospitalRefId: id }))
+        ];
+        // Deduplicate so we don't double-subscribe identical queries
+        const seenKeys = new Set();
+        const uniqueKeys = allKeys.filter(f => {
+            const k = JSON.stringify(f);
+            if (seenKeys.has(k)) return false;
+            seenKeys.add(k);
+            return true;
+        });
+
+        const unsubscribers = uniqueKeys.map((f) =>
+            subscribeToAppointments(f, (data) => {
+                const key = JSON.stringify(f);
+                sourceRows.set(key, data || []);
+                recompute();
+            })
+        );
 
         return () => {
-            unsubPending();
-            unsubHistory();
+            unsubscribers.forEach((u) => u && u());
         };
-    }, [hospitalId]);
+    }, [hospitalPrimaryId, hospitalRefId]);
 
     const handleAssign = async (appointmentId, doctorId) => {
-        const doc = doctors.find(d => d.id === doctorId);
+        const appointment = pendingQueue.find((a) => a.id === appointmentId);
+        if (!appointment) return;
+
+        const selectedDoctor = doctors.find(d => d.id === doctorId);
+        const resolvedDoctorId =
+            selectedDoctor?.uid ||
+            selectedDoctor?.userId ||
+            selectedDoctor?.doctorId ||
+            appointment?.doctorId ||
+            doctorId;
+        const resolvedDoctorRefId = selectedDoctor?.id || appointment?.doctorRefId || doctorId || '';
+        const resolvedDoctorName = selectedDoctor?.name || appointment?.doctorName || 'Assigned Doctor';
+
+        const isReassignment = !!(appointment.doctorId || appointment.doctorRefId);
+
+        if (!resolvedDoctorId) {
+            alert('No doctor found for this request. Please select a doctor and try again.');
+            return;
+        }
+
         try {
-            await updateAppointmentStatus(appointmentId, 'approved', {
-                doctorId: doctorId,
-                doctorName: doc.name
+            if (appointment?.date && appointment?.time) {
+                const conflictQuery = query(
+                    collection(db, "appointments"),
+                    where("doctorId", "==", resolvedDoctorId),
+                    where("date", "==", appointment.date),
+                    where("time", "==", appointment.time),
+                    where("status", "==", "accepted")
+                );
+                const conflictSnap = await getDocs(conflictQuery);
+                if (!conflictSnap.empty) {
+                    alert(`Doctor ${resolvedDoctorName} is not available at ${appointment.time}. Please choose another doctor or reject this request.`);
+                    return;
+                }
+            }
+
+            // Always move to 'assigned' to trigger the Doctor Validation Layer
+            const newStatus = 'assigned';
+
+            await updateAppointmentStatus(appointmentId, newStatus, {
+                doctorId: resolvedDoctorId,
+                doctorRefId: resolvedDoctorRefId,
+                doctorName: resolvedDoctorName,
+                originalDoctorId: isReassignment ? appointment.doctorId : (appointment.originalDoctorId || null),
+                originalDoctorName: isReassignment ? appointment.doctorName : (appointment.originalDoctorName || null),
+                reviewedByHospitalAt: serverTimestamp(),
+                assignmentType: isReassignment ? 'OVERRIDE' : 'INITIAL'
             });
-            alert(`vArogra ORCHESTRATION: Specialist ${doc.name} assigned to mission.`);
+            alert(`MISSION DISPATCHED: Dr. ${resolvedDoctorName} has been assigned. Waiting for clinician validation.`);
         } catch (error) {
             console.error("Error assigning doctor:", error);
+        }
+    };
+
+    const handleReject = async (appointmentId) => {
+        try {
+            await updateAppointmentStatus(appointmentId, 'rejected', {
+                reviewedByHospitalAt: serverTimestamp()
+            });
+            alert('Appointment rejected due to doctor availability.');
+        } catch (error) {
+            console.error('Error rejecting appointment:', error);
         }
     };
 
@@ -190,7 +335,8 @@ const Appointments = () => {
         }
         try {
             const appointmentData = {
-                hospitalId,
+                hospitalId: hospitalPrimaryId,
+                hospitalRefId,
                 patientName: 'Generic Walk-in',
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 status: 'pending',
@@ -223,7 +369,8 @@ const Appointments = () => {
 
     return (
         <div style={{ paddingBottom: '3rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '3.5rem' }}>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.5rem' }}>
                 <div>
                     <h2 style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1.5px', marginBottom: '0.5rem' }}>Appointment Orchestration</h2>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Managing patient flow and specialist assignment under hospital protocol.</p>
@@ -301,6 +448,7 @@ const Appointments = () => {
                                         idx={i}
                                         doctors={doctors}
                                         onAssign={handleAssign}
+                                        onReject={handleReject}
                                         isEmergency={isEmergency}
                                     />
                                 ))
@@ -379,7 +527,7 @@ const Appointments = () => {
                                     }}
                                 >
                                     <ChevronRight size={18} style={{ transform: showLogs ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }} />
-                                    {showLogs ? 'Dismiss Historical Logs' : 'View Audit Logs • Completed'}
+                                    {showLogs ? 'Dismiss Historical Logs' : 'View Audit Logs â€¢ Completed'}
                                 </motion.button>
 
                                 <AnimatePresence>
@@ -392,7 +540,7 @@ const Appointments = () => {
                                         >
                                             <div style={{ padding: '0 0.5rem' }}>
                                                 <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.25rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                                    Session Audit • {new Date().toLocaleDateString()}
+                                                    Session Audit â€¢ {new Date().toLocaleDateString()}
                                                 </h4>
                                                 {history.map((p, i) => (
                                                     <HistoricalItem key={p.id} item={p} idx={i} />
@@ -452,3 +600,14 @@ const Appointments = () => {
 };
 
 export default Appointments;
+
+
+
+
+
+
+
+
+
+
+

@@ -1,12 +1,34 @@
 import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../../../context/AuthContext';
+import DoctorDashboard from '../DoctorDashboard';
+import DoctorProfileDashboard from '../DoctorProfileDashboard';
 import '../../hospital/styles/global.css';
 
 const Layout = () => {
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const { user } = useAuth();
+    const { pathname } = useLocation();
+    const isApproved = user?.doctorStatus === 'APPROVED';
+
+    // Total Lockdown: If not approved, only show the pending message (but allow profile page)
+    if (!isApproved) {
+        if (pathname === '/dashboard/doctor/profile') {
+            return (
+                <div className="hospital-dashboard-root" style={{ minHeight: '100vh', background: 'var(--bg-main)' }}>
+                    <DoctorProfileDashboard />
+                </div>
+            );
+        }
+        return (
+            <div className="hospital-dashboard-root" style={{ minHeight: '100vh', background: 'var(--bg-main)' }}>
+                <DoctorDashboard />
+            </div>
+        );
+    }
 
     return (
         <div className="hospital-dashboard-root" style={{ display: 'flex', minHeight: '100vh' }}>

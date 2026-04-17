@@ -62,7 +62,7 @@ const UnifiedAuth = () => {
         try {
             let result;
             if (isLogin) {
-                result = await loginPatient(email, password);
+                result = await loginPatient(email.trim(), password);
             } else {
                 result = await registerPatient({
                     ...signupData,
@@ -98,14 +98,7 @@ const UnifiedAuth = () => {
             >
                 {/* Brand Header */}
                 <div className="text-center mb-8">
-                    <motion.div
-                        whileHover={{ scale: 1.05 }}
-                        className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-2xl shadow-blue-500/20 mb-6 group cursor-pointer"
-                    >
-                        <ShieldCheck className="text-white w-9 h-9" />
-                    </motion.div>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-3">vArogra</h1>
-                    <p className="text-slate-500 font-medium">
+                    <p className="text-slate-500 font-bold text-lg">
                         {isLogin ? "Enter your credentials to access the command center." : "Initialize your secure health protocol."}
                     </p>
                 </div>
@@ -139,7 +132,7 @@ const UnifiedAuth = () => {
                                 <AuthInput
                                     icon={<Mail size={18} />}
                                     type="email"
-                                    placeholder="Authorized Email"
+                                    placeholder="name@example.com"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required

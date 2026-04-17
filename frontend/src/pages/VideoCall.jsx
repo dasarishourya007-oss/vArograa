@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, PenTool, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import WritingBoard from '../components/WritingBoard';
+import { uploadPrescriptionImage, addAppointmentPrescription } from '../firebase/services';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const VideoCall = () => {
     const { id } = useParams();
@@ -14,6 +17,8 @@ const VideoCall = () => {
     const [muted, setMuted] = useState(false);
     const [videoOff, setVideoOff] = useState(false);
     const [status, setStatus] = useState('Connecting...');
+    const [showWritingBoard, setShowWritingBoard] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         const timer = setTimeout(() => setStatus('Connected'), 1500);
@@ -116,27 +121,101 @@ const VideoCall = () => {
                     onClick={() => setVideoOff(!videoOff)}
                 />
                 <div style={{
-                    width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#ef4444',
+                    width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#ef4444',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(239,68,68,0.4)'
+                    boxShadow: '0 4px 20px rgba(239,68,68,0.4)',
+                    transition: 'all 0.2s ease'
                 }} onClick={() => navigate(-1)}>
-                    <PhoneOff color="white" fill="white" />
+                    <PhoneOff color="white" fill="white" size={28} />
                 </div>
+                {isDoctor && (
+                    <ControlButton
+                        icon={<PenTool />}
+                        active={showWritingBoard}
+                        onClick={() => setShowWritingBoard(!showWritingBoard)}
+                        label="Prescribe"
+                    />
+                )}
                 <ControlButton icon={<MessageSquare />} onClick={() => alert('Chat Overlay')} />
             </div>
+
+            {/* Writing Board Overlay for Doctor */}
+            <AnimatePresence>
+                {showWritingBoard && isDoctor && (
+                    <motion.div
+                        initial={{ x: '100%' }}
+                        animate={{ x: 0 }}
+                        exit={{ x: '100%' }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            right: 0,
+                            width: '400px',
+                            height: '100%',
+                            backgroundColor: 'white',
+                            zIndex: 100,
+                            boxShadow: '-10px 0 30px rgba(0,0,0,0.3)',
+                            display: 'flex',
+                            flexDirection: 'column'
+                        }}
+                    >
+                        <div style={{ padding: '20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#333' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900' }}>DIGITAL PRESCRIPTION</h3>
+                            <button onClick={() => setShowWritingBoard(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666' }}>
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <div style={{ flex: 1, padding: '10px' }}>
+                            <WritingBoard onSave={async (dataUrl) => {
+                                setIsSaving(true);
+                                try {
+                                    const imageUrl = await uploadPrescriptionImage(id, dataUrl);
+                                    await addAppointmentPrescription({
+                                        appointmentId: id,
+                                        imageUrl,
+                                        doctorName: user.name,
+                                        patientId: appointment.userId
+                                    });
+                                    alert('Prescription sent to patient!');
+                                    setShowWritingBoard(false);
+                                } catch (e) {
+                                    alert('Failed to send prescription');
+                                } finally {
+                                    setIsSaving(false);
+                                }
+                            }} />
+                        </div>
+                        {isSaving && (
+                            <div style={{
+                                position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.7)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 'bold', zIndex: 110
+                            }}>
+                                Sending...
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
 
-const ControlButton = ({ icon, active, onClick }) => (
-    <button onClick={onClick} style={{
-        width: '48px', height: '48px', borderRadius: '50%',
-        backgroundColor: active ? 'white' : 'rgba(255,255,255,0.2)',
-        color: active ? 'black' : 'white',
-        border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-    }}>
-        {icon}
-    </button>
+const ControlButton = ({ icon, active, onClick, label }) => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+        <button onClick={onClick} style={{
+            width: '52px', height: '52px', borderRadius: '50%',
+            backgroundColor: active ? '#14b8a6' : 'rgba(255,255,255,0.15)',
+            color: 'white',
+            border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            backdropFilter: 'blur(10px)',
+            boxShadow: active ? '0 0 15px rgba(20,184,166,0.4)' : 'none'
+        }}>
+            {icon}
+        </button>
+        {label && <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: active ? '#14b8a6' : '#999' }}>{label}</span>}
+    </div>
 );
 
 export default VideoCall;

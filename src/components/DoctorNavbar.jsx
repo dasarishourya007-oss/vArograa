@@ -1,11 +1,9 @@
 import React from 'react';
 import { Bell, LogOut, ShieldCheck, User, Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
 
 const DoctorNavbar = ({ onLogoutClick }) => {
     const { user } = useAuth();
-    const navigate = useNavigate();
 
     return (
         <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-[#E2E8F0] px-6 flex items-center justify-between z-40">
@@ -43,8 +41,12 @@ const DoctorNavbar = ({ onLogoutClick }) => {
                         <p className="text-sm font-bold text-[var(--text-primary)] group-hover:text-[var(--brand-primary)]">Dr. {user?.name}</p>
                         <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">{user?.code || 'DOC-4921'}</p>
                     </div>
-                    <div className="w-10 h-10 rounded-xl bg-[var(--brand-primary)]/10 flex items-center justify-center text-[var(--brand-primary)] border border-[var(--brand-primary)]/20 group-hover:bg-[var(--brand-primary)] group-hover:text-white transition-all">
-                        <User size={20} />
+                    <div className="w-10 h-10 rounded-xl bg-[var(--brand-primary)]/10 flex items-center justify-center text-[var(--brand-primary)] border border-[var(--brand-primary)]/20 group-hover:bg-[var(--brand-primary)] group-hover:text-white transition-all overflow-hidden">
+                        {user?.photoURL ? (
+                            <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                            <User size={20} />
+                        )}
                     </div>
                 </div>
 

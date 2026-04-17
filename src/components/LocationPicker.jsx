@@ -3,11 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import {
     Search, MapPin, Navigation, Plus, ChevronRight,
-    X, Home, Briefcase, Map, Compass, MoreHorizontal, Share2, ArrowLeft, Check
+    X, Home, Briefcase, Map as MapIcon, Compass, MoreHorizontal, Share2, ArrowLeft, Check
 } from 'lucide-react';
 import MapComponent from './MapComponent';
 
-const LocationPicker = ({ isOpen, onClose, onSelect, currentCity }) => {
+const LocationPicker = ({ isOpen, onClose, onSelect }) => {
     const { t } = useTranslation();
     const [searchTerm, setSearchTerm] = useState('');
     const [isFetching, setIsFetching] = useState(false);
@@ -114,7 +114,7 @@ const LocationPicker = ({ isOpen, onClose, onSelect, currentCity }) => {
                     const parts = data.display_name.split(',');
                     const shortAddress = parts.length > 2 ? `${parts[0]}, ${parts[1]}` : data.display_name;
                     onSelect(shortAddress);
-                } catch (error) {
+                } catch {
                     onSelect(`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
                 } finally {
                     setIsFetching(false);

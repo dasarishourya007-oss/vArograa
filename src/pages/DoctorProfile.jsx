@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, Star, Clock, MapPin,
@@ -49,7 +49,7 @@ const DoctorProfile = () => {
             {/* Cinematic Hero Section */}
             <div className="relative h-[380px] w-full">
                 <img
-                    src={doctor.image}
+                    src={doctor.photoURL || doctor.image || '/images/default-doctor.png'}
                     alt={doctor.name}
                     className="w-full h-full object-cover"
                 />
@@ -79,17 +79,28 @@ const DoctorProfile = () => {
                         className="flex flex-col gap-1"
                     >
                         <div className="flex items-center gap-2 mb-1">
+                            {/* Clinical Status */}
                             <div className={`px-2.5 py-1 rounded-lg backdrop-blur-md border border-white/10 text-[10px] font-bold text-white uppercase tracking-wider ${doctor.status === 'Available' ? 'bg-success/40' : doctor.status === 'In Consultation' ? 'bg-orange-500/40' : 'bg-slate-500/40'}`}>
                                 {doctor.status || 'ABSENT'}
                             </div>
+                            {/* Verification Status */}
+                            {doctor.status === 'PENDING_APPROVAL' && (
+                                <div className="px-2.5 py-1 rounded-lg backdrop-blur-md border border-amber-500/50 bg-amber-600/60 text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-1">
+                                    <Clock size={10} /> Pending Verification
+                                </div>
+                            )}
                             <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-accent/90 backdrop-blur-md text-white">
                                 <Star size={10} fill="currentColor" />
-                                <span className="text-[10px] font-black">{doctor.rating}</span>
+                                <span className="text-[10px] font-black">{doctor.rating || '4.5'}</span>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <h1 className="text-3xl font-black text-white leading-tight tracking-tight">{doctor.name}</h1>
-                            <ShieldCheck size={24} className="text-blue-400" fill="currentColor" />
+                            {doctor.status === 'APPROVED' || doctor.status === 'ACTIVE' ? (
+                                <ShieldCheck size={24} className="text-blue-400" fill="currentColor" />
+                            ) : (
+                                <ShieldCheck size={24} className="text-white/30" />
+                            )}
                         </div>
                         <p className="text-lg text-slate-200 font-medium">{doctor.specialty} • {doctor.experience}+ Years</p>
                     </motion.div>
@@ -151,11 +162,11 @@ const DoctorProfile = () => {
                         <div className="grid grid-cols-2 gap-3">
                             <div className="p-4 rounded-[24px] bg-white border border-border/50 flex flex-col items-center gap-1 shadow-sm">
                                 <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Online</span>
-                                <span className="text-xl font-black text-p-600">₹{doctor.fees.online}</span>
+                                <span className="text-xl font-black text-p-600">Rs.{doctor.fees.online}</span>
                             </div>
                             <div className="p-4 rounded-[24px] bg-white border border-border/50 flex flex-col items-center gap-1 shadow-sm">
                                 <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Hospital</span>
-                                <span className="text-xl font-black text-main">₹{doctor.fees.offline}</span>
+                                <span className="text-xl font-black text-main">Rs.{doctor.fees.offline}</span>
                             </div>
                         </div>
                     </div>
@@ -247,14 +258,14 @@ const DoctorProfile = () => {
                         className="flex-1 h-14 rounded-[24px] flex flex-col items-center justify-center gap-0.5 bg-p-50 hover:bg-p-100 transition-colors active:scale-95"
                     >
                         <span className="text-[11px] font-black text-p-600">📹 Online</span>
-                        <span className="text-[10px] font-bold text-p-400">₹{doctor.fees.online}</span>
+                        <span className="text-[10px] font-bold text-p-400">Rs.{doctor.fees.online}</span>
                     </button>
                     <button
                         onClick={() => navigate(`/book-appointment/${mainHospital.id}?doctor=${doctor.id}&type=hospital`)}
                         className="flex-[1.3] h-14 rounded-[24px] flex flex-col items-center justify-center gap-0.5 btn-primary shadow-lg shadow-p-600/20 active:scale-95 border-none"
                     >
                         <span className="text-[11px] font-black text-white">🏥 Hospital</span>
-                        <span className="text-[10px] font-bold text-white/80">₹{doctor.fees.offline}</span>
+                        <span className="text-[10px] font-bold text-white/80">Rs.{doctor.fees.offline}</span>
                     </button>
                 </div>
             )}

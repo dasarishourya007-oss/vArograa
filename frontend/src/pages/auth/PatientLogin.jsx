@@ -13,6 +13,18 @@ import { hospitals as mockHospitals } from '../../utils/mockData';
 
 // --- Custom Components ---
 
+const InputGroup = ({ icon, label, children, onClick, style }) => (
+    <div onClick={onClick} className="flex flex-col gap-1.5" style={style}>
+        {label && <label className="text-xs font-bold text-slate-500 ml-1">{label}</label>}
+        <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus-within:border-emerald-500 focus-within:bg-white transition-all">
+            {icon && <div className="text-emerald-500">{icon}</div>}
+            {children}
+        </div>
+    </div>
+);
+
+// --- View Components ---
+
 const CalendarPicker = ({ value, onChange, onClose }) => {
     const [viewDate, setViewDate] = useState(value ? new Date(value) : new Date());
     const [selectedDate, setSelectedDate] = useState(value ? new Date(value) : null);
@@ -122,10 +134,7 @@ const LoginView = ({ email, setEmail, password, setPassword, onSubmit, onSwitch,
     >
         <div className="text-center mb-8">
             <div className="flex items-center justify-center gap-1.5 mb-6">
-                <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="text-blue-600 drop-shadow-sm">
-                    <path d="M16 2C16 9.73 9.73 16 2 16C9.73 16 16 22.27 16 30C16 22.27 22.27 16 30 16C22.27 16 16 9.73 16 2Z" fill="currentColor" />
-                </svg>
-                <img src="/logo.jpg" alt="vArogra Logo" className="h-10 w-auto" />
+                <img src="/logo.png" alt="vArogra Logo" className="h-12 w-auto" />
             </div>
             <h2 className="text-3xl font-bold text-slate-900 mb-2">Welcome back</h2>
             <p className="text-slate-500 text-sm">Please enter your details to sign in</p>
@@ -166,8 +175,8 @@ const LoginView = ({ email, setEmail, password, setPassword, onSubmit, onSwitch,
                 <div className="flex items-center gap-3 px-4 py-3.5 bg-white border border-slate-200 rounded-xl focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all shadow-sm">
                     <Mail size={18} className="text-slate-400" />
                     <input
-                        type="email"
-                        placeholder="your@email.com"
+                        type="text"
+                        placeholder="Email or 123"
                         className="bg-transparent border-none outline-none w-full font-semibold text-slate-800 placeholder:text-slate-300"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -329,7 +338,7 @@ const OtpView = ({ phone, otp, setOtp, otpRefs, onVerify, onBack }) => (
 
 // --- Main Component ---
 
-const PatientLogin = () => {
+const PatientLogin = ({ isEmbedded = false }) => {
     const navigate = useNavigate();
     const { loginPatient, loginSocial, registerPatient } = useAuth();
     const [isLoginView, setIsLoginView] = useState(true);
@@ -366,23 +375,23 @@ const PatientLogin = () => {
         try {
             let result;
             if (socialProvider && typeof socialProvider === 'string') {
+                // Store intended role locally so AuthContext can use it immediately
+                localStorage.setItem('userRole', 'patient');
                 result = await loginSocial(socialProvider);
             } else {
                 result = await loginPatient(email, password);
             }
 
+            // REDIRECT IMMEDIATELY - result.success means Auth succeeded
+            // Profile data will continue loading in the background
             if (result.success) {
-                navigate('/');
+                navigate('/dashboard/patient');
             } else {
-                if (result.message === "ACCOUNT_NOT_FOUND") {
-                    setErrorMsg("Account not found. Please sign up first.");
-                } else {
-                    setErrorMsg(result.message || "Login failed. Please check your credentials.");
-                }
+                setErrorMsg(result.message || "Login failed.");
+                setIsLoading(false); // Only stop loading if it failed
             }
         } catch (error) {
             setErrorMsg("An unexpected error occurred.");
-        } finally {
             setIsLoading(false);
         }
     };
@@ -394,7 +403,7 @@ const PatientLogin = () => {
         try {
             const result = await registerPatient(signupData);
             if (result.success) {
-                navigate('/');
+                navigate('/dashboard/patient');
             } else {
                 setErrorMsg(result.message || 'Registration failed. Please try again.');
                 setIsLoginView(false); // Stay on signup view
@@ -407,8 +416,8 @@ const PatientLogin = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-[40px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] w-full max-w-[480px] p-8 relative overflow-hidden">
+        <div className={isEmbedded ? "" : "min-h-screen bg-slate-50 flex items-center justify-center p-4"}>
+            <div className={isEmbedded ? "" : "bg-white rounded-[40px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] w-full max-w-[480px] p-8 relative overflow-hidden"}>
                 <button onClick={() => navigate('/login')} className="absolute top-6 left-6 p-2 text-slate-400 hover:bg-slate-50 rounded-full transition-colors z-20">
                     <ArrowLeft size={20} />
                 </button>
@@ -445,14 +454,6 @@ const PatientLogin = () => {
     );
 };
 
-const InputGroup = ({ icon, label, children, onClick, style }) => (
-    <div onClick={onClick} className="flex flex-col gap-1.5" style={style}>
-        {label && <label className="text-xs font-bold text-slate-500 ml-1">{label}</label>}
-        <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus-within:border-emerald-500 focus-within:bg-white transition-all">
-            {icon && <div className="text-emerald-500">{icon}</div>}
-            {children}
-        </div>
-    </div>
-);
+// (This section is now empty because components were moved up)
 
 export default PatientLogin;

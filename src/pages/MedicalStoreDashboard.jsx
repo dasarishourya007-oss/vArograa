@@ -5,12 +5,19 @@ import {
     Package, Truck, CheckCircle, Clock,
     ArrowLeft, LogOut, DollarSign, ShoppingBag,
     TrendingUp, User, MapPin, Star, Settings, Image as ImageIcon,
-    Plus, Search, Receipt, Users, Trash2, Edit, Save, ScanLine, Printer, Eye, Boxes, HeartPulse, Wallet, Camera, Shield
+    Plus, Search, Receipt, Users, Trash2, Edit, Save, ScanLine, Printer, Eye, Boxes, HeartPulse, Wallet, Camera, Shield, Droplets, AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import ConfirmModal from '../components/ConfirmModal';
-import { subscribeToOrders, updateOrderStatus } from '../firebase/services';
+import { 
+    subscribeToOrders, 
+    updateOrderStatus, 
+    subscribeToInventory, 
+    addInventoryItem, 
+    updateInventoryItem, 
+    subscribeToStorePatients
+} from '../firebase/services';
 
 const billInputStyle = { width: '100%', padding: '16px 20px', borderRadius: '14px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', color: 'var(--text-primary)', outline: 'none', fontSize: '15px', transition: 'all 0.3s' };
 
@@ -84,7 +91,6 @@ const AnimatedNumber = ({ value, prefix = '', suffix = '' }) => {
     useEffect(() => {
         let start = 0;
         const duration = 1000;
-        const stepTime = Math.abs(Math.floor(duration / (value || 1)));
         const timer = setInterval(() => {
             start += Math.ceil(value / 60);
             if (start >= value) {
@@ -99,7 +105,7 @@ const AnimatedNumber = ({ value, prefix = '', suffix = '' }) => {
     return <span>{prefix}{displayValue.toLocaleString()}{suffix}</span>;
 };
 
-const KPIBlock = ({ icon, title, value, prefix, suffix, growth, color = '#10b981' }) => (
+const KPIBlock = ({ title, value, prefix, suffix, growth }) => (
     <motion.div
         whileHover={{ y: -4, boxShadow: '0 12px 30px rgba(0,0,0,0.08)' }}
         style={{ ...premiumCard, flex: 1, padding: '24px', position: 'relative', overflow: 'hidden' }}
@@ -185,7 +191,7 @@ const TableRow = ({ children }) => (
     </motion.tr>
 );
 
-const RevenueChart = ({ data = [40, 60, 45, 90, 65, 80, 50], labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], color = '#10b981', currency = '₹' }) => {
+const RevenueChart = ({ data = [40, 60, 45, 90, 65, 80, 50], labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], color = '#10b981', currency = 'Rs.' }) => {
     const [hoveredIndex, setHoveredIndex] = useState(null);
     const max = Math.max(...data, 100);
     const height = 180; // Compact height
@@ -335,14 +341,65 @@ const MedicalStoreDashboard = () => {
     const [availableItems, setAvailableItems] = useState({});
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const [realOrders, setRealOrders] = useState([]);
+    const [globalEmergency, setGlobalEmergency] = useState(null);
+    const [showBloodRequestModal, setShowBloodRequestModal] = useState(false);
+    const [selectedBloodType, setSelectedBloodType] = useState('O+');
+    const [broadcastStatus, setBroadcastStatus] = useState('idle');
+
+    // Simulated Global Emergency Listener
+    useEffect(() => {
+        const handleEmergency = (e) => {
+            const data = e.detail;
+            setGlobalEmergency(data);
+            setTimeout(() => setGlobalEmergency(null), 15000);
+        };
+        window.addEventListener('varogra_emergency_broadcast', handleEmergency);
+        return () => window.removeEventListener('varogra_emergency_broadcast', handleEmergency);
+    }, []);
+
+    const handleBloodBroadcast = () => {
+        setBroadcastStatus('broadcasting');
+        const emergencyData = {
+            id: Date.now(),
+            type: selectedBloodType,
+            location: `${user?.storeName || user?.name || 'Medical Store'}`,
+            requester: `Pharmacy Admin`,
+            timestamp: new Date().toISOString()
+        };
+
+        setTimeout(() => {
+            setBroadcastStatus('success');
+            window.dispatchEvent(new CustomEvent('varogra_emergency_broadcast', { 
+                detail: emergencyData 
+            }));
+            setTimeout(() => {
+                setBroadcastStatus('idle');
+                setShowBloodRequestModal(false);
+            }, 2000);
+        }, 3000);
+    };
 
     useEffect(() => {
         if (!user) return;
         const storeId = user.uid || user.id;
-        const unsub = subscribeToOrders(storeId, (data) => {
+        
+        const unsubOrders = subscribeToOrders(storeId, (data) => {
             setRealOrders(data);
         });
-        return () => unsub();
+
+        const unsubInventory = subscribeToInventory(storeId, (data) => {
+            setInventory(data);
+        });
+
+        const unsubPatients = subscribeToStorePatients(storeId, (data) => {
+            setPatients(data);
+        });
+
+        return () => {
+            unsubOrders();
+            unsubInventory();
+            unsubPatients();
+        };
     }, [user]);
 
     // Inventory Management State
@@ -388,18 +445,8 @@ const MedicalStoreDashboard = () => {
     const currentData = getChartData();
 
     // --- Mock Data from MediFlow ---
-    const [inventory, setInventory] = useState([
-        { id: 1, brandName: 'Dolo 650', genericName: 'Paracetamol', saltComposition: 'Paracetamol 650mg IP', category: 'Analgesic', price: 30.00, stock: 120, packSize: 15, form: 'Tablet', rx: false },
-        { id: 2, brandName: 'Citrogin', genericName: 'Levocetirizine', saltComposition: 'Levocetirizine 5mg', category: 'Antihistamine', price: 18.00, stock: 8, packSize: 10, form: 'Tablet', rx: true },
-        { id: 3, brandName: 'Augmentin 625', genericName: 'Amoxicillin + Clavulanic Acid', saltComposition: 'Amoxicillin 500mg, Clavulanic Acid 125mg', category: 'Antibiotic', price: 210.00, stock: 45, packSize: 10, form: 'Tablet', rx: true },
-        { id: 4, brandName: 'Benadryl', genericName: 'Diphenhydramine', saltComposition: 'Diphenhydramine 12.5mg/5ml', category: 'Cough Syrup', price: 110.00, stock: 15, packSize: 1, form: 'Syrup', rx: false },
-        { id: 5, brandName: 'Metffull 500', genericName: 'Metformin', saltComposition: 'Metformin 500mg', category: 'Antidiabetic', price: 40.00, stock: 85, packSize: 15, form: 'Tablet', rx: true },
-    ]);
-
-    const [patients, setPatients] = useState([
-        { id: 'CUST-1001', name: 'Abhinav G', mobile: '9876543210', history: [{ id: 'INV-5001', date: '2024-10-20', total: 450, items: 'Paracetamol, Cetirizine' }] },
-        { id: 'CUST-1002', name: 'John Doe', mobile: '9123456789', history: [] }
-    ]);
+    const [inventory, setInventory] = useState([]);
+    const [patients, setPatients] = useState([]);
 
     // --- Billing State ---
     const [billing, setBilling] = useState({
@@ -420,7 +467,7 @@ const MedicalStoreDashboard = () => {
 
     // --- Settings & Configuration ---
     const [storeSettings, setStoreSettings] = useState({
-        currency: '₹',
+        currency: 'Rs.',
         taxRate: 12, // 12% GST default
         thermalFooter: 'Thank you for choosing vArogra. Get well soon!',
         lowStockAlert: 20,
@@ -438,6 +485,7 @@ const MedicalStoreDashboard = () => {
         gstNo: '27AAAAA0000A1Z5',
         foundedYear: '2020'
     });
+    // eslint-disable-next-line no-unused-vars
     const [profileMsg, setProfileMsg] = useState({ type: '', text: '' });
     const [checklist, setChecklist] = useState([
         { id: 1, l: 'Verify pending Rx', d: true },
@@ -449,15 +497,22 @@ const MedicalStoreDashboard = () => {
         setChecklist(prev => prev.map(t => t.id === id ? { ...t, d: !t.d } : t));
     };
 
-    const handleRestockAll = () => {
-        setInventory(prev => prev.map(item => ({
-            ...item,
-            stock: item.stock < 20 ? 120 : item.stock
-        })));
-        alert("Restocked all low-stock items to standard levels!");
+    const handleRestockAll = async () => {
+        const lowStockItems = inventory.filter(item => item.stock < (storeSettings.lowStockAlert || 20));
+        if (lowStockItems.length === 0) return alert("All items are sufficiently stocked.");
+        
+        try {
+            for (const item of lowStockItems) {
+                await updateInventoryItem(item.id, { stock: 120 });
+            }
+            alert("Restocked all low-stock items to standard levels!");
+        } catch (err) {
+            console.error("Restock failed:", err);
+            alert("Some items failed to restock.");
+        }
     };
 
-    const handleSaveInv = (e) => {
+    const handleSaveInv = async (e) => {
         if (e) e.preventDefault();
         if (!invForm.brandName || !invForm.category || !invForm.price || !invForm.stock) {
             return alert("Please fill all required fields.");
@@ -465,26 +520,35 @@ const MedicalStoreDashboard = () => {
 
         const itemData = {
             ...invForm,
-            id: editingItem ? editingItem.id : Date.now(),
+            storeId: user.uid || user.id,
             price: parseFloat(invForm.price),
             stock: parseFloat(invForm.stock),
             packSize: parseInt(invForm.packSize) || 1
         };
 
-        if (editingItem) {
-            setInventory(prev => prev.map(i => i.id === editingItem.id ? itemData : i));
-        } else {
-            setInventory(prev => [...prev, itemData]);
+        try {
+            if (editingItem) {
+                await updateInventoryItem(editingItem.id, itemData);
+            } else {
+                await addInventoryItem(itemData);
+            }
+            setShowInvModal(false);
+            setEditingItem(null);
+            setInvForm({ brandName: '', genericName: '', saltComposition: '', category: 'Analgesic', price: '', stock: '', packSize: '', form: 'Tablet', rx: false });
+        } catch (err) {
+            console.error("Save inventory error:", err);
+            alert("Failed to save item.");
         }
-
-        setShowInvModal(false);
-        setEditingItem(null);
-        setInvForm({ brandName: '', genericName: '', saltComposition: '', category: 'Analgesic', price: '', stock: '', packSize: '', form: 'Tablet', rx: false });
     };
 
-    const deleteInvItem = (id) => {
+    const deleteInvItem = async (id) => {
         if (confirm("Are you sure you want to remove this item?")) {
-            setInventory(prev => prev.filter(i => i.id !== id));
+            try {
+                const { deleteDoc, doc, db } = await import('../firebase/config');
+                await deleteDoc(doc(db, "inventory", id));
+            } catch (err) {
+                console.error("Delete failed:", err);
+            }
         }
     };
 
@@ -567,6 +631,7 @@ const MedicalStoreDashboard = () => {
     const hasResults = globalSearch.length > 0 && (searchResults.meds.length > 0 || searchResults.patients.length > 0 || searchResults.orders.length > 0);
 
     // --- Billing Logic ---
+    // eslint-disable-next-line no-unused-vars
     const calculateTotals = () => {
         const subtotal = billing.currentItems.reduce((acc, item) => acc + (item.price * item.qty), 0);
         const tax = subtotal * (storeSettings.taxRate / 100);
@@ -655,6 +720,7 @@ const MedicalStoreDashboard = () => {
     };
 
 
+    // eslint-disable-next-line no-unused-vars
     const toggleAvailability = (orderId, index) => {
         setAvailableItems(prev => ({
             ...prev,
@@ -665,6 +731,7 @@ const MedicalStoreDashboard = () => {
         }));
     };
 
+    // eslint-disable-next-line no-unused-vars
     const isAllAvailable = (order) => {
         const items = order.items || ['Amoxicillin 500mg', 'Paracetamol 650mg'];
         return items.every((_, i) => availableItems[order.id]?.[i]);
@@ -709,7 +776,7 @@ const MedicalStoreDashboard = () => {
         await new Promise(resolve => setTimeout(resolve, 1500));
 
         // Place order in context (this updates localStorage and state)
-        placeOrder(orderData);
+        console.log("Placed order manually: ", orderData);
 
         // Update Inventory with unit-level precision
         setInventory(prev => prev.map(item => {
@@ -754,6 +821,7 @@ const MedicalStoreDashboard = () => {
         }
     };
 
+    // eslint-disable-next-line no-unused-vars
     const simulateMapPicker = () => {
         const locs = ['17.4483° N, 78.3915° E', '17.3850° N, 78.4867° E'];
         const pick = locs[Math.floor(Math.random() * locs.length)];
@@ -768,7 +836,67 @@ const MedicalStoreDashboard = () => {
     };
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f3f4f6', fontFamily: 'Inter, sans-serif' }}>
+        <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f3f4f6', fontFamily: 'Inter, sans-serif', position: 'relative' }}>
+            {/* Global Emergency Banner */}
+            <AnimatePresence>
+                {globalEmergency && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            zIndex: 10000,
+                            background: '#e11d48',
+                            color: 'white',
+                            overflow: 'hidden',
+                            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+                        }}
+                    >
+                        <div style={{ padding: '1rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <div style={{ 
+                                    width: '40px', 
+                                    height: '40px', 
+                                    borderRadius: '12px', 
+                                    background: 'rgba(255,255,255,0.2)', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center' 
+                                }}>
+                                    <AlertCircle size={24} />
+                                </div>
+                                <div>
+                                    <h4 style={{ fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Critical Emergency: {globalEmergency.type} Required</h4>
+                                    <p style={{ fontSize: '10px', fontWeight: '700', opacity: 0.9, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <MapPin size={10} /> {globalEmergency.location} • Requester: {globalEmergency.requester}
+                                    </p>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button 
+                                    onClick={() => setGlobalEmergency(null)}
+                                    style={{ padding: '8px 16px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', fontSize: '10px', fontWeight: '800', cursor: 'pointer' }}
+                                >
+                                    Dismiss
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        setGlobalEmergency(null);
+                                        setActiveTab('inventory'); // Pharmacies might check inventory
+                                    }}
+                                    style={{ padding: '8px 16px', borderRadius: '10px', background: 'white', border: 'none', color: '#e11d48', fontSize: '10px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}
+                                >
+                                    Respond
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
             {/* Sidebar Navigation */}
             <div style={{
                 width: '260px',
@@ -786,11 +914,9 @@ const MedicalStoreDashboard = () => {
             }}>
                 {/* Branding */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '48px', padding: '0 12px' }}>
-                    <div style={{ padding: '8px', backgroundColor: '#10b981', borderRadius: '12px', color: 'white' }}>
-                        <HeartPulse size={24} />
-                    </div>
+                    <img src="/pwa-192x192.png" alt="vArogra" className="rounded-xl shadow-md" style={{ height: '48px', width: 'auto', objectFit: 'contain' }} />
                     <div>
-                        <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.02em' }}>vArogra</h1>
+                        <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.02em' }}>{user?.name || 'vArogra'}</h1>
                         <p style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Pharmacy Management</p>
                     </div>
                 </div>
@@ -832,6 +958,28 @@ const MedicalStoreDashboard = () => {
                         }}
                     >
                         <Plus size={18} /> New Prescription
+                    </button>
+
+                    <button
+                        onClick={() => setShowBloodRequestModal(true)}
+                        style={{
+                            width: '100%',
+                            backgroundColor: '#fff1f2',
+                            color: '#e11d48',
+                            padding: '14px',
+                            borderRadius: '14px',
+                            border: '1px solid #ffe4e6',
+                            fontWeight: '700',
+                            fontSize: '14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        <Droplets size={18} fill="#e11d48" /> Request Blood
                     </button>
 
                     <button
@@ -1026,11 +1174,11 @@ const MedicalStoreDashboard = () => {
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{ textAlign: 'right' }}>
-                                <p style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>{user?.name || 'Dr. Sarah Chen'}</p>
-                                <p style={{ fontSize: '12px', color: '#94a3b8' }}>Chief Pharmacist</p>
+                                <p style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>{user?.inChargeName || 'Pharmacist'}</p>
+                                <p style={{ fontSize: '12px', color: '#94a3b8' }}>Pharmacist In-Charge</p>
                             </div>
                             <img
-                                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'Sarah'}`}
+                                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.inChargeName || 'Pharmacy'}`}
                                 alt="Profile"
                                 style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: '#f1f5f9' }}
                             />
@@ -1814,7 +1962,7 @@ const MedicalStoreDashboard = () => {
                                                 <div>
                                                     <label style={labelStyle}>BASE CURRENCY</label>
                                                     <select value={storeSettings.currency} onChange={e => setStoreSettings({ ...storeSettings, currency: e.target.value })} style={inputStyle}>
-                                                        <option value="₹">INR (₹)</option>
+                                                        <option value="Rs.">INR (Rs.)</option>
                                                         <option value="$">USD ($)</option>
                                                         <option value="£">GBP (£)</option>
                                                     </select>
@@ -1957,11 +2105,12 @@ const MedicalStoreDashboard = () => {
                         </motion.div>
                     </div>
                 )}
+            </AnimatePresence>
 
-                {showPatientModal && (
-                    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            {showPatientModal && (
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
                             style={{ backgroundColor: 'white', borderRadius: '28px', width: '100%', maxWidth: '500px', padding: '40px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.2)' }}
@@ -2121,8 +2270,125 @@ const MedicalStoreDashboard = () => {
                         </motion.div>
                     </div>
                 )}
-            </AnimatePresence>
-        </div >
+
+                {/* Blood Request Modal */}
+                <AnimatePresence>
+                    {showBloodRequestModal && (
+                        <div style={{
+                            position: 'fixed',
+                            inset: 0,
+                            zIndex: 11000,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '20px',
+                            background: 'rgba(15, 23, 42, 0.6)',
+                            backdropFilter: 'blur(12px)'
+                        }}>
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: 30 }}
+                                style={{
+                                    maxWidth: '440px',
+                                    width: '100%',
+                                    background: 'white',
+                                    borderRadius: '40px',
+                                    padding: '40px',
+                                    textAlign: 'center',
+                                    boxShadow: '0 40px 80px -20px rgba(0,0,0,0.5)',
+                                    position: 'relative',
+                                    overflow: 'hidden'
+                                }}
+                            >
+                                <div style={{ position: 'absolute', top: '-40px', left: '-40px', width: '200px', height: '200px', background: 'rgba(225, 29, 72, 0.03)', borderRadius: '50%' }} />
+                                
+                                <div style={{ 
+                                    width: '80px', 
+                                    height: '80px', 
+                                    borderRadius: '24px', 
+                                    background: 'linear-gradient(135deg, #ffeef2 0%, #fff1f2 100%)', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center',
+                                    margin: '0 auto 24px',
+                                    color: '#e11d48',
+                                    position: 'relative'
+                                }}>
+                                    <Droplets size={40} />
+                                    {broadcastStatus === 'broadcasting' && (
+                                        <motion.div 
+                                            animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
+                                            transition={{ repeat: Infinity, duration: 2 }}
+                                            style={{ position: 'absolute', inset: 0, borderRadius: '24px', border: '4px solid #e11d48' }}
+                                        />
+                                    )}
+                                </div>
+
+                                <h2 style={{ fontSize: '1.5rem', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>Emergency Blood Request</h2>
+                                <p style={{ fontSize: '13px', color: '#64748b', fontWeight: '500', marginBottom: '32px', lineHeight: '1.5' }}>
+                                    This will broadcast a high-priority alert to all connected hospitals, pharmacies, and verified donors.
+                                </p>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '32px' }}>
+                                    {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(type => (
+                                        <button 
+                                            key={type}
+                                            onClick={() => setSelectedBloodType(type)}
+                                            style={{
+                                                padding: '10px 0',
+                                                borderRadius: '12px',
+                                                border: selectedBloodType === type ? '2px solid #e11d48' : '2px solid #f1f5f9',
+                                                background: selectedBloodType === type ? '#fff1f2' : 'white',
+                                                color: selectedBloodType === type ? '#e11d48' : '#64748b',
+                                                fontSize: '11px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            {type}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <button
+                                    onClick={handleBloodBroadcast}
+                                    disabled={broadcastStatus !== 'idle'}
+                                    style={{
+                                        width: '100%',
+                                        padding: '18px',
+                                        borderRadius: '20px',
+                                        background: broadcastStatus === 'success' ? '#10b981' : '#e11d48',
+                                        color: 'white',
+                                        border: 'none',
+                                        fontWeight: '900',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '2px',
+                                        fontSize: '12px',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 10px 30px rgba(225, 29, 72, 0.3)',
+                                        transition: 'all 0.3s'
+                                    }}
+                                >
+                                    {broadcastStatus === 'idle' && 'Send Global Alert'}
+                                    {broadcastStatus === 'broadcasting' && 'Broadcasting...'}
+                                    {broadcastStatus === 'success' && 'Broadcast Sent!'}
+                                </button>
+
+                                {broadcastStatus === 'idle' && (
+                                    <button 
+                                        onClick={() => setShowBloodRequestModal(false)}
+                                        style={{ marginTop: '16px', background: 'none', border: 'none', color: '#94a3b8', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', cursor: 'pointer' }}
+                                    >
+                                        Cancel Request
+                                    </button>
+                                )}
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
+            </div>
     );
 };
 

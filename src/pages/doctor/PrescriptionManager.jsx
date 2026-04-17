@@ -16,7 +16,7 @@ import {
     Package
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { createPrescription, updateAppointmentStatus, subscribeToPrescriptions } from '../../firebase/services';
+import { createPrescription, updateAppointmentStatus } from '../../firebase/services';
 
 // ─── View Prescription Modal ────────────────────────────────────────────────
 const ViewPrescriptionModal = ({ prescription, onClose, onPrint, onDownload }) => {
@@ -599,6 +599,9 @@ const PrescriptionManager = () => {
         // or a global list if we had one.
     }, [user]);
 
+    const [searchTerm, setSearchTerm] = useState('');
+    const [activeTemplate, setActiveTemplate] = useState(null);
+
     // Open modal immediately if appointment passed
     useEffect(() => {
         if (activeAppointment) {
@@ -606,8 +609,6 @@ const PrescriptionManager = () => {
         }
     }, [activeAppointment]);
 
-    const [searchTerm, setSearchTerm] = useState('');
-    const [activeTemplate, setActiveTemplate] = useState(null);
     const [viewPrescription, setViewPrescription] = useState(null);
     const [showCreateTemplate, setShowCreateTemplate] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
@@ -729,7 +730,7 @@ const PrescriptionManager = () => {
                 cost: Math.floor(Math.random() * 500) + 200 // Mock cost for medical store integration
             };
 
-            const prescriptionId = await createPrescription(newRx);
+            await createPrescription(newRx);
 
             // If linked to appointment, update status
             if (formData.appointmentId) {

@@ -1,5 +1,19 @@
 export const hospitals = [
     {
+        id: 'jPz6UEHW2NVRtMo49belygDhbRo1',
+        name: 'vArogra Demo Hospital',
+        address: 'Main St, Healthcare City',
+        distance: '0.5 km',
+        rating: 5.0,
+        isOpen: true,
+        hasEmergency: true,
+        image: 'https://images.unsplash.com/photo-1512678080530-7760d81faba6?auto=format&fit=crop&q=80&w=500',
+        costRange: 'Rs.200 - Rs.50,000',
+        facilities: ['Demo Facility', '24/7 Support', 'Smart Health Records'],
+        bloodAvailability: { 'O+': 'Available', 'B+': 'Available' },
+        doctors: []
+    },
+    {
         id: 'h1',
         name: 'City Care Hospital',
         address: 'Madhapur, Hyderabad',
@@ -8,7 +22,7 @@ export const hospitals = [
         isOpen: true,
         hasEmergency: true,
         image: 'https://images.unsplash.com/photo-1587351021759-3e566b9af923?auto=format&fit=crop&q=80&w=500',
-        costRange: '₹500 - ₹45,000',
+        costRange: 'Rs.500 - Rs.45,000',
         facilities: ['X-Ray', 'Diagnostic Lab', '24/7 Pharmacy', 'Emergency Care', 'ICU'],
         bloodAvailability: { 'A+': 'Available', 'B+': 'Low Stock', 'O+': 'Available', 'AB+': 'Check' },
         doctors: [
@@ -18,13 +32,15 @@ export const hospitals = [
                 specialty: 'Cardiologist',
                 experience: 12,
                 image: 'https://images.unsplash.com/photo-1559839734-2b71f1536783?auto=format&fit=crop&q=80&w=500',
+                consultingTime: '15-20 mins',
                 fees: { online: 500, offline: 800 },
                 hospitals: ['City Care Hospital', 'St. Mary\'s Clinic'],
                 rating: 4.8,
                 reviewsCount: 124,
                 reviews: [
                     { id: 1, user: 'Rahul V.', rating: 5, comment: 'Excellent doctor, very patient and explained everything clearly.', date: '2 days ago' },
-                    { id: 2, user: 'Anita S.', rating: 4, comment: 'Good experience, but the waiting time was a bit long.', date: '1 week ago' }
+                    { id: 2, user: 'Anita S.', rating: 4, comment: 'Good experience, but the waiting time was a bit long.', date: '1 week ago' },
+                    { id: 21, user: 'Vikram J.', rating: 5, comment: 'The best cardiologist in the city. Very professional.', date: '3 days ago' }
                 ],
                 status: 'Available',
                 availability: {
@@ -38,6 +54,7 @@ export const hospitals = [
                 specialty: 'General Physician',
                 experience: 8,
                 image: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=500',
+                consultingTime: '10-15 mins',
                 fees: { online: 300, offline: 500 },
                 hospitals: ['City Care Hospital'],
                 rating: 4.5,
@@ -62,7 +79,7 @@ export const hospitals = [
         isOpen: true,
         hasEmergency: false,
         image: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=500',
-        costRange: '₹300 - ₹30,000',
+        costRange: 'Rs.300 - Rs.30,000',
         facilities: ['Pathology Lab', 'Pharmacy', 'Physiotherapy', 'Outpatient Dept'],
         bloodAvailability: { 'A-': 'Available', 'B-': 'Check', 'O-': 'Unavailable' },
         doctors: [
@@ -72,6 +89,7 @@ export const hospitals = [
                 specialty: 'Pediatrician',
                 experience: 15,
                 image: 'https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&q=80&w=500',
+                consultingTime: '20-30 mins',
                 fees: { online: 600, offline: 1000 },
                 hospitals: ['Sunshine Medical Center', 'Children\'s Hope'],
                 rating: 4.9,
@@ -96,7 +114,7 @@ export const hospitals = [
         isOpen: false,
         hasEmergency: true,
         image: 'https://images.unsplash.com/photo-1538108149393-fbbd81895907?auto=format&fit=crop&q=80&w=500',
-        costRange: '₹400 - ₹25,000',
+        costRange: 'Rs.400 - Rs.25,000',
         facilities: ['Eye Care Unit', 'Optical Shop', 'Laser Surgery', 'Consultation'],
         bloodAvailability: {},
         doctors: [
@@ -106,6 +124,7 @@ export const hospitals = [
                 specialty: 'Ophthalmologist',
                 experience: 10,
                 image: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=500',
+                consultingTime: '15-20 mins',
                 fees: { online: 400, offline: 700 },
                 hospitals: ['Green Valley Clinic', 'Eye Tech'],
                 rating: 4.7,
@@ -130,7 +149,7 @@ export const hospitals = [
         isOpen: true,
         hasEmergency: true,
         image: 'https://images.unsplash.com/photo-1516549655169-df83a0674c6c?auto=format&fit=crop&q=80&w=500',
-        costRange: '₹800 - ₹1,50,000',
+        costRange: 'Rs.800 - Rs.1,50,000',
         facilities: ['Advanced Imaging', 'Modular OT', 'Cardiac Unit', 'Emergency', 'Blood Bank'],
         bloodAvailability: { 'A+': 'Available', 'B+': 'Available', 'O+': 'Available', 'O-': 'Rare Stock' },
         doctors: [
@@ -140,6 +159,7 @@ export const hospitals = [
                 specialty: 'General Physician',
                 experience: 20,
                 image: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=500',
+                consultingTime: '20-25 mins',
                 fees: { online: 500, offline: 900 },
                 hospitals: ['Apollo Spectra', 'City Hospital'],
                 rating: 4.8,
@@ -164,7 +184,7 @@ export const hospitals = [
         isOpen: true,
         hasEmergency: false,
         image: 'https://images.unsplash.com/photo-1519494083224-7236dacc6f02?auto=format&fit=crop&q=80&w=500',
-        costRange: '₹100 - ₹5,000',
+        costRange: 'Rs.100 - Rs.5,000',
         facilities: ['Primary Care', 'Vaccination', 'Basic Diagnostics', 'Maternal Health'],
         bloodAvailability: { 'Any': 'Request only' },
         doctors: [

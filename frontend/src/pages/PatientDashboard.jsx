@@ -1,43 +1,487 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
     Calendar, Clock, MapPin, User, LogOut, Package, Video,
     AlertCircle, Send, Bot, Loader2, ShoppingBag,
     Search, Upload, Star, Navigation, Plus, FileText, Zap, DollarSign, ChevronRight,
     Bike, CheckCircle, Map, ArrowLeft, Phone, PhoneOff, MicOff, ShieldCheck,
-    Stethoscope, Heart, Baby, Eye, FlaskConical, Grid, Ear, Megaphone, Settings, Camera, X, Mic, Volume2, Square
+    Stethoscope, Heart, Baby, Eye, FlaskConical, Grid, Ear, Megaphone, Settings, Camera, X, Mic, Volume2, Square, Sun,
+    Filter, LayoutGrid, List
 } from 'lucide-react';
+import { MOCK_STORES } from '../data/mockStores';
 
 import { useTranslation } from 'react-i18next';
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import ConfirmModal from '../components/ConfirmModal';
 import SafeErrorBoundary from '../components/SafeErrorBoundary';
 import VoiceAssistant from '../components/VoiceAssistant';
 import PaymentScreen from './PaymentScreen';
 import AppointmentDetails from './AppointmentDetails';
-import { getAIResponse, analyzePrescription } from '../utils/AIService';
+import { analyzePrescription } from '../services/aiService';
 import BottomNav from '../components/BottomNav';
+import Button from '../components/Button';
 import Header from '../components/Header';
-import { hospitals as mockHospitals, medicalStores as mockMedicalStores } from '../utils/mockData';
-import { getHospitals, getDoctors, uploadProfilePhoto } from '../firebase/services';
-import { updateUserProfilePhoto } from '../firebase/auth';
+import { uploadProfilePhoto, subscribeToNotifications } from '../firebase/services';
 import { useAuth } from '../context/AuthContext';
 import ImageUpload from '../components/ImageUpload';
 import LocationPicker from '../components/LocationPicker';
+import MapComponent from '../components/MapComponent';
 import HospitalCard from '../components/HospitalCard';
-
+import { VitalsCard, AITriageHistory } from '../components/patient/vArograFeatures';
+import AddressSetupModal from '../components/patient/AddressSetupModal';
 // Carousel Component for Today's Reminders
+import { VitalsCard, AITriageHistory } from '../components/patient/vArograFeatures';
+import AddressSetupModal from '../components/patient/AddressSetupModal';
+
+const StoreDetailModal = ({ store, isOpen, onClose, onAddToCart, cart }) => {
+    if (!store || !isOpen) return null;
+    
+    return (
+        <AnimatePresence>
+            <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
+                <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={onClose}
+                    className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                />
+                <motion.div 
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
+                    className="relative w-full max-w-lg bg-white rounded-t-[40px] sm:rounded-[40px] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+                >
+                    <div className="relative h-48 shrink-0">
+                        <img src={store.image} alt={store.name} className="w-full h-full object-cover" />
+                        <button 
+                            onClick={onClose}
+                            className="absolute top-6 right-6 w-10 h-10 rounded-full bg-white/20 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/40 transition-all"
+                        >
+                            <X size={20} />
+                        </button>
+                        <div className="absolute bottom-6 left-6 right-6">
+                            <h3 className="text-2xl font-black text-white drop-shadow-lg">{store.name}</h3>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="px-2 py-0.5 bg-amber-400 text-amber-950 text-[10px] font-black rounded-lg uppercase tracking-widest">{store.rating} ★</span>
+                                <span className="text-white/80 text-[11px] font-bold drop-shadow-md">{store.address}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="p-6 flex-1 overflow-y-auto no-scrollbar">
+                        <div className="flex items-center justify-between mb-6">
+                            <h4 className="text-sm font-black text-main uppercase tracking-widest">Available Medicines</h4>
+                            <div className="px-3 py-1 bg-slate-50 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                {store.inventory?.length || 0} Items
+                            </div>
+                        </div>
+                        
+                        <div className="grid gap-3">
+                            {store.inventory?.map((med, idx) => {
+                                const cartItem = cart.find(item => item.storeId === store.id && item.medName === med);
+                                return (
+                                    <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-[24px] border border-slate-100/50 hover:bg-white hover:shadow-md transition-all group">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-xl bg-p-50 flex items-center justify-center text-p-600 group-hover:bg-p-600 group-hover:text-white transition-all">
+                                                <Package size={18} />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-black text-main">{med}</p>
+                                                <p className="text-[10px] font-bold text-muted uppercase tracking-tight">Standard Unit</p>
+                                            </div>
+                                        </div>
+                                        
+                                        {cartItem ? (
+                                            <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-sm border border-slate-100">
+                                                <button 
+                                                    onClick={() => onAddToCart(store, med, -1)}
+                                                    className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-all"
+                                                >
+                                                    <Minus size={14} />
+                                                </button>
+                                                <span className="text-xs font-black text-main w-4 text-center">{cartItem.quantity}</span>
+                                                <button 
+                                                    onClick={() => onAddToCart(store, med, 1)}
+                                                    className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-emerald-50 hover:text-emerald-500 transition-all"
+                                                >
+                                                    <Plus size={14} />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button 
+                                                onClick={() => onAddToCart(store, med, 1)}
+                                                className="w-10 h-10 rounded-xl bg-white text-p-600 flex items-center justify-center border border-slate-100 shadow-sm hover:bg-p-600 hover:text-white transition-all active:scale-90"
+                                            >
+                                                <Plus size={18} />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    
+                    <div className="p-6 pt-2 bg-white border-t border-slate-50 flex gap-4">
+                        <button className="flex-1 py-4.5 rounded-2xl bg-slate-100 text-slate-600 text-[12px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all">Get Directions</button>
+                        <button className="flex-1 py-4.5 rounded-2xl bg-p-600 text-white text-[12px] font-black uppercase tracking-widest shadow-xl shadow-p-200 active:scale-95 transition-all">Store Chat</button>
+                    </div>
+                </motion.div>
+            </div>
+        </AnimatePresence>
+    );
+};
+
+const CartDrawer = ({ cart, onUpdateQuantity, onPlaceOrder, onClose, isOpen }) => {
+    if (!isOpen) return null;
+    
+    const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
+    const storesCount = new Set(cart.map(item => item.storeId)).size;
+    
+    return (
+        <AnimatePresence>
+            <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4">
+                <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={onClose}
+                    className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                />
+                <motion.div 
+                    initial={{ x: "100%" }}
+                    animate={{ x: 0 }}
+                    exit={{ x: "100%" }}
+                    className="absolute right-0 top-0 bottom-0 w-full max-w-md bg-white shadow-2xl flex flex-col"
+                >
+                    <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+                        <div>
+                            <h3 className="text-xl font-black text-main flex items-center gap-3">
+                                <ShoppingCart size={24} className="text-p-600" />
+                                Your Order
+                            </h3>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">
+                                {totalItems} Medicines from {storesCount} Stores
+                            </p>
+                        </div>
+                        <button onClick={onClose} className="w-12 h-12 rounded-2xl bg-white text-slate-400 flex items-center justify-center border border-slate-100 shadow-sm hover:bg-rose-50 hover:text-rose-500 transition-all">
+                            <X size={20} />
+                        </button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-8 no-scrollbar">
+                        {cart.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-center">
+                                <div className="w-20 h-20 rounded-[32px] bg-slate-50 flex items-center justify-center text-slate-300 mb-6">
+                                    <ShoppingBag size={40} />
+                                </div>
+                                <h4 className="text-lg font-black text-slate-400 mb-2">Cart is empty</h4>
+                                <p className="text-xs font-bold text-slate-300 max-w-[200px]">Browse medical stores and add medicines to your order.</p>
+                            </div>
+                        ) : (
+                            <div className="grid gap-6">
+                                {cart.map((item, idx) => (
+                                    <motion.div 
+                                        key={idx}
+                                        initial={{ opacity: 0, x: 20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: idx * 0.1 }}
+                                        className="flex items-center justify-between p-5 bg-white rounded-[28px] border border-slate-100 shadow-sm hover:shadow-md transition-all"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 rounded-2xl bg-p-50 flex items-center justify-center text-p-600">
+                                                <Package size={20} />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-black text-main">{item.medName}</p>
+                                                <p className="text-[10px] font-bold text-muted uppercase tracking-tight">{item.storeName}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 bg-slate-50 p-1 rounded-xl">
+                                            <button 
+                                                onClick={() => onUpdateQuantity(item.storeId, item.medName, -1)}
+                                                className="w-8 h-8 rounded-lg bg-white text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-all border border-slate-100 shadow-sm"
+                                            >
+                                                <Minus size={14} />
+                                            </button>
+                                            <span className="text-xs font-black text-main w-4 text-center">{item.quantity}</span>
+                                            <button 
+                                                onClick={() => onUpdateQuantity(item.storeId, item.medName, 1)}
+                                                className="w-8 h-8 rounded-lg bg-white text-slate-400 flex items-center justify-center hover:bg-emerald-50 hover:text-emerald-500 transition-all border border-slate-100 shadow-sm"
+                                            >
+                                                <Plus size={14} />
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="p-8 bg-slate-50/50 border-t border-slate-100">
+                        <div className="flex items-center justify-between mb-6 px-2">
+                             <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Estimated Total</span>
+                                <span className="text-[28px] font-black text-main leading-none">â‚¹ {cart.length * 450 + 40}</span>
+                             </div>
+                             <div className="flex flex-col items-end">
+                                <span className="text-[10px] font-black text-p-600 uppercase tracking-widest leading-none mb-1">Fee: â‚¹40</span>
+                                <span className="text-[10px] font-bold text-slate-400 leading-none italic">Delivery incl.</span>
+                             </div>
+                        </div>
+                        <button 
+                            disabled={cart.length === 0}
+                            onClick={onPlaceOrder}
+                            className="w-full py-5 rounded-[24px] bg-p-600 text-white text-sm font-black uppercase tracking-[0.2em] shadow-2xl shadow-p-200 active:scale-[0.98] transition-all disabled:opacity-50 disabled:grayscale"
+                        >
+                            Confirm & Place Order
+                        </button>
+                        <p className="text-[10px] font-bold text-slate-400 text-center mt-6">Secure checkout powered by vArogra Pay</p>
+                    </div>
+                </motion.div>
+            </div>
+        </AnimatePresence>
+    );
+};
+
+const StoreCard = ({ store, viewMode, index, isBestMatch, onSelect, onCompare, isComparing }) => {
+    return (
+        <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.4, delay: index * 0.05 }}
+            whileHover={{ y: -5 }}
+            className={`group bg-white rounded-[28px] overflow-hidden border ${isBestMatch ? 'border-p-500 ring-2 ring-p-500/10' : 'border-slate-50'} shadow-sm hover:shadow-lg transition-all duration-300 ${viewMode === 'grid' ? 'flex flex-col' : 'flex'}`}
+        >
+            <div className={`relative ${viewMode === 'grid' ? 'w-full h-32' : 'w-32 h-32'} shrink-0`}>
+                <img src={store.image} alt={store.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
+                    {store.hasVerifiedBadge && (
+                        <div className="bg-[#00B4A6] text-white p-1 rounded-lg shadow-lg w-fit">
+                            <ShieldCheck size={14} />
+                        </div>
+                    )}
+                    {isBestMatch && (
+                        <div className="bg-p-600 text-white px-2 py-0.5 rounded-lg shadow-lg flex items-center gap-1 w-fit">
+                            <Zap size={10} fill="white" />
+                            <span className="text-[8px] font-black uppercase tracking-widest">Best</span>
+                        </div>
+                    )}
+                </div>
+                {!store.isOpen && (
+                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center">
+                        <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] font-black text-white uppercase tracking-widest border border-white/30">Closed</span>
+                    </div>
+                )}
+            </div>
+            
+            <div className="p-4 flex-1 flex flex-col">
+                <div className="flex justify-between items-start mb-1">
+                    <h4 className={`font-black text-main leading-tight group-hover:text-p-600 transition-colors ${viewMode === 'grid' ? 'text-sm line-clamp-1' : 'text-base'}`}>{store.name}</h4>
+                    {viewMode === 'list' && (
+                        <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 rounded-lg shrink-0">
+                            <Star size={10} fill="#f59e0b" className="text-amber-500" />
+                            <span className="text-[10px] font-black text-amber-600">{store.rating}</span>
+                        </div>
+                    )}
+                </div>
+                
+                <p className="text-[10px] font-bold text-muted line-clamp-1 mb-3">{store.address}</p>
+                
+                <div className="flex flex-wrap items-center gap-3 mt-auto">
+                    <div className="flex items-center gap-1.5">
+                        <Navigation size={12} className="text-p-500" />
+                        <span className="text-[10px] font-extrabold text-[#1e2937]">{store.distanceKm} km</span>
+                    </div>
+                    <div className="w-1 h-1 rounded-full bg-slate-200" />
+                    <span className={`text-[11px] font-black ${store.costIndicator === '₹' ? 'text-emerald-600' : store.costIndicator === '₹₹' ? 'text-amber-500' : 'text-blue-600'}`}>
+                        {store.costIndicator}
+                    </span>
+                    {store.isOpen && (
+                        <>
+                            <div className="w-1 h-1 rounded-full bg-slate-200" />
+                            <div className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Open</span>
+                            </div>
+                        </>
+                    )}
+                </div>
+                
+                {viewMode === 'list' && (
+                    <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50">
+                        <button 
+                             onClick={(e) => {
+                                e.stopPropagation();
+                                onCompare(store);
+                             }}
+                             className={`px-4 py-2.5 rounded-xl border transition-all text-[10px] font-black uppercase tracking-widest ${isComparing ? 'bg-p-50 border-p-200 text-p-600' : 'bg-slate-50 border-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                        >
+                             {isComparing ? 'Selected' : 'Compare'}
+                        </button>
+                        <button 
+                            onClick={() => onSelect(store)}
+                            className="flex-1 py-2.5 rounded-xl bg-p-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-p-100 active:scale-95 transition-all"
+                        >
+                            View Medicines
+                        </button>
+                    </div>
+                )}
+            </div>
+        </motion.div>
+    );
+};
+
+const RecommendedStoreCard = ({ store, type, meds, onSelect, onAutoAdd }) => {
+    return (
+        <div className={`p-6 rounded-[32px] border ${type === 'primary' ? 'bg-[#0077B6]/5 border-[#0077B6]/20' : 'bg-slate-50 border-slate-100'} transition-all hover:shadow-md`}>
+            <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${type === 'primary' ? 'bg-[#0077B6] text-white shadow-lg shadow-blue-200' : 'bg-slate-200 text-slate-500'}`}>
+                        {type === 'primary' ? <Zap size={20} fill="white" /> : <Star size={20} />}
+                    </div>
+                    <div>
+                        <h6 className="text-[15px] font-black text-main" onClick={() => onSelect(store)}>{store.name}</h6>
+                        <div className="flex items-center gap-2 mt-0.5">
+                             <span className="text-[11px] font-bold text-muted">{store.distanceKm} km away</span>
+                             <div className="w-1 h-1 rounded-full bg-slate-300" />
+                             <span className="text-[11px] font-bold text-muted">{store.costIndicator}</span>
+                        </div>
+                    </div>
+                </div>
+                <div className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest ${type === 'primary' ? 'bg-[#0077B6] text-white' : 'bg-slate-200 text-slate-600'}`}>
+                    {type === 'primary' ? 'Best Match' : 'Recommended'}
+                </div>
+            </div>
+            
+            <div className="flex flex-wrap gap-2 mt-4">
+                {meds.map((med, i) => {
+                    const available = store.inventory?.some(item => item.toLowerCase().includes(med.toLowerCase()));
+                    return (
+                        <div key={i} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-tight ${available ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100 opacity-60'}`}>
+                            {available ? <CheckCircle size={12} className="text-emerald-500" /> : <X size={12} className="text-rose-400" />}
+                            {med}
+                        </div>
+                    );
+                })}
+            </div>
+             <button 
+                onClick={() => onAutoAdd(store, meds)}
+                className={`w-full mt-6 py-4 rounded-2xl text-[12px] font-black uppercase tracking-widest transition-all active:scale-[0.98] ${type === 'primary' ? 'bg-[#0077B6] text-white shadow-xl shadow-blue-100' : 'bg-white border border-slate-100 text-slate-600'}`}>
+                {type === 'primary' ? 'Auto-Add to Cart' : 'View Alternative'}
+            </button>
+        </div>
+    );
+};
+
+const AIAnalyzerModal = ({ isOpen, onClose, analysis, loading }) => {
+    const { t } = useTranslation();
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[3000] flex items-end sm:items-center justify-center p-4">
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={onClose}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+                initial={{ opacity: 0, y: 100 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 100 }}
+                className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            >
+                <div className="p-8 pb-4 border-b border-slate-100 flex justify-between items-center bg-p-50/50">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-p-600 flex items-center justify-center">
+                            <Bot className="text-white" size={24} />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black text-main leading-tight">{t('ai_prescription_analyzer')}</h3>
+                            <p className="text-[10px] font-bold text-p-600 uppercase tracking-widest">{t('varogra_smart_brain')}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 rounded-xl bg-white shadow-sm border border-slate-100 text-muted">
+                        <ArrowLeft size={20} />
+                    </button>
+                </div>
+
+                <div className="p-8 overflow-y-auto">
+                    {loading ? (
+                        <div className="py-20 flex flex-col items-center justify-center">
+                            <div className="w-16 h-16 border-4 border-p-100 border-t-p-600 rounded-full animate-spin mb-6" />
+                            <p className="font-bold text-main animate-pulse">{t('analyzing_prescription')}</p>
+                            <p className="text-xs text-muted mt-2">{t('identifying_medicines_instructions')}</p>
+                        </div>
+                    ) : (
+                        <div className="prose prose-slate prose-sm max-w-none">
+                            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 mb-6 font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                {analysis}
+                            </div>
+                            <div className="p-5 rounded-3xl bg-amber-50 border border-amber-100 flex gap-4">
+                                <AlertCircle className="text-amber-600 shrink-0" size={20} />
+                                <p className="text-[11px] font-bold text-amber-800 leading-snug">
+                                    {t('informational_only_disclaimer')}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-8 pt-4 bg-slate-50">
+                    <button
+                        onClick={onClose}
+                        className="w-full py-4 rounded-2xl bg-main text-white font-black text-sm shadow-xl active:scale-95 transition-transform"
+                    >
+                        {t('got_it_thanks')}
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
 const ReminderCarousel = ({ onNavigate }) => {
     const { t } = useTranslation();
-    const { allHospitals, appointments, bloodRequests, orders, allMedicalStores: medicalStores } = useAuth();
+    const { appointments = [], orders = [], medicalCamps = [], campRegistrations = [] } = useAuth() || {};
     const [currentIndex, setCurrentIndex] = useState(0);
 
-    const activeAppt = appointments
-        .filter(a => a.status === 'Accepted' || a.status === 'Confirmed')
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+    const now = new Date();
+    // Reset to start of day for comparison
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const urgentBlood = bloodRequests[0];
-    const activeOrder = orders.filter(o => o.status !== 'Delivered')[0];
+    // 1. Upcoming Appointments
+    const activeAppt = appointments
+        .filter(a => {
+            if (a.status !== 'approved' && a.status !== 'Confirmed' && a.status !== 'Accepted') return false;
+            // Ensure the appointment is today or in the future
+            if (!a.timestamp) return true; // fallback
+            const apptDate = new Date(a.timestamp);
+            return apptDate >= today;
+        })
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))[0];
+
+    // 2. Active Orders
+    const activeOrder = orders
+        .filter(o => o.status !== 'Delivered')
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0]; // Most recent active
+
+    // 3. Registered Upcoming Camps
+    // Match registrations with camps to get details, then filter by date
+    const registeredCamps = campRegistrations.map(reg => {
+        const camp = medicalCamps.find(c => c.id === reg.campId);
+        return camp;
+    }).filter(c => {
+        if (!c) return false;
+        if (!c.timestamp) return true; // fallback
+        const campDate = new Date(c.timestamp);
+        return campDate >= today;
+    });
+
+    const upcomingCamp = registeredCamps.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))[0];
 
     const slides = [
         activeAppt && {
@@ -50,23 +494,11 @@ const ReminderCarousel = ({ onNavigate }) => {
             bg: 'bg-white',
             borderColor: 'border-slate-100',
             title: `Dr. ${activeAppt?.doctorName || t('specialist')}`,
-            desc: `${activeAppt?.time || ''} • ${activeAppt?.hospitalName || ''}`
-        },
-        urgentBlood && {
-            type: 'blood',
-            icon: <Heart size={24} className="text-white animate-pulse" />,
-            color: 'bg-rose-500',
-            glow: 'shadow-rose-500/20',
-            tag: t('urgent_blood_needed'),
-            tagColor: 'text-rose-500',
-            bg: 'bg-white',
-            borderColor: 'border-rose-100',
-            title: t('donate_blood'),
-            desc: `${urgentBlood?.hospitalName || ''} • ${urgentBlood?.bloodType || urgentBlood?.bloodGroup || 'O+'}`
+            desc: `${activeAppt?.time || ''} â€¢ ${activeAppt?.hospitalName || ''}`
         },
         activeOrder && {
             type: 'store',
-            icon: <ShoppingBag size={24} className="text-white animate-pulse" />,
+            icon: <Package size={24} className="text-white animate-pulse" />,
             color: 'bg-emerald-500',
             glow: 'shadow-emerald-500/20',
             tag: t('active_delivery'),
@@ -74,9 +506,21 @@ const ReminderCarousel = ({ onNavigate }) => {
             bg: 'bg-white',
             borderColor: 'border-emerald-100',
             title: t('track_order'),
-            desc: `${activeOrder?.storeName || ''} • ${activeOrder?.status || ''}`
+            desc: `${activeOrder?.storeName || ''} â€¢ ${activeOrder?.status || ''}`
+        },
+        upcomingCamp && {
+            type: 'camps', // or wherever camps should navigate to
+            icon: <MapPin size={24} className="text-white animate-pulse" />,
+            color: 'bg-blue-500',
+            glow: 'shadow-blue-500/20',
+            tag: t('upcoming_camp') || 'UPCOMING CAMP',
+            tagColor: 'text-blue-500',
+            bg: 'bg-white',
+            borderColor: 'border-blue-100',
+            title: upcomingCamp.title || upcomingCamp.hospitalName || 'Health Camp',
+            desc: `${upcomingCamp.date || ''} â€¢ ${upcomingCamp.location || ''}`
         }
-    ].filter(Boolean);
+    ].filter(slide => slide && slide.type); // Ensure slide exists and has a type
 
     useEffect(() => {
         if (slides.length <= 1) return;
@@ -87,9 +531,19 @@ const ReminderCarousel = ({ onNavigate }) => {
     }, [slides.length]);
 
     if (slides.length === 0) return (
-        <div className="p-8 text-center glass rounded-[32px] border-dashed border-slate-200">
-            <p className="text-sm font-bold text-muted">No urgent reminders for today</p>
-        </div>
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-6 text-center rounded-[32px] bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-emerald-100/50 flex flex-col items-center justify-center gap-3 shadow-sm"
+        >
+            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-emerald-500 mb-1">
+                <Sun size={24} className="text-emerald-500" strokeWidth={2.5} />
+            </div>
+            <h4 className="text-[16px] font-black text-slate-800 tracking-tight">Have a great day!</h4>
+            <p className="text-[13px] font-bold text-slate-500 max-w-[200px] leading-snug">
+                You have no upcoming medical activities today.
+            </p>
+        </motion.div>
     );
 
     return (
@@ -118,6 +572,9 @@ const ReminderCarousel = ({ onNavigate }) => {
                             <p className="text-[13px] text-slate-500 font-bold mt-0.5 truncate">
                                 {slides[currentIndex].desc}
                             </p>
+                            {slides[currentIndex].type === 'appointments' && activeAppt?.time && (
+                                <AppointmentCountdown targetTime={activeAppt.time} />
+                            )}
                         </div>
                         <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/50">
                             <ChevronRight size={22} className="text-slate-400" />
@@ -145,35 +602,47 @@ const ReminderCarousel = ({ onNavigate }) => {
 };
 // TABS CONTENT
 const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => {
-    const { user, allHospitals: authHospitals } = useAuth();
+    const { user, nearbyHospitals: authNearbyHospitals = [], loadingHospitals: authLoadingHospitals = false, allHospitals = [], allDoctors = [], refreshNearbyHospitals } = useAuth() || {};
     const [hospitals, setHospitals] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [sortBy, setSortBy] = useState('distance'); // 'distance', 'cost', 'rating'
-    const [isLoading, setIsLoading] = useState(true);
+    const [viewMode, setViewMode] = useState('list'); // list | map
+    const [onlyEmergency, setOnlyEmergency] = useState(false);
+    const [onlyWithDoctors, setOnlyWithDoctors] = useState(false);
+    const [minRating, setMinRating] = useState(0);
+    const [maxDistanceKm, setMaxDistanceKm] = useState(null);
+    const [triageLogs] = useState([]);
     const { t } = useTranslation();
 
+    // Re-sync with auth discovery state
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                // Priority to hospitals synced in AuthContext (Real-time)
-                if (authHospitals && authHospitals.length > 0) {
-                    setHospitals(authHospitals);
-                    setIsLoading(false);
-                    return;
-                }
+        if (authNearbyHospitals && authNearbyHospitals.length > 0) {
+            setHospitals(authNearbyHospitals);
+        } else if (allHospitals && allHospitals.length > 0) {
+            setHospitals(allHospitals);
+        } else {
+            setHospitals([]);
+        }
+    }, [authNearbyHospitals, allHospitals]);
 
-                const data = await getHospitals();
-                setHospitals(data.length > 0 ? data : mockHospitals);
-            } catch (err) {
-                console.error("Firestore error:", err);
-                setHospitals(mockHospitals);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchData();
-    }, [authHospitals]);
+    useEffect(() => {
+        const timer = setTimeout(async () => {
+            const scopedSearch = searchTerm.trim();
+            const scopedLocation = (currentLocation || '').trim();
+            if (!scopedSearch && !scopedLocation) return;
+
+            const results = await refreshNearbyHospitals({
+                search: scopedSearch,
+                location: scopedLocation
+            });
+            setHospitals(results || []);
+        }, 280);
+
+        return () => clearTimeout(timer);
+    }, [searchTerm, currentLocation, refreshNearbyHospitals]);
+
+    const isLoading = authLoadingHospitals;
 
     const handleCategorySelect = (catId) => {
         if (selectedCategory === catId) setSelectedCategory(null);
@@ -185,10 +654,12 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
         const textToSearch = searchTerm.toLowerCase();
 
         // 1. Match Search Term (Name or Specialty)
-        const nameMatch = (h.name || '').toLowerCase().includes(textToSearch);
-        const hospitalSpecialties = h.doctors ? h.doctors.map(d => d.specialty || '') : [];
+        const nameMatch = (h.name || h.hospitalName || '').toLowerCase().includes(textToSearch);
+        const hospitalSpecialties = h?.doctors ? h.doctors.map(d => d.specialty || '') : [];
         const specialtyMatch = hospitalSpecialties.some(s => s.toLowerCase().includes(textToSearch));
-
+        const locationMatch = `${h.district || ''} ${h.state || ''} ${h.country || ''} ${h.address || ''}`
+            .toLowerCase()
+            .includes(textToSearch);
         // 2. Match Category
         let categoryMatch = true;
         if (selectedCategory) {
@@ -209,15 +680,46 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
             ) || (selectedCategory === 'lab' && h.facilities?.some(f => f.toLowerCase().includes('lab')));
         }
 
-        return (nameMatch || specialtyMatch) && categoryMatch;
+        const emergencyMatch = !onlyEmergency || Boolean(h.hasEmergency || h.emergency || h.emergencyServices);
+        const doctorMatch =
+            !onlyWithDoctors ||
+            Boolean(
+                (allDoctors || []).some(d => d.hospitalId === h?.id && d.status === 'APPROVED') ||
+                (h?.doctors && h.doctors.length > 0)
+            );
+
+        const ratingValue = Number(h.rating || 0);
+        const ratingMatch = !minRating || ratingValue >= minRating;
+
+        const distanceMatch =
+            maxDistanceKm == null
+                ? true
+                : (typeof h.distanceKm === 'number' ? h.distanceKm <= maxDistanceKm : false);
+
+        return (nameMatch || specialtyMatch || locationMatch) && categoryMatch && emergencyMatch && doctorMatch && ratingMatch && distanceMatch;
     });
 
-    const isBirthday = () => {
-        if (!user?.birthDate) return false;
-        const today = new Date();
-        const birth = new Date(user.birthDate);
-        return today.getMonth() === birth.getMonth() && today.getDate() === birth.getDate();
-    };
+    const patientCenter = useMemo(() => {
+        const lat = typeof user?.latitude === 'number' ? user.latitude : Number(user?.latitude);
+        const lng = typeof user?.longitude === 'number' ? user.longitude : Number(user?.longitude);
+        return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : [17.3850, 78.4867];
+    }, [user?.latitude, user?.longitude]);
+
+    const mapMarkers = useMemo(() => {
+        return (filteredHospitals || [])
+            .map((h) => {
+                const lat = typeof h?.latitude === 'number' ? h.latitude : Number(h?.latitude);
+                const lng = typeof h?.longitude === 'number' ? h.longitude : Number(h?.longitude);
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+                return {
+                    position: [lat, lng],
+                    title: h.name || h.hospitalName || 'Hospital',
+                    description: `${h.distance || ''} ${h.address || h.location || ''}`.trim(),
+                    hospitalId: h.id
+                };
+            })
+            .filter(Boolean);
+    }, [filteredHospitals]);
 
     const categories = [
         { id: 'all', name: t('all') || 'All', icon: <Grid size={18} /> },
@@ -247,7 +749,7 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
                 onLangClick={() => onNavigate('profile')}
             />
 
-            <div className="px-5">
+            <div className="px-5 pt-4">
                 {/* Unified Reminders Section - Today's Priority */}
                 <div className="mb-6">
                     <div className="flex justify-between items-center mb-3">
@@ -263,6 +765,9 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
                         <ReminderCarousel onNavigate={onNavigate} />
                     </div>
                 </div>
+
+                <VitalsCard patientId={user?.uid} />
+                <AITriageHistory logs={triageLogs} />
 
                 {searchTerm.length === 0 && (
                     <div className="mb-6">
@@ -333,19 +838,26 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
                         <h3 style={{ fontSize: '18px', fontWeight: '800' }}>
                             {searchTerm ? t('search_results') : (selectedCategory ? t('best_specialists') : t('hospitals_nearby'))}
                         </h3>
-                        <span style={{
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            background: 'var(--p-100)',
-                            color: 'var(--p-700)',
-                            padding: '4px 10px',
-                            borderRadius: '10px'
-                        }}>
-                            {filteredHospitals.length} {t('found')}
-                        </span>
+                        {/* Filter bar removed as requested */}
                     </div>
 
                     <div className="flex flex-col gap-4">
+                        {viewMode === 'map' && mapMarkers.length > 0 && (
+                            <div className="mb-4">
+                                <div className="rounded-[32px] overflow-hidden border border-slate-100 shadow-sm" style={{ height: '420px' }}>
+                                    <MapComponent
+                                        center={patientCenter}
+                                        interactive={false}
+                                        markers={mapMarkers}
+                                        zoom={13}
+                                        onMarkerClick={(m) => m?.hospitalId && navigate(`/hospital/${m.hospitalId}`)}
+                                    />
+                                </div>
+                                <p className="text-[11px] font-bold text-slate-500 mt-2 px-2">
+                                    Tap a marker to view hospital and book.
+                                </p>
+                            </div>
+                        )}
                         {isLoading ? (
                             Array(3).fill(0).map((_, i) => (
                                 <div key={i} className="card-premium h-48 skeleton" />
@@ -357,32 +869,47 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick }) => 
                                     if (sortBy === 'rating') return b.rating - a.rating;
                                     return 0;
                                 })
-                                .map((hospital, index) => (
-                                    <motion.div
-                                        key={hospital.id}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        whileInView={{ opacity: 1, y: 0 }}
-                                        viewport={{ once: true, margin: "-50px" }}
-                                        transition={{ duration: 0.3, delay: index * 0.05 }}
-                                    >
-                                        <HospitalCard
-                                            hospital={hospital}
-                                            onClick={() => navigate(`/hospital/${hospital.id}`)}
-                                        />
-                                    </motion.div>
-                                ))
+                                .map((hospital, index) => {
+                                    const hospitalLiveDoctors = (allDoctors || []).filter(d => d.hospitalId === hospital.id && d.status === 'APPROVED');
+                                    const displayDoctors = [...hospitalLiveDoctors, ...(hospital.doctors || [])];
+
+                                    return (
+                                        <motion.div
+                                            key={hospital.id}
+                                            initial={{ opacity: 0, y: 20 }}
+                                            whileInView={{ opacity: 1, y: 0 }}
+                                            viewport={{ once: true, margin: "-50px" }}
+                                            transition={{ duration: 0.3, delay: index * 0.05 }}
+                                            className="mb-8"
+                                        >
+                                            {/* Hospital Section Header removed as per request */}
+
+                                            <HospitalCard
+                                                hospital={hospital}
+                                                onClick={() => navigate(`/hospital/${hospital.id}`)}
+                                            />
+
+                                            {/* Doctors Grouped Under Hospital removed as per request */}
+                                        </motion.div>
+                                    )
+                                })
                         ) : (
-                            <div className="text-center py-16 px-6 card-premium glass border-dashed">
-                                <div className="bg-p-100 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm">
-                                    <Search size={32} className="text-p-600" strokeWidth={2.5} />
+                            <div className="text-center py-20 px-8 card-premium glass border-dashed">
+                                <div className="bg-rose-50 w-24 h-24 rounded-[32px] flex items-center justify-center mx-auto mb-8 shadow-sm">
+                                    <MapPin size={40} className="text-rose-500" strokeWidth={2} />
                                 </div>
-                                <h4 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '4px' }}>{t('found_no_hospitals')}</h4>
-                                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>{t('try_different_category')}</p>
+                                <h4 style={{ fontSize: '20px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px', letterSpacing: '-0.5px' }}>
+                                    No hospitals available in your area.
+                                </h4>
+                                <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '24px', maxWidth: '280px', margin: '0 auto 32px', fontWeight: '500' }}>
+                                    We couldn't find any vArogra-linked hospitals in {user?.location || 'your area'}. Try updating your location in profile.
+                                </p>
                                 <button
-                                    onClick={() => { setSelectedCategory(null); setSearchTerm(''); }}
-                                    className="px-8 py-3.5 btn-primary rounded-2xl text-sm border-none cursor-pointer"
+                                    onClick={() => navigate('/profile')}
+                                    className="px-8 py-4 btn-primary rounded-2xl text-sm font-bold border-none transition-all active:scale-95 flex items-center gap-2 mx-auto"
                                 >
-                                    {t('reset_discovery')}
+                                    <Settings size={18} />
+                                    Update My Location
                                 </button>
                             </div>
                         )}
@@ -496,19 +1023,19 @@ const CheckoutView = ({ store, onConfirm, onCancel }) => {
                 <div style={{ borderTop: '1px dashed #ddd', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
                         <span style={{ color: '#666' }}>{t('medicine_item_total')}</span>
-                        <span>₹{itemTotal.toFixed(2)}</span>
+                        <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹{itemTotal.toFixed(2)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
                         <span style={{ color: '#666' }}>{t('delivery_fee')}</span>
-                        <span>₹{deliveryFee.toFixed(2)}</span>
+                        <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹{deliveryFee.toFixed(2)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
                         <span style={{ color: '#666' }}>{t('taxes_gst')}</span>
-                        <span>₹{taxes.toFixed(2)}</span>
+                        <span>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹{taxes.toFixed(2)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '18px', fontWeight: 'bold', borderTop: '1px solid #eee', paddingTop: '12px', marginTop: '4px' }}>
                         <span>{t('grand_total')}</span>
-                        <span style={{ color: 'var(--primary-color)' }}>₹{grandTotal.toFixed(2)}</span>
+                        <span style={{ color: 'var(--primary-color)' }}>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹{grandTotal.toFixed(2)}</span>
                     </div>
                 </div>
             </div>
@@ -594,27 +1121,27 @@ const DeliveryTrackingView = ({ order, onComplete }) => {
                         style={{
                             position: 'fixed',
                             inset: 0,
-                            backgroundColor: '#1e293b',
+                            background: 'linear-gradient(160deg, #f0fdf4 0%, #f8fafc 40%, #eff6ff 100%)',
                             zIndex: 1000,
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: 'white'
+                            color: 'var(--text-primary)'
                         }}
                     >
-                        <div style={{ width: '120px', height: '120px', borderRadius: '50%', overflow: 'hidden', border: '4px solid rgba(255,255,255,0.2)', marginBottom: '24px', boxShadow: '0 0 40px rgba(16, 185, 129, 0.2)' }}>
+                        <div style={{ width: '120px', height: '120px', borderRadius: '50%', overflow: 'hidden', border: '4px solid white', marginBottom: '24px', boxShadow: '0 0 40px rgba(16, 185, 129, 0.2)' }}>
                             <img src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=200" alt="Partner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         </div>
                         <h2 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px' }}>Ramesh Kumar</h2>
-                        <p style={{ color: '#94a3b8', fontSize: '18px', marginBottom: '40px' }}>{callTime > 0 ? formatTime(callTime) : t('calling')}</p>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '18px', marginBottom: '40px' }}>{callTime > 0 ? formatTime(callTime) : t('calling')}</p>
 
                         <div style={{ display: 'flex', gap: '40px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                <button style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <button style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'white', border: '1px solid #e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <MicOff size={28} />
                                 </button>
-                                <span style={{ fontSize: '12px', color: '#94a3b8' }}>{t('mute')}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t('mute')}</span>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                                 <button
@@ -738,7 +1265,7 @@ const DeliveryTrackingView = ({ order, onComplete }) => {
                             <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e2937' }}>Ramesh Kumar</p>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <Star size={12} fill="#f59e0b" color="#f59e0b" />
-                                <p style={{ fontSize: '12px', color: '#64748b' }}>4.9 • {t('2_5k_deliveries')}</p>
+                                <p style={{ fontSize: '12px', color: '#64748b' }}>4.9 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {t('2_5k_deliveries')}</p>
                             </div>
                         </div>
                         <button
@@ -755,9 +1282,10 @@ const DeliveryTrackingView = ({ order, onComplete }) => {
 };
 
 
-const UpdatesTab = ({ onNavigate }) => {
+const UpdatesTab = () => {
     const { t } = useTranslation();
     const { appointments, announcements, medicalCamps, registerForCamp } = useAuth();
+    const [activeSubTab, setActiveSubTab] = useState('schedule');
     const [filter, setFilter] = useState('all');
 
     const handleRegister = (id) => {
@@ -775,118 +1303,202 @@ const UpdatesTab = ({ onNavigate }) => {
         ? combinedFeed
         : combinedFeed.filter(item => (filter === 'announcements' ? item.feedType === 'announcement' : item.feedType === 'camp'));
 
+    // Featured appointment (first one for demo purposes)
+    const featuredAppt = appointments?.[0];
+    const isDataLoading = !appointments || appointments.length === 0;
+
+    const upcomingBookings = [
+        { id: 1, title: "MRI Scan", date: "Oct 24, 10:00 AM", status: "Confirmed", icon: <Package size={20} /> },
+        { id: 2, title: "Blood Work", date: "Oct 26, 08:30 AM", status: "Pending", icon: <Heart size={20} /> }
+    ];
+
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f8fafc', position: 'relative' }}>
-            <header className="sticky top-0 z-50 bg-white/60 backdrop-blur-xl border-b border-slate-100/50 px-6 pt-12 pb-6">
-                <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/20">
-                        <Megaphone className="text-white" size={28} />
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-black text-slate-900 tracking-tight">Schedule & Feed</h1>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Medical Updates • Appointments</p>
-                    </div>
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: '100vh',
+            backgroundColor: '#0A0E1A',
+            color: 'white',
+            fontFamily: 'Outfit, sans-serif'
+        }}>
+            {/* Header Tabs */}
+            <header className="sticky top-0 z-50 bg-[#0A0E1A]/80 backdrop-blur-xl border-b border-white/5 px-6 pt-12 pb-4">
+                <div className="flex justify-center gap-12">
+                    <button
+                        onClick={() => setActiveSubTab('schedule')}
+                        className={`text-sm font-black uppercase tracking-widest pb-2 transition-all border-b-2 ${activeSubTab === 'schedule' ? 'text-blue-500 border-blue-500' : 'text-slate-500 border-transparent'}`}
+                    >
+                        My Schedule
+                    </button>
+                    <button
+                        onClick={() => setActiveSubTab('feed')}
+                        className={`text-sm font-black uppercase tracking-widest pb-2 transition-all border-b-2 ${activeSubTab === 'feed' ? 'text-blue-500 border-blue-500' : 'text-slate-500 border-transparent'}`}
+                    >
+                        Health Feed
+                    </button>
                 </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-40">
-                <div className="p-6 space-y-10">
-                    {/* Schedule Section */}
-                    <section>
-                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-6 px-2">Confirmed Bookings</h3>
-                        <motion.div layout className="space-y-6">
-                            <AnimatePresence mode="popLayout">
-                                {(appointments || []).length > 0 ? (
-                                    appointments.map(appt => (
-                                        <motion.div
-                                            key={appt.id}
-                                            layout
-                                            initial={{ opacity: 0, y: 20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            exit={{ opacity: 0, scale: 0.95 }}
-                                            className="bg-white p-6 rounded-[32px] border border-slate-50 shadow-sm hover:shadow-md transition-all group"
-                                        >
-                                            <div className="flex justify-between items-start mb-4">
-                                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${appt.status === 'Accepted' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
-                                                    {appt.status || 'Verified'}
-                                                </span>
-                                                <span className="text-[10px] font-bold text-slate-300">ID: {appt.id?.slice(-8).toUpperCase()}</span>
+            <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
+                <AnimatePresence mode="wait">
+                    {activeSubTab === 'schedule' ? (
+                        <motion.div
+                            key="schedule"
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 10 }}
+                            className="p-6 space-y-8"
+                        >
+                            {/* Featured Active Card or Skeleton */}
+                            {isDataLoading ? (
+                                <motion.div className="bg-[#111827] rounded-[32px] p-6 border border-white/10 shadow-2xl animate-pulse">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="flex-1 space-y-3">
+                                            <div className="w-24 h-4 bg-white/10 rounded-full" />
+                                            <div className="w-48 h-8 bg-white/10 rounded-full" />
+                                            <div className="w-32 h-4 bg-white/10 rounded-full" />
+                                        </div>
+                                        <div className="w-20 h-20 rounded-2xl bg-white/5" />
+                                    </div>
+                                    <div className="flex gap-3 mb-8">
+                                        <div className="flex-1 h-12 rounded-2xl bg-white/5" />
+                                        <div className="flex-1 h-12 rounded-2xl bg-white/5" />
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        {[1, 2, 3].map(i => <div key={i} className="h-20 rounded-2xl bg-white/5" />)}
+                                    </div>
+                                </motion.div>
+                            ) : (
+                                <motion.div
+                                    initial={{ y: 20 }}
+                                    animate={{ y: 0 }}
+                                    className="bg-[#111827] rounded-[32px] p-6 border border-white/10 shadow-2xl relative overflow-hidden"
+                                >
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 text-blue-400 mb-1">
+                                                <Clock size={16} fill="currentColor" className="fill-blue-400/20" />
+                                                <span className="text-[13px] font-bold">{featuredAppt.date}, {featuredAppt.time}</span>
                                             </div>
-                                            <h4 className="font-black text-slate-800 text-lg group-hover:text-blue-600 transition-colors">Dr. {appt.doctorName}</h4>
-                                            <p className="text-xs font-bold text-slate-400 mb-6">{appt.hospitalName}</p>
+                                            <h2 className="text-2xl font-black tracking-tight mb-1">Dr. {featuredAppt.doctorName}</h2>
+                                            <p className="text-slate-400 text-sm font-medium">{featuredAppt.specialty || "General Consultation"}</p>
+                                        </div>
+                                        <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-white/10 shrink-0">
+                                            <img src={featuredAppt.image || "https://images.unsplash.com/photo-1559839734-2b71f1536785?auto=format&fit=crop&q=80&w=100"} alt="Doctor" className="w-full h-full object-cover" />
+                                        </div>
+                                    </div>
 
-                                            <div className="grid grid-cols-2 gap-4 pt-6 border-t border-slate-50">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400"><Calendar size={14} /></div>
-                                                    <span className="text-[11px] font-black text-slate-800">{appt.date}</span>
+                                    <div className="flex gap-3 mb-8">
+                                        <button className="flex-1 py-3.5 rounded-2xl bg-white/5 border border-white/10 text-[13px] font-black uppercase tracking-wider text-blue-400 hover:bg-white/10 transition-all">
+                                            Reschedule
+                                        </button>
+                                        <button className="flex-1 py-3.5 rounded-2xl bg-blue-600 text-white text-[13px] font-black uppercase tracking-wider shadow-lg shadow-blue-600/20 hover:bg-blue-500 transition-all">
+                                            Details
+                                        </button>
+                                    </div>
+
+                                    <div className="pt-6 border-t border-white/5">
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <CountdownBox value="03" label="Hours" />
+                                            <CountdownBox value="45" label="Mins" />
+                                            <CountdownBox value="12" label="Secs" />
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {/* Upcoming Bookings List */}
+                            <section>
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xl font-black tracking-tight">Upcoming Bookings</h3>
+                                    <button className="text-blue-500 text-[11px] font-black uppercase tracking-widest">View All</button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    {isDataLoading ? (
+                                        [1, 2].map(i => (
+                                            <div key={i} className="bg-[#111827] p-5 rounded-[28px] border border-white/5 h-20 animate-pulse" />
+                                        ))
+                                    ) : (
+                                        upcomingBookings.map((booking, idx) => (
+                                            <motion.div
+                                                key={booking.id}
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: idx * 0.1 }}
+                                                className="bg-[#111827] p-5 rounded-[28px] border border-white/5 flex items-center justify-between group hover:border-blue-500/30 transition-all"
+                                            >
+                                                <div className="flex items-center gap-5">
+                                                    <div className="w-12 h-12 rounded-2xl bg-[#1A2234] flex items-center justify-center text-blue-400 shadow-inner group-hover:scale-110 transition-transform">
+                                                        {booking.icon}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-black text-[16px] tracking-tight">{booking.title}</h4>
+                                                        <p className="text-slate-500 text-[11px] font-bold mt-0.5">{booking.date}</p>
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400"><Clock size={14} /></div>
-                                                    <span className="text-[11px] font-black text-slate-800">{appt.time}</span>
+                                                <div className={`px-4 py-1.5 rounded-full text-[10px] font-black flex items-center gap-2 border ${booking.status === 'Confirmed'
+                                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                                    : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                                                    }`}>
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${booking.status === 'Confirmed' ? 'bg-emerald-400 animate-pulse' : 'bg-orange-400'}`} />
+                                                    {booking.status}
                                                 </div>
-                                            </div>
-                                            {appt.status === 'Accepted' && <AppointmentCountdown targetTime={appt.time} />}
-                                        </motion.div>
-                                    ))
-                                ) : (
-                                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-10 flex flex-col items-center justify-center opacity-40 text-center grayscale">
-                                        <Calendar size={48} className="mb-4 text-slate-300" />
-                                        <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Schedule is Empty</p>
-                                        <button onClick={() => onNavigate('home')} className="mt-4 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:underline">Book an Appointment</button>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
+                                            </motion.div>
+                                        ))
+                                    )}
+                                </div>
+                            </section>
                         </motion.div>
-                    </section>
-
-                    {/* Feed Section */}
-                    <section>
-                        <div className="flex items-center justify-between mb-6 px-2">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Health Intelligence</h3>
-                            <div className="flex gap-2">
+                    ) : (
+                        <motion.div
+                            key="feed"
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -10 }}
+                            className="p-6 space-y-10"
+                        >
+                            {/* Feed Filters */}
+                            <div className="flex gap-2 pb-2 overflow-x-auto no-scrollbar">
                                 {['all', 'announcements', 'camps'].map(f => (
                                     <button
                                         key={f}
                                         onClick={() => setFilter(f)}
-                                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${filter === f ? 'bg-slate-900 text-white shadow-lg' : 'bg-white border border-slate-100 text-slate-400'}`}
+                                        className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap ${filter === f ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-[#111827] border-white/5 text-slate-400'}`}
                                     >
                                         {f}
                                     </button>
                                 ))}
                             </div>
-                        </div>
 
-                        <motion.div layout className="space-y-6">
-                            <AnimatePresence mode="popLayout">
+                            <div className="space-y-6">
                                 {(filteredFeed || []).length > 0 ? (
-                                    filteredFeed.map(item => (
+                                    filteredFeed.map((item, idx) => (
                                         <motion.div
                                             key={item.id}
-                                            layout
-                                            initial={{ opacity: 0, y: 30 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            exit={{ opacity: 0, scale: 0.98 }}
-                                            transition={{ type: "spring", stiffness: 200, damping: 25 }}
-                                            className={`p-8 rounded-[40px] border shadow-sm transition-all hover:shadow-md ${item.feedType === 'camp' ? 'bg-emerald-50/30 border-emerald-100/50' : 'bg-white border-slate-100'}`}
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ delay: idx * 0.05 }}
+                                            className={`p-8 rounded-[40px] border shadow-sm ${item.feedType === 'camp' ? 'bg-[#0F1D1A]/50 border-emerald-500/10' : 'bg-[#111827] border-white/5'}`}
                                         >
                                             <div className="flex justify-between items-start mb-6">
-                                                <div className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest ${item.feedType === 'camp' ? 'bg-emerald-500 text-white shadow-emerald-500/10' : 'bg-blue-600 text-white shadow-blue-600/10'}`}>
+                                                <div className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest ${item.feedType === 'camp' ? 'bg-emerald-500 text-white' : 'bg-blue-600 text-white'}`}>
                                                     {item.feedType === 'camp' ? 'Public Health Event' : item.type || 'Official Update'}
                                                 </div>
-                                                <span className="text-[10px] font-bold text-slate-300">{item.timestamp ? new Date(item.timestamp).toLocaleDateString() : 'Active Now'}</span>
+                                                <span className="text-[10px] font-bold text-slate-500">{item.timestamp ? new Date(item.timestamp).toLocaleDateString() : 'Active Now'}</span>
                                             </div>
-                                            <h4 className="text-xl font-black text-slate-900 mb-2 tracking-tight">{item.title}</h4>
-                                            <p className="text-sm font-bold text-slate-500 leading-relaxed mb-8">{item.description || item.services}</p>
+                                            <h4 className="text-xl font-black text-white mb-2 tracking-tight">{item.title}</h4>
+                                            <p className="text-sm font-bold text-slate-400 leading-relaxed mb-8">{item.description || item.services}</p>
 
-                                            <div className="flex flex-wrap gap-4 p-4 bg-white/40 rounded-3xl border border-white mb-6">
+                                            <div className="flex flex-wrap gap-4 p-4 bg-white/5 rounded-3xl border border-white/5 mb-6">
                                                 <div className="flex items-center gap-2">
                                                     <MapPin size={14} className="text-slate-400" />
-                                                    <span className="text-[11px] font-black text-slate-700">{item.location}</span>
+                                                    <span className="text-[11px] font-black text-slate-300">{item.location}</span>
                                                 </div>
                                                 {item.feedType === 'camp' && (
                                                     <div className="flex items-center gap-2">
                                                         <Calendar size={14} className="text-slate-400" />
-                                                        <span className="text-[11px] font-black text-slate-700">{item.date}</span>
+                                                        <span className="text-[11px] font-black text-slate-300">{item.date}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -896,30 +1508,39 @@ const UpdatesTab = ({ onNavigate }) => {
                                                     onClick={() => handleRegister(item.id)}
                                                     className="w-full py-4 rounded-2xl bg-emerald-500 text-white text-[11px] font-black shadow-xl shadow-emerald-500/20 active:scale-95 transition-all uppercase tracking-widest"
                                                 >
-                                                    Secure Spotted • {item.registeredCount || 0}/{item.limit || 100} Filled
+                                                    Secure Spotted ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {item.registeredCount || 0}/{item.limit || 100} Filled
                                                 </button>
                                             )}
                                         </motion.div>
                                     ))
                                 ) : (
-                                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-20 flex flex-col items-center justify-center opacity-30 text-center grayscale">
-                                        <Megaphone size={48} className="mb-4 text-slate-300" />
-                                        <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No Active Broadcasts</p>
-                                    </motion.div>
+                                    <div className="py-20 flex flex-col items-center justify-center opacity-30 text-center">
+                                        <Megaphone size={48} className="mb-4 text-slate-600" />
+                                        <p className="text-sm font-black text-slate-500 uppercase tracking-widest">No Active Broadcasts</p>
+                                    </div>
                                 )}
-                            </AnimatePresence>
+                            </div>
                         </motion.div>
-                    </section>
-                </div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );
 };
 
-const AIAssistantTab = ({ onNavigate }) => {
-    const { user } = useAuth();
+const CountdownBox = ({ value, label }) => (
+    <div className="flex flex-col items-center">
+        <div className="w-full bg-[#1A2234] border border-white/5 rounded-2xl py-4 flex flex-col items-center justify-center shadow-inner">
+            <span className="text-3xl font-black tracking-tighter text-white">{value}</span>
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 mt-1">{label}</span>
+        </div>
+    </div>
+);
+
+const AIAssistantTab = () => {
+    const { t } = useTranslation();
     const [messages, setMessages] = useState([
-        { role: 'model', text: "Hello! 👋 I'm **MediBot**, your Medicine Information Assistant.\n\nI can help you with:\n• General medicine information\n• OTC medicine suggestions for common symptoms\n• Prescription & medicine photo analysis\n\nTry asking about a symptom below, or type your question!" }
+        { role: 'model', text: t('ai_assistant_intro') || "Hello! I am your HealthLink AI Assistant. How can I help you today? You can ask me health questions, or upload a prescription to analyze." }
     ]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -929,15 +1550,6 @@ const AIAssistantTab = ({ onNavigate }) => {
     const [aiLoading, setAiLoading] = useState(false);
     const scrollRef = React.useRef(null);
     const fileInputRef = React.useRef(null);
-
-    const quickChips = [
-        { label: '🤕 Headache', query: 'I have a headache' },
-        { label: '🤧 Cold & Cough', query: 'Cold and cough' },
-        { label: '🤒 Fever', query: 'Fever' },
-        { label: '😣 Stomach Pain', query: 'Stomach pain' },
-        { label: '🤢 Nausea', query: 'Nausea and vomiting' },
-        { label: '😴 Insomnia', query: 'I cannot sleep properly' },
-    ];
 
     // Voice Recognition Setup
     const [recognition, setRecognition] = useState(null);
@@ -989,15 +1601,22 @@ const AIAssistantTab = ({ onNavigate }) => {
         setIsLoading(true);
 
         try {
-            const { getAIResponse } = await import('../utils/AIService');
+            const { getAIResponse } = await import('../services/aiService');
             const aiResponse = await getAIResponse([...messages, userMsg], 'patient');
             setMessages(prev => [...prev, { role: 'model', text: aiResponse }]);
-        } catch (error) {
-            setMessages(prev => [...prev, { role: 'model', text: "I'm sorry, something went wrong. Please try again." }]);
+        } catch {
+            setMessages(prev => [...prev, { role: 'model', text: t('ai_error_message') }]);
         } finally {
             setIsLoading(false);
         }
     };
+
+    const fileToBase64 = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+    });
 
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
@@ -1008,178 +1627,110 @@ const AIAssistantTab = ({ onNavigate }) => {
         setAiAnalysis('');
 
         try {
-            const { identifyMedicine, analyzePrescription } = await import('../utils/AIService');
+            const base64Data = await fileToBase64(file);
+            const { identifyMedicine, analyzePrescription } = await import('../services/aiService');
+            // Check if user specifically asked for medicine identification or if we should just try prescription
             const isMedicine = window.confirm("Is this a medicine photo? (Click Cancel if it's a prescription)");
 
             let result;
             if (isMedicine) {
-                result = await identifyMedicine(file);
+                result = await identifyMedicine(base64Data);
             } else {
-                result = await analyzePrescription(file);
+                result = await analyzePrescription(base64Data);
             }
-            setAiAnalysis(result);
+
+            setAiAnalysis(result?.message || result);
         } catch (error) {
+            console.error("AI Upload Error:", error);
             setAiAnalysis("Sorry, I couldn't process the image. Please try again.");
         } finally {
             setAiLoading(false);
         }
     };
 
-    // Simple markdown-like rendering for bold (**text**) and bullet points
-    const renderFormattedText = (text) => {
-        return text.split('\n').map((line, idx) => {
-            // Process bold markers
-            const parts = line.split(/(\*\*[^*]+\*\*)/g);
-            const rendered = parts.map((part, pidx) => {
-                if (part.startsWith('**') && part.endsWith('**')) {
-                    return <strong key={pidx} className="font-extrabold">{part.slice(2, -2)}</strong>;
-                }
-                // Process italic *text*
-                const italicParts = part.split(/(\*[^*]+\*)/g);
-                return italicParts.map((ip, iidx) => {
-                    if (ip.startsWith('*') && ip.endsWith('*') && !ip.startsWith('**')) {
-                        return <em key={`${pidx}-${iidx}`} className="italic text-slate-500">{ip.slice(1, -1)}</em>;
-                    }
-                    return ip;
-                });
-            });
-
-            const isBullet = line.trimStart().startsWith('•') || line.trimStart().startsWith('-');
-            const isWarning = line.includes('⚠️') || line.toLowerCase().includes('disclaimer');
-
-            return (
-                <p key={idx} className={`${idx > 0 ? 'mt-1.5' : ''} ${isBullet ? 'pl-1' : ''} ${isWarning ? 'text-amber-600 text-xs mt-3 pt-3 border-t border-amber-100' : ''}`}>
-                    {rendered}
-                </p>
-            );
-        });
-    };
-
-    const showChips = messages.length <= 2 && !isLoading;
-
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'linear-gradient(180deg, #f0f4ff 0%, #f8fafc 50%)', position: 'relative' }}>
-            {/* Premium Header */}
-            <header className="sticky top-0 z-50 bg-white/70 backdrop-blur-2xl border-b border-blue-100/30 px-5 pt-10 pb-5">
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-                            <Bot className="text-white" size={24} />
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f8fafc', position: 'relative' }}>
+            {/* Glassmorphism Header */}
+            <header className="sticky top-0 z-50 bg-white/60 backdrop-blur-xl border-b border-slate-100/50 px-6 pt-12 pb-6">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="relative">
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                                <Bot className="text-white" size={28} />
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full shadow-sm animate-pulse" />
                         </div>
-                        <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-400 border-2 border-white rounded-full shadow-sm" />
-                    </div>
-                    <div className="flex-1">
-                        <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-                            MediBot
-                            <span className="px-1.5 py-0.5 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-md text-[8px] font-black uppercase tracking-wider">AI</span>
-                        </h1>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                            <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-                            <span className="text-[10px] font-bold text-emerald-600">Online</span>
-                            <span className="text-[10px] text-slate-300 mx-1">•</span>
-                            <span className="text-[10px] font-semibold text-slate-400">Medicine Info Assistant</span>
+                        <div>
+                            <h1 className="text-xl font-black text-slate-900 tracking-tight">vArogra AI</h1>
+                            <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-md text-[9px] font-black uppercase tracking-widest border border-emerald-100">Live Assistant</span>
+                                <span className="text-[10px] font-bold text-slate-400">v2.5.0 Premium</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </header>
 
-            {/* Disclaimer Banner */}
-            <div className="mx-4 mt-3 px-4 py-2.5 bg-amber-50/80 backdrop-blur-sm border border-amber-200/50 rounded-2xl flex items-start gap-2.5">
-                <span className="text-amber-500 mt-0.5 text-xs">⚠️</span>
-                <p className="text-[10px] font-semibold text-amber-700 leading-relaxed">General medicine info only. Do not self-medicate. Always consult a doctor before taking any medication.</p>
-            </div>
-
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-44" ref={scrollRef}>
-                <div className="p-5 space-y-4">
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto no-scrollbar pb-40">
+                <div className="p-6 space-y-6">
                     <AnimatePresence initial={false}>
                         {messages.map((msg, i) => (
                             <motion.div
                                 key={i}
                                 layout
-                                initial={{ opacity: 0, y: 12, scale: 0.95 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                transition={{ type: "spring", stiffness: 500, damping: 35, opacity: { duration: 0.15 } }}
-                                className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                initial={{ opacity: 0, x: msg.role === 'user' ? 20 : -20, scale: 0.8 }}
+                                animate={{ opacity: 1, x: 0, scale: 1 }}
+                                transition={{
+                                    type: "spring",
+                                    stiffness: 400,
+                                    damping: 30,
+                                    opacity: { duration: 0.2 }
+                                }}
+                                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                             >
-                                {msg.role !== 'user' && (
-                                    <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shadow-blue-500/20 mt-1">
-                                        <Bot className="text-white" size={16} />
-                                    </div>
-                                )}
-                                <div className={`max-w-[80%] px-5 py-4 text-[13px] leading-relaxed shadow-sm ${msg.role === 'user'
-                                    ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-[22px] rounded-tr-lg shadow-blue-600/15 font-semibold'
-                                    : 'bg-white border border-slate-100/80 text-slate-700 rounded-[22px] rounded-tl-lg hover:shadow-md transition-shadow font-medium'
+                                <div className={`max-w-[85%] p-5 rounded-[28px] text-sm font-bold leading-relaxed shadow-sm transition-all ${msg.role === 'user'
+                                    ? 'bg-blue-600 text-white rounded-tr-none shadow-blue-600/10'
+                                    : 'bg-white border border-slate-100 text-slate-700 rounded-tl-none hover:shadow-md'
                                     }`}>
-                                    {msg.role === 'user'
-                                        ? msg.text.split('\n').map((line, idx) => <p key={idx} className={idx > 0 ? "mt-1.5" : ""}>{line}</p>)
-                                        : renderFormattedText(msg.text)
-                                    }
+                                    {msg.text.split('\n').map((line, idx) => (
+                                        <p key={idx} className={idx > 0 ? "mt-2" : ""}>{line}</p>
+                                    ))}
                                 </div>
-                                {msg.role === 'user' && (
-                                    <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shadow-md mt-1">
-                                        <User className="text-white" size={14} />
-                                    </div>
-                                )}
                             </motion.div>
                         ))}
                     </AnimatePresence>
-
-                    {/* Quick Action Chips */}
-                    {showChips && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.3 }}
-                            className="pt-2"
-                        >
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 ml-11">Quick Actions</p>
-                            <div className="flex flex-wrap gap-2 ml-11">
-                                {quickChips.map((chip, idx) => (
-                                    <motion.button
-                                        key={idx}
-                                        whileHover={{ scale: 1.03 }}
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={() => handleSend(chip.query)}
-                                        className="px-4 py-2.5 bg-white border border-slate-200/80 rounded-2xl text-[12px] font-bold text-slate-600 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/50 transition-all shadow-sm"
-                                    >
-                                        {chip.label}
-                                    </motion.button>
-                                ))}
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {/* Typing Indicator */}
                     {isLoading && (
-                        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5 justify-start">
-                            <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shadow-blue-500/20 mt-1">
-                                <Bot className="text-white" size={16} />
-                            </div>
-                            <div className="bg-white border border-slate-100 px-5 py-4 rounded-[22px] rounded-tl-lg flex items-center gap-3 shadow-sm">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="flex justify-start"
+                        >
+                            <div className="bg-white border border-slate-100 p-5 rounded-[28px] rounded-tl-none flex items-center gap-3 shadow-sm">
                                 <div className="flex gap-1">
                                     {[0, 1, 2].map(dot => (
                                         <motion.div
                                             key={dot}
-                                            animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
-                                            transition={{ repeat: Infinity, duration: 1, delay: dot * 0.15 }}
-                                            className="w-2 h-2 bg-blue-500 rounded-full"
+                                            animate={{ y: [0, -4, 0] }}
+                                            transition={{ repeat: Infinity, duration: 0.8, delay: dot * 0.1 }}
+                                            className="w-1.5 h-1.5 bg-blue-400 rounded-full"
                                         />
                                     ))}
                                 </div>
-                                <span className="text-[10px] font-bold text-slate-400">Analyzing...</span>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Processing</span>
                             </div>
                         </motion.div>
                     )}
+                    <div ref={scrollRef} />
                 </div>
             </div>
 
-            {/* Refined Premium Input Bar */}
-            <div className="fixed bottom-24 left-0 right-0 px-6 z-40">
+            {/* Futuristic Glass Control Bar */}
+            <div className="fixed bottom-32 left-0 right-0 px-6 z-40">
                 <motion.div
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    className="bg-white/70 backdrop-blur-3xl p-2 rounded-[24px] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border border-white/40 flex items-center gap-2 ring-1 ring-slate-200/20"
+                    className="bg-white/80 backdrop-blur-2xl p-3 rounded-[32px] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.15)] border border-white flex items-center gap-3"
                 >
                     <input
                         type="file"
@@ -1190,432 +1741,827 @@ const AIAssistantTab = ({ onNavigate }) => {
                     />
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="w-10 h-10 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-blue-50 hover:text-blue-500 transition-all active:scale-90 flex-shrink-0"
+                        className="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-blue-50 hover:text-blue-600 transition-all active:scale-90"
                     >
-                        <Camera size={18} />
+                        <Camera size={22} />
                     </button>
 
-                    <div className="flex-1 flex items-center gap-2 bg-slate-100/50 rounded-xl px-4 py-2.5">
+                    <div className="flex-1 relative flex items-center gap-2 bg-slate-50 rounded-2xl px-5 py-4">
                         <input
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder="Ask MediBot anything..."
-                            className="flex-1 bg-transparent border-none outline-none text-[13px] font-medium text-slate-700 placeholder:text-slate-400 min-w-0"
+                            placeholder="Consult symptoms or ask AI..."
+                            className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-slate-700 placeholder:text-slate-300"
                         />
                         <button
                             onClick={toggleRecording}
-                            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all flex-shrink-0 ${isRecording
-                                ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse'
-                                : 'bg-white/80 text-slate-400 hover:text-blue-500 shadow-sm'
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-white text-blue-600 shadow-sm'
                                 }`}
                         >
-                            {isRecording ? <Square size={12} fill="white" /> : <Mic size={16} />}
+                            {isRecording ? <Square size={16} fill="white" /> : <Mic size={20} />}
                         </button>
                     </div>
 
                     <button
                         onClick={() => handleSend()}
                         disabled={!input.trim() || isLoading}
-                        className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/20 active:scale-90 transition-all disabled:grayscale disabled:opacity-30 flex-shrink-0"
+                        className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xl shadow-blue-600/30 active:scale-90 transition-all disabled:grayscale disabled:opacity-30"
                     >
-                        {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={16} strokeWidth={2.5} />}
+                        {isLoading ? <Loader2 size={24} className="animate-spin" /> : <Send size={22} strokeWidth={2.5} />}
                     </button>
                 </motion.div>
                 {isRecording && (
                     <motion.p
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="text-[8px] font-black text-red-500 text-center mt-2 uppercase tracking-[0.4em] animate-pulse"
+                        className="text-[9px] font-black text-red-500 text-center mt-3 uppercase tracking-[0.3em] animate-pulse"
                     >
-                        Recording Audio
+                        AI System Listening...
                     </motion.p>
                 )}
             </div>
-
-            <AIAnalyzerModal
-                isOpen={showAIModal}
-                onClose={() => setShowAIModal(false)}
-                analysis={aiAnalysis}
-                loading={aiLoading}
+            <AIAnalyzerModal 
+                isOpen={showAIModal} 
+                onClose={() => setShowAIModal(false)} 
+                analysis={aiAnalysis} 
+                loading={aiLoading} 
             />
         </div>
     );
 };
 
-const StoreTab = () => {
-    const { t } = useTranslation();
-    const { appointments, placeOrder, allMedicalStores: medicalStores } = useAuth();
-    const [showSuccess, setShowSuccess] = useState(false);
-    const [storeSearch, setStoreSearch] = useState('');
-    const [uploading, setUploading] = useState(false);
-    const [selectionMode, setSelectionMode] = useState(null); // 'manual' | 'auto'
-    const [checkoutStore, setCheckoutStore] = useState(null);
-    const [activeOrder, setActiveOrder] = useState(null);
 
-    // AI Analysis State
-    const [showAIModal, setShowAIModal] = useState(false);
-    const [aiAnalysis, setAiAnalysis] = useState('');
-    const [aiLoading, setAiLoading] = useState(false);
-
-    const prescriptions = (appointments || []).filter(a => a.status === 'Prescribed' && a.prescription);
-
-    const filteredStores = (medicalStores || []).filter(s =>
-        (s.name || '').toLowerCase().includes(storeSearch.toLowerCase()) ||
-        (s.address || '').toLowerCase().includes(storeSearch.toLowerCase())
+const ComparisonModal = ({ stores, isOpen, onClose }) => {
+    if (!isOpen || stores.length < 2) return null;
+    
+    return (
+        <AnimatePresence>
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+                <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={onClose}
+                    className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                />
+                <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    className="relative w-full max-w-4xl bg-white rounded-[40px] overflow-hidden shadow-2xl flex flex-col max-h-[85vh]"
+                >
+                    <div className="p-8 border-b border-slate-50 flex items-center justify-between">
+                        <div>
+                            <h3 className="text-xl font-black text-main">Store Comparison</h3>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Comparing {stores.length} best options</p>
+                        </div>
+                        <button onClick={onClose} className="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-all">
+                            <X size={20} />
+                        </button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-x-auto p-8 no-scrollbar">
+                        <table className="w-full border-collapse">
+                            <thead>
+                                <tr>
+                                    <th className="text-left p-4 bg-slate-50 rounded-tl-2xl border-r border-white text-[10px] font-black text-slate-400 uppercase tracking-widest">Feature</th>
+                                    {stores.map(store => (
+                                        <th key={store.id} className="p-4 bg-slate-50 border-r border-white min-w-[200px]">
+                                            <div className="flex flex-col items-center">
+                                                <img src={store.image} className="w-20 h-20 rounded-2xl object-cover mb-3" />
+                                                <span className="text-sm font-black text-main">{store.name}</span>
+                                            </div>
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {[
+                                    { label: 'Distance', key: 'distanceKm', suffix: ' km' },
+                                    { label: 'Price Range', key: 'costIndicator' },
+                                    { label: 'Rating', key: 'rating', suffix: ' ★' },
+                                    { label: 'Status', key: 'isOpen', renderer: (val) => val ? 'Open Now' : 'Closed' },
+                                ] .map((row, idx) => (
+                                    <tr key={idx} className="border-b border-slate-50">
+                                        <td className="p-4 bg-slate-50/50 font-black text-[10px] text-slate-400 uppercase tracking-widest">{row.label}</td>
+                                        {stores.map(store => (
+                                            <td key={store.id} className="p-4 text-center">
+                                                <span className="text-sm font-bold text-main">
+                                                    {row.renderer ? row.renderer(store[row.key]) : `${store[row.key]}${row.suffix || ''}`}
+                                                </span>
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                                <tr>
+                                    <td className="p-4 bg-slate-50/50 font-black text-[10px] text-slate-400 uppercase tracking-widest">Inventory</td>
+                                    {stores.map(store => (
+                                        <td key={store.id} className="p-4">
+                                            <div className="flex flex-wrap gap-1 justify-center">
+                                                {store.inventory.slice(0, 4).map((med, i) => (
+                                                    <span key={i} className="px-2 py-0.5 bg-p-50 text-p-600 text-[8px] font-black rounded-lg uppercase">{med}</span>
+                                                ))}
+                                                {store.inventory.length > 4 && <span className="text-[8px] font-bold text-slate-300">+{store.inventory.length - 4} more</span>}
+                                            </div>
+                                        </td>
+                                    ))}
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </motion.div>
+            </div>
+        </AnimatePresence>
     );
+};
 
-    const initiateCheckout = (store) => {
-        setCheckoutStore(store);
-    };
+const StoreTab = ({ onNavigate }) => {
+    const { t } = useTranslation();
+    const [storeSearch, setStoreSearch] = useState('');
+    const [viewMode, setViewMode] = useState('list');
+    const [showMap, setShowMap] = useState(false);
+    
+    const [maxDistance, setMaxDistance] = useState(10); 
+    const [costFilter, setCostFilter] = useState('all'); 
+    const [onlyOpen, setOnlyOpen] = useState(false);
+    const [minRating, setMinRating] = useState(0);
 
-    const handleOrder = (storeName = t('the_selected_store')) => {
-        setCheckoutStore(null);
-        setShowSuccess(true);
+    const [showPrescriptionPanel, setShowPrescriptionPanel] = useState(false);
+    const [prescriptionText, setPrescriptionText] = useState('');
+    const [priority, setPriority] = useState('nearest'); 
+    const [recommendation, setRecommendation] = useState(null);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const fileInputRef = useRef(null);
 
-        // Save order to global state for Merchant Dashboard
-        const newOrder = placeOrder({
-            storeName,
-            storeId: checkoutStore?.id || 'ms1',
-            total: 493.50, // Simulated total from checkout
-            items: ['Amoxicillin', 'Paracetamol'] // Simulated items
+    // Advanced Features states
+    const [cart, setCart] = useState([]);
+    const [showCart, setShowCart] = useState(false);
+    const [selectedStore, setSelectedStore] = useState(null);
+    const [comparisonList, setComparisonList] = useState([]);
+    const [showComparison, setShowComparison] = useState(false);
+
+    const handleAddToCart = (store, medName, quantityDelta) => {
+        setCart(prev => {
+            const existing = prev.find(item => item.storeId === store.id && item.medName === medName);
+            if (existing) {
+                const newQuantity = existing.quantity + quantityDelta;
+                if (newQuantity <= 0) return prev.filter(item => item !== existing);
+                return prev.map(item => item === existing ? { ...item, quantity: newQuantity } : item);
+            }
+            if (quantityDelta <= 0) return prev;
+            return [...prev, { storeId: store.id, storeName: store.name, medName, quantity: 1, price: 450 }];
         });
+    };
 
+    const handleAutoAddPrescription = (store, meds) => {
+        const availableMeds = meds.filter(med => 
+            store.inventory.some(item => item.toLowerCase().includes(med.toLowerCase()))
+        );
+        
+        availableMeds.forEach(med => {
+            const actualMedName = store.inventory.find(item => item.toLowerCase().includes(med.toLowerCase()));
+            handleAddToCart(store, actualMedName, 1);
+        });
+        
+        setShowCart(true);
+    };
+
+    const toggleCompare = (store) => {
+        setComparisonList(prev => {
+            if (prev.find(s => s.id === store.id)) {
+                return prev.filter(s => s.id !== store.id);
+            }
+            if (prev.length >= 3) return prev;
+            return [...prev, store];
+        });
+    };
+
+    const filteredStores = useMemo(() => {
+        return MOCK_STORES.filter(store => {
+            const matchesSearch = store.name.toLowerCase().includes(storeSearch.toLowerCase()) || 
+                                 store.address.toLowerCase().includes(storeSearch.toLowerCase());
+            const matchesDistance = store.distanceKm <= maxDistance;
+            const matchesRating = store.rating >= minRating;
+            const matchesOpen = !onlyOpen || store.isOpen;
+            
+            let matchesCost = true;
+            if (costFilter === 'Budget Friendly') matchesCost = store.costIndicator === 'â‚¹';
+            if (costFilter === 'Premium') matchesCost = store.costIndicator === 'â‚¹â‚¹â‚¹';
+            
+            return matchesSearch && matchesDistance && matchesRating && matchesOpen && matchesCost;
+        });
+    }, [storeSearch, maxDistance, minRating, onlyOpen, costFilter]);
+
+    const handlePrescriptionUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setIsAnalyzing(true);
+        setRecommendation(null);
+        
+        try {
+            const { analyzePrescription } = await import('../services/aiService');
+            // Mocking base64 for demo since we don't have a backend to actually process it here
+            // In a real app, we'd use the actual file data
+            const result = "Paracetamol, Amoxicillin, Cetirizine"; // Simulated AI extraction
+            setPrescriptionText(result);
+            setTimeout(() => findBestMatch(), 500);
+        } catch (error) {
+            console.error("Prescription analysis failed:", error);
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    const findBestMatch = () => {
+        if (!prescriptionText.trim()) return;
+        setIsAnalyzing(true);
+        setRecommendation(null);
+        
         setTimeout(() => {
-            setShowSuccess(false);
-            setSelectionMode(null);
-            setActiveOrder(newOrder); // Use the global order object
-        }, 2000);
+            // Support comma, newline, or space separation
+            const meds = prescriptionText.split(/[,|\n]+/).map(m => m.trim().toLowerCase()).filter(m => m.length > 2);
+            
+            const scoredStores = MOCK_STORES.map(store => {
+                const availableMeds = meds.filter(med => 
+                    store.inventory.some(item => item.toLowerCase().includes(med))
+                );
+                const matchCount = availableMeds.length;
+                
+                // Base score on medicine availability
+                let score = matchCount * 25; 
+                
+                // Bonus for distance
+                const distanceBonus = Math.max(0, (10 - store.distanceKm) * 5);
+                
+                // Bonus for cost
+                let costBonus = 0;
+                if (store.costIndicator === '₹') costBonus = 20;
+                else if (store.costIndicator === '₹₹') costBonus = 10;
+                
+                if (priority === 'nearest') {
+                    score += distanceBonus * 2 + costBonus;
+                } else {
+                    score += costBonus * 2 + distanceBonus;
+                }
+                
+                // High rating bonus
+                if (store.rating >= 4.5) score += 10;
+                
+                return { ...store, matchCount, totalMeds: meds.length, availableMeds, score };
+            }).sort((a, b) => b.score - a.score);
+
+            setRecommendation({
+                primary: scoredStores[0],
+                secondary: scoredStores[1],
+                reasoning: priority === 'nearest' 
+                    ? `We found ${scoredStores[0].name} is the best choice because it's only ${scoredStores[0].distanceKm}km away and has ${scoredStores[0].matchCount}/${meds.length} of your medicines.`
+                    : `We recommend ${scoredStores[0].name} for the best value. It has ${scoredStores[0].matchCount}/${meds.length} medicines and is rated ${scoredStores[0].rating} stars.`,
+                meds: meds
+            });
+            setIsAnalyzing(false);
+        }, 1200);
     };
-
-
-    const handleAutoSelect = () => {
-        setUploading(true);
-        setSelectionMode('auto');
-        setTimeout(() => {
-            // Find store with highest priceScore (best for customer)
-            const cheapestStore = [...medicalStores].sort((a, b) => b.priceScore - a.priceScore)[0];
-            setUploading(false);
-            initiateCheckout(cheapestStore);
-        }, 2000);
-    };
-
-    const handleUploadPrescription = () => {
-        setUploading(true);
-        setTimeout(() => {
-            setUploading(false);
-            setSelectionMode('manual');
-        }, 1500);
-    };
-
-    const handleAIScan = async () => {
-        setAiLoading(true);
-        setShowAIModal(true);
-        const result = await analyzePrescription('dummy_uri');
-        setAiAnalysis(result);
-        setAiLoading(false);
-    };
-
-    if (activeOrder) {
-        return <DeliveryTrackingView order={activeOrder} onComplete={() => setActiveOrder(null)} />;
-    }
-
-    if (checkoutStore) {
-        return <CheckoutView store={checkoutStore} onConfirm={handleOrder} onCancel={() => setCheckoutStore(null)} />;
-    }
 
     return (
-        <div style={{ paddingBottom: '100px', backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
-            {/* Header / Search */}
-            <div style={{ backgroundColor: '#fff', padding: '40px 20px 20px', borderBottom: '1px solid #eee' }}>
-                <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>{t('pharmacy_store')}</h1>
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    backgroundColor: '#f3f4f6',
-                    padding: '12px 16px',
-                    borderRadius: '12px'
-                }}>
-                    <Search size={20} color="#9ca3af" />
-                    <input
-                        type="text"
-                        placeholder={t('search_medicines_stores_placeholder')}
+        <div className="pb-32 bg-[#F8FAFC]">
+            <div className="sticky top-0 z-[100] bg-white/70 backdrop-blur-xl border-b border-slate-100 px-5 pt-12 pb-4">
+                <div className="flex items-center justify-between mb-4">
+                    <h1 className="text-2xl font-black text-[#0f172a] tracking-tight">Medical Store</h1>
+                    <div className="flex items-center gap-2">
+                         <button 
+                            onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+                            className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:text-p-600 transition-colors"
+                        >
+                            {viewMode === 'list' ? <LayoutGrid size={20} /> : <List size={20} />}
+                        </button>
+                        <button 
+                            onClick={() => setShowMap(!showMap)}
+                            className={`p-2 rounded-xl transition-all ${showMap ? 'bg-p-600 text-white shadow-lg shadow-p-200' : 'bg-slate-50 text-slate-400'}`}
+                        >
+                            <MapPin size={20} />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="relative mb-4">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Search stores or medicines..."
                         value={storeSearch}
                         onChange={(e) => setStoreSearch(e.target.value)}
-                        style={{ background: 'none', border: 'none', outline: 'none', width: '100%', fontSize: '14px' }}
+                        className="w-full bg-slate-50 border-none rounded-2xl py-3.5 pl-12 pr-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-p-500/20 transition-all placeholder:text-slate-300"
                     />
                 </div>
-            </div>
 
-            <div style={{ padding: '20px' }}>
-                {/* Selection Logic Cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '32px' }}>
-                    <div
-                        onClick={handleAutoSelect}
-                        style={{
-                            background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                            borderRadius: '20px',
-                            padding: '16px',
-                            color: '#fff',
-                            boxShadow: '0 4px 12px rgba(79, 70, 229, 0.2)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px'
-                        }}
-                    >
-                        <Zap size={24} fill="white" />
-                        <div>
-                            <p style={{ fontWeight: 'bold', fontSize: '14px' }}>{t('smart_select')}</p>
-                            <p style={{ fontSize: '10px', opacity: 0.8 }}>{t('choose_best_price_automatically')}</p>
+                <div className="flex items-center gap-3 overflow-x-auto no-scrollbar py-2 -mx-5 px-5">
+                    <div className="flex items-center gap-2.5 px-4 py-2.5 bg-white border border-slate-100 rounded-2xl shrink-0 shadow-sm">
+                        <Navigation size={15} className="text-p-600" />
+                        <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Distance</span>
+                            <select 
+                                value={maxDistance} 
+                                onChange={(e) => setMaxDistance(Number(e.target.value))}
+                                className="bg-transparent border-none text-[11px] font-black uppercase tracking-tight outline-none p-0 h-4"
+                            >
+                                <option value={1}>Within 1 km</option>
+                                <option value={3}>Within 3 km</option>
+                                <option value={5}>Within 5 km</option>
+                                <option value={10}>All Distances</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div
-                        onClick={handleAIScan}
-                        style={{
-                            background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
-                            borderRadius: '20px',
-                            padding: '16px',
-                            color: '#fff',
-                            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.2)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px'
-                        }}
-                    >
-                        <Bot size={24} color="#3b82f6" />
-                        <div>
-                            <p style={{ fontWeight: 'bold', fontSize: '14px' }}>{t('ai_analyzer')}</p>
-                            <p style={{ fontSize: '10px', opacity: 0.8 }}>{t('scan_explain_prescription')}</p>
+                    <div className="flex items-center gap-2.5 px-4 py-2.5 bg-white border border-slate-100 rounded-2xl shrink-0 shadow-sm">
+                        <DollarSign size={15} className="text-emerald-500" />
+                        <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Price Range</span>
+                            <select 
+                                value={costFilter} 
+                                onChange={(e) => setCostFilter(e.target.value)}
+                                className="bg-transparent border-none text-[11px] font-black uppercase tracking-tight outline-none p-0 h-4"
+                            >
+                                <option value="all">Any Price</option>
+                                <option value="Budget Friendly">Budget Friendly</option>
+                                <option value="Premium">Premium</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div
-                        onClick={handleUploadPrescription}
-                        style={{
-                            backgroundColor: '#fff',
-                            borderRadius: '20px',
-                            padding: '16px',
-                            color: '#1f2937',
-                            border: '2px dashed #e5e7eb',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px',
-                            gridColumn: 'span 2'
-                        }}
+                    <button 
+                        onClick={() => setOnlyOpen(!onlyOpen)}
+                        className={`flex items-center gap-3 px-5 py-2.5 rounded-2xl border transition-all shrink-0 shadow-sm ${onlyOpen ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-100 text-slate-500'}`}
                     >
-                        <Plus size={24} color="#3b82f6" />
-                        <div>
-                            <p style={{ fontWeight: 'bold', fontSize: '14px', color: '#1f2937' }}>{t('compare_stores')}</p>
-                            <p style={{ fontSize: '10px', color: '#9ca3af' }}>{t('select_store_manually')}</p>
-                        </div>
+                        <Clock size={15} />
+                        <span className="text-[11px] font-black uppercase tracking-tight">Open Only</span>
+                    </button>
+
+                    <div className="flex items-center gap-2.5 px-4 py-2.5 bg-white border border-slate-100 rounded-2xl shrink-0 shadow-sm relative" onClick={() => setShowCart(true)}>
+                        <ShoppingCart size={15} className="text-p-600" />
+                         <span className="text-[11px] font-black uppercase tracking-tight">Cart</span>
+                         {cart.length > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center">
+                                {cart.length}
+                            </span>
+                         )}
                     </div>
+
+                    <button 
+                        onClick={() => setShowComparison(true)}
+                        disabled={comparisonList.length < 2}
+                        className={`flex items-center gap-3 px-5 py-2.5 rounded-2xl border transition-all shrink-0 shadow-sm ${comparisonList.length >= 2 ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-100 text-slate-300'}`}
+                    >
+                        <BarChart size={15} />
+                        <span className="text-[11px] font-black uppercase tracking-tight">Compare ({comparisonList.length})</span>
+                    </button>
                 </div>
 
-                {uploading && (
-                    <div style={{ textAlign: 'center', padding: '20px', backgroundColor: '#e0f2fe', borderRadius: '16px', marginBottom: '24px' }}>
-                        <Loader2 className="animate-spin" style={{ margin: '0 auto', marginBottom: '8px' }} color="#3b82f6" />
-                        <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#0369a1' }}>{t('searching_best_prices')}</p>
+                {(onlyOpen || minRating > 0 || costFilter !== 'all' || maxDistance < 10) && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                        {maxDistance < 10 && (
+                            <div className="px-3 py-1 bg-p-50 text-p-600 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border border-p-100">
+                                &lt; {maxDistance}km
+                                <X size={10} onClick={() => setMaxDistance(10)} className="cursor-pointer" />
+                            </div>
+                        )}
+                        {costFilter !== 'all' && (
+                            <div className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border border-emerald-100">
+                                {costFilter}
+                                <X size={10} onClick={() => setCostFilter('all')} className="cursor-pointer" />
+                            </div>
+                        )}
+                        {onlyOpen && (
+                            <div className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                                Open Now
+                                <X size={10} onClick={() => setOnlyOpen(false)} className="cursor-pointer" />
+                            </div>
+                        )}
+                        {minRating > 0 && (
+                            <div className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-2 border border-amber-100">
+                                {minRating}â˜…+
+                                <X size={10} onClick={() => setMinRating(0)} className="cursor-pointer" />
+                            </div>
+                        )}
                     </div>
                 )}
-
-                {/* Nearby Stores Section */}
-                <div style={{ marginBottom: '32px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: 'bold' }}>{selectionMode === 'manual' ? t('choose_a_store') : t('nearby_medical_stores')}</h3>
-                        <span style={{ color: '#3b82f6', fontSize: '14px', fontWeight: '600' }}>{selectionMode === 'manual' ? t('select_one') : t('see_all')}</span>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {filteredStores.map(store => (
-                            <div key={store.id} style={{
-                                backgroundColor: '#fff',
-                                borderRadius: '20px',
-                                overflow: 'hidden',
-                                boxShadow: 'var(--shadow-sm)',
-                                border: selectionMode === 'manual' ? '2px solid #3b82f6' : '1px solid #eee',
-                                display: 'flex',
-                                position: 'relative',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s'
-                            }}
-                                onClick={() => selectionMode === 'manual' && initiateCheckout(store)}
-                            >
-                                <img src={store.image} alt={store.name} style={{ width: '100px', height: '100px', objectFit: 'cover' }} />
-                                <div style={{ padding: '12px', flex: 1 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <h4 style={{ fontWeight: 'bold', fontSize: '16px' }}>{store.name}</h4>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#fef3c7', padding: '2px 6px', borderRadius: '6px' }}>
-                                            <Star size={12} fill="#f59e0b" color="#f59e0b" />
-                                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#92400e' }}>{store.rating}</span>
-                                        </div>
-                                    </div>
-                                    <p style={{ color: '#666', fontSize: '12px', marginBottom: '8px' }}>{store.address}</p>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#10b981' }}>{store.deliveryTime}</span>
-                                            <span style={{ fontSize: '11px', color: '#9ca3af' }}>• {store.distance}</span>
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#dcfce7', padding: '4px 8px', borderRadius: '8px' }}>
-                                            <DollarSign size={12} color="#15803d" />
-                                            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#15803d' }}>{t('price_match')} {store.priceScore}%</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                {!store.isOpen && (
-                                    <div style={{
-                                        position: 'absolute',
-                                        inset: 0,
-                                        backgroundColor: 'rgba(255,255,255,0.7)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        zIndex: 5
-                                    }}>
-                                        <span style={{ backgroundColor: '#ef4444', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>{t('closed')}</span>
-                                    </div>
-                                )}
-                                {selectionMode === 'manual' && (
-                                    <div style={{ padding: '0 12px', display: 'flex', alignItems: 'center' }}>
-                                        <ChevronRight size={24} color="#3b82f6" />
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* My Active Prescriptions */}
-                <div>
-                    <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>{t('digital_prescriptions')}</h3>
-                    {prescriptions.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {prescriptions.map(appt => (
-                                <div key={appt.prescription.id} style={{ backgroundColor: 'white', padding: '16px', borderRadius: '16px', border: '1px solid #eee' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                        <span style={{ fontWeight: 'bold', fontSize: '14px' }}>{appt.prescription.medicine}</span>
-                                        <span style={{ fontSize: '12px', color: '#10b981' }}>{t('order_now')}</span>
-                                    </div>
-                                    <p style={{ fontSize: '12px', color: '#666' }}>{t('by_dr')} {appt.doctorName}</p>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p style={{ color: '#9ca3af', fontSize: '14px' }}>{t('no_digital_prescriptions_yet')}</p>
-                    )}
-                </div>
             </div>
 
-            <AnimatePresence>
-                {showSuccess && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        style={{
-                            position: 'fixed',
-                            top: '20px',
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                            backgroundColor: '#10b981',
-                            color: 'white',
-                            padding: '12px 24px',
-                            borderRadius: '12px',
-                            zIndex: 1000,
-                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-                            fontWeight: 'bold'
-                        }}
+            <div className="px-5 pt-6">
+                <motion.button 
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setShowPrescriptionPanel(!showPrescriptionPanel)}
+                    className="w-full mb-8 p-6 bg-gradient-to-r from-[#0077B6] to-[#00B4A6] rounded-[32px] text-white flex items-center justify-between shadow-xl shadow-blue-200 group overflow-hidden relative"
+                >
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+                    <div className="relative z-10 text-left">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Bot size={20} className="text-white animate-pulse" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">vArogra Smart Matching</span>
+                        </div>
+                        <h3 className="text-lg font-black tracking-tight">Find Best Store for My Prescription</h3>
+                        <p className="text-[11px] font-bold opacity-70 mt-1">AI-powered recommendation based on cost & distance</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md group-hover:bg-white group-hover:text-p-600 transition-all">
+                        <ChevronRight size={24} />
+                    </div>
+                </motion.button>
+
+                <AnimatePresence>
+                    {showPrescriptionPanel && (
+                        <motion.div 
+                            initial={{ height: 0, opacity: 0, marginBottom: 0 }}
+                            animate={{ height: 'auto', opacity: 1, marginBottom: 32 }}
+                            exit={{ height: 0, opacity: 0, marginBottom: 0 }}
+                            className="overflow-hidden"
+                        >
+                            <div className="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm">
+                                <div className="flex gap-4 mb-6">
+                                    <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        ref={fileInputRef} 
+                                        className="hidden" 
+                                        onChange={handlePrescriptionUpload} 
+                                    />
+                                    <button 
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="flex-1 py-4 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-p-600 hover:text-p-600 transition-all flex flex-col items-center justify-center gap-2"
+                                    >
+                                        <Upload size={20} />
+                                        <span className="text-[10px] font-black uppercase tracking-widest">Upload Image</span>
+                                    </button>
+                                    <div className="flex-1">
+                                        <textarea 
+                                            className="w-full h-full bg-slate-50 border-none rounded-xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-p-500/20 placeholder:text-slate-300"
+                                            placeholder="...or paste prescription text here"
+                                            value={prescriptionText}
+                                            onChange={(e) => setPrescriptionText(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                
+                                <div className="flex gap-4 mb-6">
+                                    <div className="flex-1">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Optimize selection for</p>
+                                        <div className="flex gap-2 p-1.5 bg-slate-100 rounded-2xl">
+                                            <button 
+                                                onClick={() => setPriority('nearest')}
+                                                className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${priority === 'nearest' ? 'bg-white text-p-600 shadow-sm' : 'text-slate-400'}`}
+                                            >
+                                                Nearest
+                                            </button>
+                                            <button 
+                                                onClick={() => setPriority('lowest_cost')}
+                                                className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${priority === 'lowest_cost' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                                            >
+                                                Lowest Cost
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button 
+                                    onClick={findBestMatch}
+                                    disabled={!prescriptionText.trim() || isAnalyzing}
+                                    className="w-full py-4 rounded-2xl bg-[#0f172a] text-white font-black text-sm shadow-xl active:scale-95 transition-all disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-3"
+                                >
+                                    {isAnalyzing ? <Loader2 size={20} className="animate-spin" /> : <Zap size={18} fill="white" />}
+                                    Find Best Match
+                                </button>
+
+                                <AnimatePresence>
+                                    {recommendation && (
+                                        <motion.div 
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="mt-8 pt-8 border-t border-slate-50"
+                                        >
+                                            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex gap-4 items-start mb-6">
+                                                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0">
+                                                    <CheckCircle size={20} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[12px] font-bold text-emerald-800 leading-snug">{recommendation.reasoning}</p>
+                                                </div>
+                                            </div>
+
+                                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 text-center">Recommended Stores</h5>
+                                            <div className="space-y-4">
+                                                <RecommendedStoreCard 
+                                                    store={recommendation.primary} 
+                                                    type="primary" 
+                                                    meds={recommendation.meds} 
+                                                    onSelect={setSelectedStore}
+                                                    onAutoAdd={handleAutoAddPrescription}
+                                                />
+                                                <RecommendedStoreCard 
+                                                    store={recommendation.secondary} 
+                                                    type="secondary" 
+                                                    meds={recommendation.meds} 
+                                                    onSelect={setSelectedStore}
+                                                    onAutoAdd={handleAutoAddPrescription}
+                                                />
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {showMap && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-8 rounded-[40px] overflow-hidden border border-slate-100 shadow-sm relative h-[300px] bg-slate-100"
                     >
-                        🚀 {t('order_placed_successfully')}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center opacity-40">
+                                <Map size={48} className="mx-auto mb-2" />
+                                <p className="text-xs font-bold uppercase tracking-widest">Map View Placeholder</p>
+                                <p className="text-[10px] font-medium max-w-[200px] mt-1 mx-auto">Showing pins for {filteredStores.length} stores nearby</p>
+                            </div>
+                        </div>
+                        {filteredStores.map((store, i) => (
+                            <motion.div 
+                                key={store.id}
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{ delay: i * 0.1 }}
+                                className="absolute p-1 bg-white rounded-full shadow-lg border-2 border-p-600"
+                                style={{ 
+                                    left: `${30 + (i * 12) % 60}%`, 
+                                    top: `${20 + (i * 15) % 60}%`
+                                }}
+                            >
+                                <div className="w-2 h-2 rounded-full bg-p-600" />
+                            </motion.div>
+                        ))}
                     </motion.div>
                 )}
-            </AnimatePresence>
 
-            <AIAnalyzerModal
-                isOpen={showAIModal}
-                onClose={() => setShowAIModal(false)}
-                analysis={aiAnalysis}
-                loading={aiLoading}
-            />
+                <div className="flex justify-between items-center mb-6 px-1">
+                    <h3 className="text-lg font-black text-main tracking-tight">
+                        {filteredStores.length} Nearby Stores
+                    </h3>
+                    <div className="flex gap-4">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sorted by {priority === 'nearest' ? 'Distance' : 'Match Score'}</span>
+                    </div>
+                </div>
+
+                <div className={`grid gap-5 ${viewMode === 'grid' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    {(filteredStores.length > 0 ? (
+                          filteredStores.sort((a, b) => {
+                            if (recommendation) return b.score - a.score;
+                            return a.distanceKm - b.distanceKm;
+                         }).map((store, index) => (
+                            <StoreCard 
+                                key={store.id} 
+                                store={store} 
+                                viewMode={viewMode} 
+                                index={index} 
+                                isBestMatch={recommendation && recommendation.primary.id === store.id}
+                                onSelect={setSelectedStore}
+                                onCompare={toggleCompare}
+                                isComparing={comparisonList.some(s => s.id === store.id)}
+                            />
+                        ))
+                    ) : (
+                        <div className="col-span-full py-20 text-center bg-white rounded-[40px] border-2 border-dashed border-slate-100">
+                            <Package size={48} className="mx-auto mb-4 text-slate-100" />
+                            <p className="text-sm font-black text-slate-300 uppercase tracking-widest">No matching stores found</p>
+                            <button onClick={() => {
+                                setStoreSearch('');
+                                setMaxDistance(10);
+                                setCostFilter('all');
+                                setOnlyOpen(false);
+                                setMinRating(0);
+                            }} className="text-p-600 text-[10px] font-black uppercase tracking-widest mt-4">Clear All Filters</button>
+                        </div>
+                    ))}
+                </div>
+
+                <StoreDetailModal 
+                    store={selectedStore} 
+                    isOpen={!!selectedStore} 
+                    onClose={() => setSelectedStore(null)}
+                    onAddToCart={handleAddToCart}
+                    cart={cart}
+                />
+                
+                <CartDrawer 
+                    cart={cart} 
+                    isOpen={showCart} 
+                    onClose={() => setShowCart(false)}
+                    onUpdateQuantity={(sid, med, delta) => {
+                        const store = MOCK_STORES.find(s => s.id === sid);
+                        handleAddToCart(store, med, delta);
+                    }}
+                    onPlaceOrder={() => {
+                        setShowCart(false);
+                        onNavigate('checkout');
+                    }}
+                />
+                
+                <ComparisonModal 
+                    stores={comparisonList} 
+                    isOpen={showComparison} 
+                    onClose={() => setShowComparison(false)}
+                />
+            </div>
         </div>
     );
 };
-
-const AIAnalyzerModal = ({ isOpen, onClose, analysis, loading }) => {
+const MedicalRecordsTab = () => {
     const { t } = useTranslation();
-    if (!isOpen) return null;
+    const { user } = useAuth();
+    const [prescriptions, setPrescriptions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedPrescription, setSelectedPrescription] = useState(null);
+
+    useEffect(() => {
+        const fetchPrescriptions = async () => {
+            const userId = user?.uid || user?.id;
+            if (!userId) return;
+            try {
+                const { getPrescriptions } = await import('../firebase/services');
+                const data = await getPrescriptions(userId);
+                setPrescriptions(data);
+            } catch (e) {
+                console.error("Failed to fetch prescriptions:", e);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchPrescriptions();
+    }, [user?.uid, user?.id]);
 
     return (
-        <div className="fixed inset-0 z-[3000] flex items-end sm:items-center justify-center p-4">
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            />
-            <motion.div
-                initial={{ opacity: 0, y: 100 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 100 }}
-                className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
-            >
-                <div className="p-8 pb-4 border-b border-slate-100 flex justify-between items-center bg-p-50/50">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-p-600 flex items-center justify-center">
-                            <Bot className="text-white" size={24} />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-black text-main leading-tight">{t('ai_prescription_analyzer')}</h3>
-                            <p className="text-[10px] font-bold text-p-600 uppercase tracking-widest">{t('varogra_smart_brain')}</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="p-2 rounded-xl bg-white shadow-sm border border-slate-100 text-muted">
-                        <ArrowLeft size={20} />
-                    </button>
-                </div>
+        <div className="pb-32 px-6 pt-4 animate-entrance">
+            <h2 className="text-3xl font-black text-main tracking-tight mb-8">Medical Records</h2>
 
-                <div className="p-8 overflow-y-auto">
-                    {loading ? (
-                        <div className="py-20 flex flex-col items-center justify-center">
-                            <div className="w-16 h-16 border-4 border-p-100 border-t-p-600 rounded-full animate-spin mb-6" />
-                            <p className="font-bold text-main animate-pulse">{t('analyzing_prescription')}</p>
-                            <p className="text-xs text-muted mt-2">{t('identifying_medicines_instructions')}</p>
-                        </div>
-                    ) : (
-                        <div className="prose prose-slate prose-sm max-w-none">
-                            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 mb-6 font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
-                                {analysis}
+            {loading ? (
+                <div className="py-20 flex justify-center">
+                    <Loader2 className="animate-spin text-p-600" size={32} />
+                </div>
+            ) : prescriptions.length === 0 ? (
+                <div className="py-20 flex flex-col items-center opacity-30 text-center">
+                    <FileText size={48} className="mb-4" />
+                    <p className="font-bold">No medical records found.</p>
+                </div>
+            ) : (
+                <div className="flex flex-col gap-4">
+                    {prescriptions.map((px) => (
+                        <motion.div
+                            key={px.id}
+                            whileHover={{ scale: 1.02 }}
+                            onClick={() => setSelectedPrescription(px)}
+                            className="p-6 rounded-[32px] bg-white border border-slate-100 shadow-sm flex items-center gap-6 cursor-pointer"
+                        >
+                            <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
+                                <FileText size={24} />
                             </div>
-                            <div className="p-5 rounded-3xl bg-amber-50 border border-amber-100 flex gap-4">
-                                <AlertCircle className="text-amber-600 shrink-0" size={20} />
-                                <p className="text-[11px] font-bold text-amber-800 leading-snug">
-                                    {t('informational_only_disclaimer')}
+                            <div className="flex-1">
+                                <h4 className="font-black text-main text-base">Prescription from {px.doctorName}</h4>
+                                <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1">
+                                    {px.createdAt ? new Date(px.createdAt.seconds * 1000).toLocaleDateString() : 'Recent'}
                                 </p>
                             </div>
-                        </div>
-                    )}
+                            <ChevronRight size={20} className="text-slate-300" />
+                        </motion.div>
+                    ))}
                 </div>
+            )}
 
-                <div className="p-8 pt-4 bg-slate-50">
-                    <button
-                        onClick={onClose}
-                        className="w-full py-4 rounded-2xl bg-main text-white font-black text-sm shadow-xl active:scale-95 transition-transform"
-                    >
-                        {t('got_it_thanks')}
-                    </button>
-                </div>
-            </motion.div>
+            <AnimatePresence>
+                {selectedPrescription && (
+                    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setSelectedPrescription(null)}
+                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                            className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+                        >
+                            <div className="p-8 border-b border-slate-100 flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-xl font-black text-main">Prescription Details</h3>
+                                    <p className="text-[10px] font-bold text-p-600 uppercase tracking-widest mt-1">Dr. {selectedPrescription.doctorName}</p>
+                                </div>
+                                <button onClick={() => setSelectedPrescription(null)} className="p-2 rounded-xl bg-slate-50 text-slate-400">
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div className="p-8 overflow-y-auto min-h-[300px] flex items-center justify-center bg-slate-50">
+                                {selectedPrescription.imageUrl ? (
+                                    <div className="rounded-2xl overflow-hidden border border-slate-200 bg-white p-2 shadow-inner">
+                                        <img src={selectedPrescription.imageUrl} alt="Prescription" className="max-w-full h-auto rounded-xl" />
+                                    </div>
+                                ) : (
+                                    <div className="p-8 rounded-3xl bg-white border border-slate-100 shadow-sm w-full">
+                                        <p className="text-sm font-bold text-slate-800 leading-relaxed whitespace-pre-wrap">{selectedPrescription.prescription}</p>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="p-8 pt-4 bg-white border-t border-slate-100 flex gap-4">
+                                <button
+                                    onClick={() => setSelectedPrescription(null)}
+                                    className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-widest"
+                                >
+                                    Close
+                                </button>
+                                <button
+                                    onClick={() => window.open(selectedPrescription.imageUrl || '', '_blank')}
+                                    className="flex-1 py-4 rounded-2xl bg-p-600 text-white font-black text-xs uppercase tracking-widest shadow-xl shadow-p-200"
+                                >
+                                    Download
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
 
+const AppointmentsTab = () => {
+    const { appointments, user } = useAuth();
 
+    const patientId = user?.uid || user?.id;
+    const myAppointments = (appointments || [])
+        .filter((a) => !patientId || a.patientId === patientId || a.userId === patientId)
+        .sort((a, b) => {
+            const at = a?.createdAt?.seconds ? a.createdAt.seconds * 1000 : Date.parse(a?.timestamp || 0);
+            const bt = b?.createdAt?.seconds ? b.createdAt.seconds * 1000 : Date.parse(b?.timestamp || 0);
+            return (bt || 0) - (at || 0);
+        });
+
+    const statusClass = (status) => {
+        const s = String(status || '').toLowerCase();
+        if (s === 'approved' || s === 'accepted' || s === 'confirmed') return 'bg-emerald-100 text-emerald-700';
+        if (s === 'pending') return 'bg-amber-100 text-amber-700';
+        if (s === 'rejected') return 'bg-rose-100 text-rose-700';
+        if (s === 'completed' || s === 'prescribed') return 'bg-blue-100 text-blue-700';
+        return 'bg-slate-100 text-slate-700';
+    };
+
+    const statusText = (status) => {
+        const s = String(status || '').toLowerCase();
+        if (s === 'approved' || s === 'accepted') return 'Accepted';
+        if (s === 'confirmed') return 'Confirmed';
+        if (s === 'pending') return 'Pending Hospital Review';
+        if (s === 'rejected') return 'Rejected';
+        if (s === 'completed') return 'Completed';
+        return status || 'Scheduled';
+    };
+
+    return (
+        <div className="pb-32 px-6 pt-4 animate-entrance">
+            <h2 className="text-3xl font-black text-main tracking-tight mb-6">My Appointments</h2>
+
+            {myAppointments.length === 0 ? (
+                <div className="py-20 flex flex-col items-center opacity-40 text-center">
+                    <Calendar size={48} className="mb-4" />
+                    <p className="font-bold">No appointments found yet.</p>
+                </div>
+            ) : (
+                <div className="flex flex-col gap-4">
+                    {myAppointments.map((item) => (
+                        <div key={item.id} className="p-5 rounded-3xl bg-white border border-slate-100 shadow-sm">
+                            <div className="flex items-start justify-between gap-3 mb-3">
+                                <div>
+                                    <h3 className="text-base font-black text-main">{item.doctorName || 'Doctor'}</h3>
+                                    <p className="text-xs font-bold text-muted">{item.hospitalName || 'Hospital'}</p>
+                                </div>
+                                <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${statusClass(item.status)}`}>
+                                    {statusText(item.status)}
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 text-xs font-bold text-slate-600">
+                                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">Date: {item.date || 'Today'}</div>
+                                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">Time: {item.time || 'N/A'}</div>
+                                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">Visit: {item.visitType || 'hospital'}</div>
+                                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">Token: #{item.token || '--'}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 const MedicalHistoryTab = () => {
     const { t } = useTranslation();
     const { appointments } = useAuth();
@@ -1706,44 +2652,38 @@ const MedicalHistoryTab = () => {
 
 const ProfileTab = ({ user, logout }) => {
     const { t, i18n } = useTranslation();
+    const { updateUserProfilePhoto } = useAuth();
     const [isEditingPhoto, setIsEditingPhoto] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [tempPhoto, setTempPhoto] = useState(null);
     const [error, setError] = useState('');
+    const [photoSuccess, setPhotoSuccess] = useState(false);
 
     const changeLanguage = (lng) => {
         i18n.changeLanguage(lng);
     };
 
     const handlePhotoSave = async () => {
-        console.log("Attempting to save photo...");
-        console.log("User:", user);
-        console.log("Photo:", tempPhoto);
-
-        if (!tempPhoto) {
-            console.warn("No photo to save");
-            return;
-        }
-
-        const userId = user?.uid || user?.id; // Fallback for legacy/demo users
-
+        if (!tempPhoto) return;
+        const userId = user?.uid || user?.id;
         if (!userId) {
-            console.error("No user ID found");
-            setError("User identification failed");
+            setError('User identification failed. Please log in again.');
             return;
         }
-
         setError('');
+        setPhotoSuccess(false);
         try {
             const downloadURL = await uploadProfilePhoto(userId, tempPhoto, (progress) => {
                 setUploadProgress(progress);
             });
-            await updateUserProfilePhoto(userId, downloadURL);
+            updateUserProfilePhoto(downloadURL);
             setIsEditingPhoto(false);
             setUploadProgress(0);
             setTempPhoto(null);
+            setPhotoSuccess(true);
+            setTimeout(() => setPhotoSuccess(false), 3000);
         } catch (err) {
-            console.error("Upload failed", err);
+            console.error('Upload failed', err);
             setError(`Failed to upload photo: ${err.message}`);
             setUploadProgress(0);
         }
@@ -1772,8 +2712,8 @@ const ProfileTab = ({ user, logout }) => {
                             <Camera size={16} />
                         </button>
                     </div>
-                    <h2 className="text-2xl font-black text-main">{user?.name}</h2>
-                    <p className="text-sm font-bold text-muted opacity-80">{user?.phone || '+91 98765 43210'}</p>
+                    <h2 className="text-2xl font-black text-main">{user?.name || user?.displayName}</h2>
+                    <p className="text-sm font-bold text-muted opacity-80">{user?.phone || user?.email || '+91 98765 43210'}</p>
                 </div>
             </div>
 
@@ -1841,8 +2781,8 @@ const ProfileTab = ({ user, logout }) => {
                 <div className="flex gap-2">
                     {[
                         { code: 'en', label: 'English' },
-                        { code: 'te', label: 'తెలుగు' },
-                        { code: 'hi', label: 'हिन्दी' }
+                        { code: 'te', label: 'Ã Â°Â¤Ã Â±â€ Ã Â°Â²Ã Â±ÂÃ Â°â€”Ã Â±Â' },
+                        { code: 'hi', label: 'Ã Â¤Â¹Ã Â¤Â¿Ã Â¤Â¨Ã Â¥ÂÃ Â¤Â¦Ã Â¥â‚¬' }
                     ].map((lang) => (
                         <button
                             key={lang.code}
@@ -1904,7 +2844,7 @@ const ProfileTab = ({ user, logout }) => {
                 </button>
 
                 <p className="text-center text-[10px] font-bold text-muted opacity-40 mt-4">
-                    Version 2.4.0 • Build 2026.02
+                    Version 2.4.0 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Build 2026.02
                 </p>
             </div>
         </div>
@@ -1914,17 +2854,83 @@ const ProfileTab = ({ user, logout }) => {
 
 const PatientDashboard = () => {
     const navigate = useNavigate();
-    const { user, logout, loading } = useAuth();
+    const { user, logout, loading, appointments, nearbyHospitals, saveDefaultAddress, refreshNearbyHospitals } = useAuth();
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState('home');
     const [notif, setNotif] = useState(null);
+    const seenNotificationIdsRef = useRef(new Set());
     const [isLocationOpen, setIsLocationOpen] = useState(false);
+    const [isAddressSetupOpen, setIsAddressSetupOpen] = useState(false);
     const [selectedLocation, setSelectedLocation] = useState('Mancherial, Telangana');
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const [showVoice, setShowVoice] = useState(false);
     const [showPayment, setShowPayment] = useState(false);
     const [showDetails, setShowDetails] = useState(false);
     const [activeVoiceBooking, setActiveVoiceBooking] = useState(null);
+
+    useEffect(() => {
+        const userId = user?.uid || user?.id;
+        if (!userId) return undefined;
+
+        const unsub = subscribeToNotifications(userId, (items) => {
+            if (!Array.isArray(items) || items.length === 0) return;
+
+            const freshAccepted = items.find((n) => {
+                if (!n?.id) return false;
+                if (seenNotificationIdsRef.current.has(n.id)) return false;
+                return ['appointment_booked', 'appointment_accepted', 'appointment_rejected'].includes(n.type) || String(n.title || '').toLowerCase().includes('appointment confirmed');
+            });
+
+            items.forEach((n) => {
+                if (n?.id) seenNotificationIdsRef.current.add(n.id);
+            });
+
+            if (freshAccepted?.message) {
+                setNotif(freshAccepted.message);
+                setTimeout(() => setNotif(null), 6000);
+            }
+        });
+
+        return () => unsub();
+    }, [user?.uid, user?.id]);
+    // 5-Minute Reminder Logic
+    useEffect(() => {
+        if (!appointments || appointments.length === 0) return;
+
+        const checkReminders = () => {
+            const now = new Date();
+            appointments.forEach(appt => {
+                if (appt.status === 'approved' || appt.status === 'Confirmed' || appt.status === 'pending') {
+                    try {
+                        // Very basic time parsing for "HH:MM AM/PM"
+                        const [timeStr, period] = appt.time.split(' ');
+                        const [hoursStr, minutesStr] = timeStr.split(':');
+                        let hours = parseInt(hoursStr);
+                        let minutes = parseInt(minutesStr);
+
+                        if (period === 'PM' && hours < 12) hours += 12;
+                        if (period === 'AM' && hours === 12) hours = 0;
+
+                        const apptDate = new Date();
+                        apptDate.setHours(hours, minutes, 0, 0);
+
+                        const diffMinutes = Math.floor((apptDate - now) / (1000 * 60));
+
+                        if (diffMinutes === 5) {
+                            setNotif(`ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Reminder: Your appointment with ${appt.doctorName} starts in 5 minutes!`);
+                            // Persistent for 10 seconds
+                            setTimeout(() => setNotif(null), 10000);
+                        }
+                    } catch (e) {
+                        console.error("Reminder parsing failed:", e);
+                    }
+                }
+            });
+        };
+
+        const interval = setInterval(checkReminders, 60000); // Check every minute
+        return () => clearInterval(interval);
+    }, [appointments]);
 
     const handleVoiceAssistant = () => {
         console.log("SOS Voice Assistant Triggered");
@@ -1949,24 +2955,70 @@ const PatientDashboard = () => {
         }
     }, [location.search]);
 
-    // Request Location Permission on Mount
+    // Request location once per user session (prevents repeated location updates)
     useEffect(() => {
-        if ("geolocation" in navigator) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const { latitude, longitude } = position.coords;
-                    console.log("Location obtained:", latitude, longitude);
-                    // In a real app, we would reverse geocode this to a city name
-                    // For now, we'll just indicate that location is active
-                    setNotif(t('location_enabled') || "Location services enabled for better experience");
-                    setTimeout(() => setNotif(null), 3000);
-                },
-                (error) => {
-                    console.warn("Location permission denied or error:", error);
+        const uidKey = user?.uid || 'guest';
+        const locationInitKey = `varogra_location_init_${uidKey}`;
+        if (sessionStorage.getItem(locationInitKey) === '1') return;
+        if (!("geolocation" in navigator)) return;
+
+        if (typeof user?.latitude === 'number' && typeof user?.longitude === 'number') return;
+
+        sessionStorage.setItem(locationInitKey, '1');
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const { latitude, longitude } = position.coords;
+                console.log("Location obtained:", latitude, longitude);
+
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`);
+                    const data = await response.json();
+
+                    if (data && data.address) {
+                        const city = data.address.city || data.address.town || data.address.village || data.address.county || 'Unknown';
+                        const state = data.address.state || '';
+                        const locationString = state ? `${city}, ${state}` : city;
+
+                        setSelectedLocation((prev) => (prev === locationString ? prev : locationString));
+                        setNotif(`Location updated to ${locationString}`);
+                    } else {
+                        setNotif("Location services enabled");
+                    }
+                } catch (geocodingError) {
+                    console.error("Geocoding failed:", geocodingError);
+                    setNotif("Location services enabled");
                 }
-            );
+
+                setTimeout(() => setNotif(null), 3000);
+            },
+            (error) => {
+                console.warn("Location permission denied or error:", error);
+            }
+        );
+    }, [user?.uid]);
+    // Sync label from saved profile fields (preferred)
+    useEffect(() => {
+        if (!user) return;
+        const city = user?.city || user?.defaultAddress?.city || '';
+        const state = user?.state || user?.defaultAddress?.state || '';
+        const label = city ? (state ? `${city}, ${state}` : city) : (user?.location || user?.address || selectedLocation);
+        setSelectedLocation((prev) => (prev === label ? prev : label));
+    }, [user, selectedLocation]);
+
+    // First-login onboarding: require a saved geo address
+    useEffect(() => {
+        if (loading || !user) return;
+        const roles = user?.roles || [user?.role].filter(Boolean);
+        const isPatient = roles.includes('patient');
+        if (!isPatient) return;
+
+        const hasCoords = typeof user?.latitude === 'number' && typeof user?.longitude === 'number';
+        const hasAdmin = Boolean(user?.state && (user?.district || user?.mandal || user?.city));
+        if (!hasCoords || !hasAdmin) {
+            setIsAddressSetupOpen(true);
         }
-    }, [t]);
+    }, [user, loading]);
 
     // Redirect to login if not authenticated
     useEffect(() => {
@@ -2059,19 +3111,41 @@ const PatientDashboard = () => {
                                 navigate={navigate}
                                 onNavigate={setActiveTab}
                                 currentLocation={selectedLocation}
-                                onLocationClick={() => setIsLocationOpen(true)}
+                                onLocationClick={() => setIsAddressSetupOpen(true)}
                             />
                         )}
+                        {activeTab === 'appointments' && <AppointmentsTab />}
                         {activeTab === 'ai-assistant' && <AIAssistantTab onNavigate={setActiveTab} />}
                         {activeTab === 'updates' && <UpdatesTab onNavigate={setActiveTab} />}
-                        {activeTab === 'store' && <StoreTab />}
+                        {activeTab === 'records' && <MedicalRecordsTab />}
+                        {activeTab === 'store' && <StoreTab onNavigate={setActiveTab} />}
                         {activeTab === 'profile' && <ProfileTab user={user} logout={() => setShowLogoutConfirm(true)} />}
+
                     </SafeErrorBoundary>
                 </motion.div>
             </AnimatePresence>
 
             <BottomNav activeTab={activeTab} onTabChange={handleTabChange} onVoiceAssistant={handleVoiceAssistant} />
 
+            <AddressSetupModal
+                isOpen={isAddressSetupOpen}
+                onClose={() => setIsAddressSetupOpen(false)}
+                initialAddress={user?.defaultAddress}
+                onSave={async (address) => {
+                    try {
+                        const updated = await saveDefaultAddress(address);
+                        const label = address?.city ? (address?.state ? `${address.city}, ${address.state}` : address.city) : (address?.fullAddress || selectedLocation);
+                        setSelectedLocation(label);
+                        await refreshNearbyHospitals({ profile: updated, location: label });
+                        setNotif('Address saved');
+                        setTimeout(() => setNotif(null), 2000);
+                    } catch (e) {
+                        console.error('Failed to save address:', e);
+                        setNotif('Failed to save address');
+                        setTimeout(() => setNotif(null), 3000);
+                    }
+                }}
+            />
             <LocationPicker
                 isOpen={isLocationOpen}
                 onClose={() => setIsLocationOpen(false)}
@@ -2093,3 +3167,23 @@ const PatientDashboard = () => {
 };
 
 export default PatientDashboard;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

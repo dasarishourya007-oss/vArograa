@@ -1,8 +1,7 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
-
 import { AuthProvider } from './context/AuthContext';
 import LoginSelection from './pages/auth/LoginSelection';
 import PatientLogin from './pages/auth/PatientLogin';
@@ -11,6 +10,7 @@ import DoctorRegister from './pages/auth/DoctorRegister';
 import DoctorStatus from './pages/auth/DoctorStatus';
 import DoctorRecovery from './pages/auth/DoctorRecovery';
 import HospitalDetail from './pages/HospitalDetail';
+import HospitalHome from './pages/HospitalHome';
 import BookAppointment from './pages/BookAppointment';
 import AppointmentSuccess from './pages/AppointmentSuccess';
 import PrescriptionForm from './pages/PrescriptionForm';
@@ -22,49 +22,15 @@ import PatientDashboard from './pages/PatientDashboard';
 import DoctorProfile from './pages/DoctorProfile';
 import DoctorDashboard from './pages/DoctorDashboard';
 import AdminUserTracking from './pages/AdminUserTracking';
-
-
-
+import { DashboardGate, RoleGuard, RoleRedirect } from './components/RoleRouter';
 
 function App() {
+  console.log("App: Component rendering starting...");
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-
-          {/* Auth Routes */}
-          <Route path="login" element={<LoginSelection />} />
-          <Route path="login/patient" element={<PatientLogin />} />
-          <Route path="login/doctor" element={<DoctorLogin />} />
-          <Route path="login/medical-store" element={<MedicalStoreLogin />} />
-          <Route path="register/medical-store" element={<MedicalStoreRegister />} />
-
-          <Route path="register/doctor" element={<DoctorRegister />} />
-          <Route path="status/doctor" element={<DoctorStatus />} />
-          <Route path="recovery/doctor" element={<DoctorRecovery />} />
-          <Route path="call/:id" element={<VideoCall />} />
-
-          {/* Phase 2 Routes */}
-          <Route path="hospital/:id" element={<HospitalDetail />} />
-          <Route path="doctor/:id" element={<DoctorProfile />} />
-
-
-          {/* Phase 3 Routes */}
-          <Route path="book-appointment/:id" element={<BookAppointment />} />
-          <Route path="appointment-success" element={<AppointmentSuccess />} />
-
-          {/* Phase 5 Routes */}
-          <Route path="prescribe/:id" element={<PrescriptionForm />} />
-
-          {/* Phase 10 Routes */}
-          <Route path="medical-store/dashboard" element={<MedicalStoreDashboard />} />
-          <Route path="dashboard/patient" element={<PatientDashboard />} />
-          <Route path="dashboard/doctor" element={<DoctorDashboard />} />
-          <Route path="admin/tracking" element={<AdminUserTracking />} />
-
-        </Route>
-      </Routes>
+      <div style={{ padding: '20px', background: '#f0f0f0', border: '2px solid blue' }}>
+        App Component Loaded (with AuthProvider)
+      </div>
     </AuthProvider>
   );
 }

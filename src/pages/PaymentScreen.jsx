@@ -39,7 +39,7 @@ const PaymentScreen = ({ appointment, onPaymentSuccess, onBack }) => {
                         <p className="text-sm text-slate-500 font-bold">{appointment?.hospital || 'HealthCenter'}</p>
                     </div>
                     <div className="text-right">
-                        <span className="text-lg font-black text-p-600">₹500</span>
+                        <span className="text-lg font-black text-p-600">Rs.500</span>
                     </div>
                 </div>
                 <div className="flex items-center gap-3 pt-4 border-t border-slate-50">
@@ -94,7 +94,7 @@ const PaymentScreen = ({ appointment, onPaymentSuccess, onBack }) => {
                         <Loader2 className="animate-spin" size={24} />
                     ) : (
                         <>
-                            PAY NOW ₹500
+                            PAY NOW Rs.500
                             <ExternalLink size={20} />
                         </>
                     )}

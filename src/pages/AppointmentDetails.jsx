@@ -70,7 +70,7 @@ const AppointmentDetails = ({ appointment, onBack, onCancel }) => {
                             </div>
                             <span className="text-sm font-black text-emerald-800 uppercase tracking-tight">Success</span>
                         </div>
-                        <span className="text-sm font-black text-emerald-800">₹500</span>
+                        <span className="text-sm font-black text-emerald-800">Rs.500</span>
                     </div>
                 </div>
             </div>

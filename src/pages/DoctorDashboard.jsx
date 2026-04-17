@@ -7,27 +7,38 @@ import {
     ChevronRight, Bell, Calendar, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import ConfirmModal from '../components/ConfirmModal';
 import Input from '../components/Input';
-import { getAIResponse } from '../utils/AIService';
+import { getAIResponse } from '../services/aiService';
 import { useRef, useEffect } from 'react';
+import { uploadDoctorPhoto } from '../firebase/uploadImage';
+import ImageUpload from '../components/ImageUpload';
+import { db } from '../firebase/config';
+import { onSnapshot, query, collection, where } from 'firebase/firestore';
+import Toast from '../components/Toast';
 
 const DoctorDashboard = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const {
-        user, loading, appointments, updateAppointmentStatus, updateProfile, logout,
-        doctorStatus, setDoctorStatus, autoApprove, setAutoApprove
+        user, loading, appointments, updateAppointmentStatus, updateProfile, updateUserProfilePhoto, logout,
+        doctorStatus, setDoctorStatus, autoApprove, setAutoApprove, notifications
     } = useAuth();
 
     const [activeTab, setActiveTab] = useState('queue'); // 'queue' | 'ai-bot' | 'settings'
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const [showNotifications, setShowNotifications] = useState(false);
     const [profileMsg, setProfileMsg] = useState({ type: '', text: '' });
+    const [showToast, setShowToast] = useState(false);
+    const [toastData, setToastData] = useState({ patient: '', message: '' });
 
     // AI Chat State
     const [chatHistory, setChatHistory] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const [isAILoading, setIsAILoading] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
     const chatEndRef = useRef(null);
 
     const scrollToBottom = () => {
@@ -49,10 +60,41 @@ const DoctorDashboard = () => {
         if (!loading && !user) navigate('/login');
     }, [user, loading, navigate]);
 
+    useEffect(() => {
+        if (location?.state?.requirePhotoUpload) {
+            setActiveTab('settings');
+            setProfileMsg({ type: 'error', text: 'Please upload your profile image to continue.' });
+            navigate(location.pathname, { replace: true, state: null });
+        }
+    }, [location, navigate]);
+
+    useEffect(() => {
+        if (!user?.uid) return;
+        const q = query(
+            collection(db, "appointments"),
+            where("doctorId", "==", user.uid || user.id)
+        );
+        const unsub = onSnapshot(q, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === "modified" || change.type === "added") {
+                    const data = change.doc.data();
+                    if (data.status === 'accepted') {
+                        setToastData({
+                            patient: data.patientName || 'A patient',
+                            message: 'New confirmed appointment'
+                        });
+                        setShowToast(true);
+                    }
+                }
+            });
+        });
+        return () => unsub();
+    }, [user?.uid, user?.id]);
+
     if (loading || !user) return null;
 
-    const myAppointments = appointments.filter(a => a.doctorId === user.id);
-    const pending = myAppointments.filter(a => a.status === 'Accepted' || a.status === 'Confirmed');
+    const myAppointments = appointments.filter(a => a.doctorId === user.id || a.doctorId === user.uid);
+    const pending = myAppointments.filter(a => String(a.status).toLowerCase() === 'accepted' || a.status === 'Confirmed');
 
     const handleSendChat = async (e) => {
         e.preventDefault();
@@ -75,12 +117,8 @@ const DoctorDashboard = () => {
                 Auto-Approve: ${autoApprove ? 'ON' : 'OFF'}
             `;
 
-            const historyWithContext = [
-                { role: 'user', text: `SYSTEM CONTEXT (INTERNAL): ${clinicalContext}\n\nUSER QUERY: ${chatInput}` },
-            ];
-
-            const aiResponse = await getAIResponse(newHistory, 'doctor');
-            setChatHistory([...newHistory, { role: 'model', text: aiResponse }]);
+            const result = await getAIResponse(newHistory, 'doctor');
+            setChatHistory([...newHistory, { role: 'model', text: result.reply }]);
         } catch (error) {
             console.error("AI Error:", error);
             setChatHistory([...newHistory, { role: 'model', text: "I'm having trouble analyzing the clinical data right now. Please try again." }]);
@@ -100,6 +138,29 @@ const DoctorDashboard = () => {
         }
     };
 
+    const handlePhotoUpload = async (file) => {
+        if (!file) return;
+        const doctorId = user?.uid || user?.id;
+        if (!doctorId) return;
+        setIsUploading(true);
+        setUploadProgress(10);
+        try {
+            setUploadProgress(30);
+            const downloadURL = await uploadDoctorPhoto(doctorId, file);
+            setUploadProgress(100);
+            updateUserProfilePhoto(downloadURL);
+            setProfileMsg({ type: 'success', text: 'Profile photo updated! It is now visible to all patients.' });
+        } catch (error) {
+            console.error("Upload failed:", error);
+            setProfileMsg({ type: 'error', text: 'Upload failed. Please try again.' });
+        } finally {
+            setTimeout(() => {
+                setIsUploading(false);
+                setUploadProgress(0);
+            }, 1000);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-[#fafbfc] pb-24">
             {/* Minimalist Clinical Header */}
@@ -111,6 +172,54 @@ const DoctorDashboard = () => {
                     </p>
                 </div>
                 <div className="flex items-center gap-4">
+                    {/* Notification Bell */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowNotifications(!showNotifications)}
+                            className="p-2 text-slate-400 hover:text-teal-600 transition-colors relative"
+                        >
+                            <Bell size={20} />
+                            {notifications.filter(n => !n.read).length > 0 && (
+                                <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full border-2 border-white" />
+                            )}
+                        </button>
+                        
+                        <AnimatePresence>
+                            {showNotifications && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 overflow-hidden"
+                                >
+                                    <div className="p-4 border-b border-slate-50 flex justify-between items-center">
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Notifications</h3>
+                                        <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">
+                                            {notifications.filter(n => !n.read).length} New
+                                        </span>
+                                    </div>
+                                    <div className="max-h-96 overflow-y-auto">
+                                        {notifications.length > 0 ? (
+                                            notifications.map(n => (
+                                                <div key={n.id} className={`p-4 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors ${!n.read ? 'bg-teal-50/20' : ''}`}>
+                                                    <p className="text-xs font-black text-slate-800 mb-1">{n.title}</p>
+                                                    <p className="text-[11px] text-slate-500 leading-relaxed">{n.message}</p>
+                                                    <p className="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-tighter">
+                                                        {new Date(n.createdAt?.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="p-8 text-center">
+                                                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">No notifications</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
                     <div className="hidden sm:flex flex-col items-end mr-2">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Doctor ID</span>
                         <span className="text-xs font-bold text-slate-700">{user.code}</span>
@@ -260,11 +369,40 @@ const DoctorDashboard = () => {
                             onSubmit={handleUpdateProfile}
                             className="bg-white rounded-[40px] p-8 shadow-sm border border-slate-50 flex flex-col gap-8"
                         >
-                            <div className="flex items-center justify-between mb-2">
-                                <h3 className="text-lg font-black text-slate-800">Clinical Configuration</h3>
-                                <button type="button" onClick={() => alert('Feature coming soon')} className="text-teal-600 text-xs font-black uppercase tracking-tighter flex items-center gap-1">
-                                    <Camera size={14} /> Update Photo
-                                </button>
+                            <div className="flex flex-col items-center gap-6 mb-8 p-6 bg-slate-50/50 rounded-[32px] border border-slate-100">
+                                <div className="relative group">
+                                    <div className="w-32 h-32 rounded-full border-4 border-white shadow-xl overflow-hidden bg-white">
+                                        <img
+                                            src={user.photoURL || '/images/default-doctor.png'}
+                                            alt="Profile"
+                                            className="w-full h-full object-cover"
+                                        />
+                                        {isUploading && (
+                                            <div className="absolute inset-0 bg-teal-600/80 backdrop-blur-sm flex items-center justify-center text-white">
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <span className="text-[10px] font-black">{uploadProgress}%</span>
+                                                    <div className="w-12 h-1 bg-white/20 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-white" style={{ width: `${uploadProgress}%` }} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <label className="absolute bottom-0 right-0 w-10 h-10 bg-teal-600 text-white rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 active:scale-95 transition-all border-4 border-white">
+                                        <Camera size={18} />
+                                        <input
+                                            type="file"
+                                            className="hidden"
+                                            accept="image/*"
+                                            onChange={(e) => handlePhotoUpload(e.target.files[0])}
+                                            disabled={isUploading}
+                                        />
+                                    </label>
+                                </div>
+                                <div className="text-center">
+                                    <h3 className="text-lg font-black text-slate-800">Clinical Identity</h3>
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Manage your public representation</p>
+                                </div>
                             </div>
 
                             {profileMsg.text && (
@@ -400,8 +538,17 @@ const DoctorDashboard = () => {
                 onClose={() => setShowLogoutConfirm(false)}
                 onConfirm={logout}
             />
+
+            <Toast 
+                show={showToast} 
+                message={toastData.message}
+                doctorName={toastData.patient}
+                onClose={() => setShowToast(false)} 
+            />
         </div>
     );
 };
 
 export default DoctorDashboard;
+
+

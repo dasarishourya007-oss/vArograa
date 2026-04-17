@@ -61,7 +61,7 @@ class SafeErrorBoundary extends React.Component {
                     >
                         <RefreshCw size={16} /> Reload Page
                     </button>
-                    {process.env.NODE_ENV === 'development' && (
+                    {import.meta.env.DEV && (
                         <pre style={{
                             marginTop: '24px',
                             padding: '16px',

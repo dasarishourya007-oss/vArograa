@@ -109,7 +109,7 @@ const ContactSpecialistModal = ({ isOpen, onClose, practitioner }) => {
                                     <ShieldCheck size={32} />
                                 </div>
                                 <h4 style={{ color: 'white', marginBottom: '0.5rem' }}>Transmission Success</h4>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Message encrypted and delivered via node {Math.floor(Math.random() * 900) + 100}x.</p>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Message encrypted and delivered via node 512x.</p>
                             </motion.div>
                         ) : (
                             <form onSubmit={handleSend}>
