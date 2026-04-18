@@ -74,11 +74,11 @@ body {
 /* Desktop Web Format (Laptop/Desktop Layout) */
 @media (min-width: 768px) {
     .container {
-        max-width: 1280px;
-        margin: 0 auto;
+        width: 100%;
+        max-width: none;
+        margin: 0;
         box-shadow: none;
-        border-right: 1px solid var(--border-color);
-        border-left: 1px solid var(--border-color);
+        border: none;
         padding: 0 40px;
     }
 }

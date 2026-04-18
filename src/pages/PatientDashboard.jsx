@@ -446,7 +446,7 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick, viewM
                                     {filteredHospitals.length} {t('found')}
                                 </span>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-6 gap-y-10">
                                 {isLoading ? (
                                     Array(3).fill(0).map((_, i) => (
                                         <div key={i} className="card-premium h-48 skeleton" />
@@ -1753,7 +1753,7 @@ const StoreTab = () => {
                     </div>
                     <button className="text-[10px] font-black text-blue-600 underline decoration-blue-200 underline-offset-8 uppercase tracking-[0.2em] hover:text-blue-700 transition-colors">See All</button>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
                     {/* Store Cards */}
                     {filteredStores.length > 0 ? (
                         filteredStores.map(store => (
