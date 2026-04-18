@@ -56,18 +56,21 @@ const buildFallbackReply = (messages = []) => {
 router.post('/chat', async (req, res) => {
     try {
         const { messages } = req.body;
+        console.log(`[AI Request] Messages: ${messages?.length || 0}`);
 
         if (!messages || !Array.isArray(messages)) {
             return res.status(400).json({ error: "Invalid request: 'messages' array is required." });
         }
 
         if (!process.env.NVIDIA_API_KEY) {
+            console.log("[AI] Routing to: RULE-BASED FALLBACK");
             return res.json({
                 reply: buildFallbackReply(messages),
                 source: 'fallback'
             });
         }
 
+        console.log("[AI] Routing to: NVIDIA NIM");
         const response = await axios.post(NVIDIA_API_URL, {
             model: MODEL,
             messages: messages,
@@ -79,7 +82,7 @@ router.post('/chat', async (req, res) => {
                 Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
                 "Content-Type": "application/json"
             },
-            timeout: 15000
+            timeout: 60000
         });
 
         res.json({
@@ -88,7 +91,15 @@ router.post('/chat', async (req, res) => {
         });
 
     } catch (error) {
-        console.error("FULL ERROR:", error.response?.data || error.message);
+        const errorDetail = error.response?.data || error.message;
+        console.error("FULL ERROR:", errorDetail);
+        
+        // Log to a file we can read
+        try {
+            const fs = await import('fs');
+            fs.appendFileSync('ai_error.log', `[${new Date().toISOString()}] ${JSON.stringify(errorDetail)}\n`);
+        } catch (logErr) {}
+
         const status = Number(error.response?.status || 0);
 
         if (status === 401 || status === 403) {
