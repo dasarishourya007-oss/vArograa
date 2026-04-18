@@ -71,16 +71,18 @@ body {
     position: relative;
 }
 
-/* Mobile App Format (Constrained) */
-@media (max-width: 767px) {
+/* Desktop Web Format (Constrained to look like an app) */
+@media (min-width: 768px) {
     .container {
-        max-width: 450px;
-        box-shadow: 0 0 100px rgba(0, 0, 0, 0.5);
+        max-width: 500px;
+        box-shadow: 0 0 100px rgba(0, 0, 0, 0.1);
+        border-right: 1px solid var(--border-color);
+        border-left: 1px solid var(--border-color);
     }
 }
 
-/* Desktop Web Format (Full Width) */
-@media (min-width: 768px) {
+/* Mobile App Format (Full Width) */
+@media (max-width: 767px) {
     .container {
         max-width: 100%;
         box-shadow: none;
