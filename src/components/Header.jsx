@@ -28,6 +28,7 @@ const Header = ({ variant = 'default', searchValue, onSearchChange, currentLocat
                 position: 'relative',
                 boxShadow: '0 10px 30px rgba(29, 78, 216, 0.15)',
             }}>
+            <div className="max-w-4xl mx-auto">
                 {/* Header Row */}
                 <div className="flex justify-between items-center mb-6">
                     {/* Location Selection Pill */}
@@ -110,6 +111,7 @@ const Header = ({ variant = 'default', searchValue, onSearchChange, currentLocat
                         </motion.button>
                     </div>
                 </motion.div>
+            </div>
             </div>
         );
     }

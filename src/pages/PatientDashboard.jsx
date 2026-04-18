@@ -446,7 +446,7 @@ const HomeTab = ({ navigate, onNavigate, currentLocation, onLocationClick, viewM
                                     {filteredHospitals.length} {t('found')}
                                 </span>
                             </div>
-                            <div className="flex flex-col gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10">
                                 {isLoading ? (
                                     Array(3).fill(0).map((_, i) => (
                                         <div key={i} className="card-premium h-48 skeleton" />
@@ -1534,7 +1534,7 @@ const AIAssistantTab = ({ onNavigate }) => {
             </header>
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto no-scrollbar pb-40">
-                <div className="p-6 space-y-6">
+                <div className="max-w-4xl mx-auto p-6 space-y-6">
                     <AnimatePresence initial={false}>
                         {messages.map((msg, i) => (
                             <motion.div
@@ -1612,6 +1612,7 @@ const AIAssistantTab = ({ onNavigate }) => {
             </div>
             {/* Futuristic Glass Control Bar */}
             <div className="fixed bottom-32 left-0 right-0 px-6 z-40">
+                <div className="max-w-4xl mx-auto">
                 <motion.div
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
@@ -1664,6 +1665,7 @@ const AIAssistantTab = ({ onNavigate }) => {
                         AI System Listening...
                     </motion.p>
                 )}
+                </div>
             </div>
             <AIAnalyzerModal
                 isOpen={showAIModal}
@@ -1751,7 +1753,7 @@ const StoreTab = () => {
                     </div>
                     <button className="text-[10px] font-black text-blue-600 underline decoration-blue-200 underline-offset-8 uppercase tracking-[0.2em] hover:text-blue-700 transition-colors">See All</button>
                 </div>
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {/* Store Cards */}
                     {filteredStores.length > 0 ? (
                         filteredStores.map(store => (
@@ -1759,9 +1761,9 @@ const StoreTab = () => {
                                 key={store.id}
                                 whileTap={{ scale: 0.98 }}
                                 onClick={() => setCheckoutStore(store)}
-                                className="bg-white rounded-[24px] overflow-hidden border border-slate-100 shadow-sm flex items-stretch gap-0 hover:shadow-xl transition-all group cursor-pointer relative"
+                                className="bg-white rounded-[24px] overflow-hidden border border-slate-100 shadow-sm flex flex-col items-stretch gap-0 hover:shadow-xl transition-all group cursor-pointer relative"
                             >
-                                <div className="w-32 h-32 shrink-0 bg-slate-100 relative">
+                                <div className="w-full h-40 shrink-0 bg-slate-100 relative">
                                     <img
                                         src={store.image || 'https://images.unsplash.com/photo-1576602976047-174e57a47881?auto=format&fit=crop&q=80&w=200'}
                                         alt={store.name}

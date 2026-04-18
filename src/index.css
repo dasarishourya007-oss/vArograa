@@ -71,21 +71,24 @@ body {
     position: relative;
 }
 
-/* Desktop Web Format (Constrained to look like an app) */
+/* Desktop Web Format (Laptop/Desktop Layout) */
 @media (min-width: 768px) {
     .container {
-        max-width: 500px;
-        box-shadow: 0 0 100px rgba(0, 0, 0, 0.1);
+        max-width: 1280px;
+        margin: 0 auto;
+        box-shadow: none;
         border-right: 1px solid var(--border-color);
         border-left: 1px solid var(--border-color);
+        padding: 0 40px;
     }
 }
 
-/* Mobile App Format (Full Width) */
+/* Mobile App Format (Full Width Phone Layout) */
 @media (max-width: 767px) {
     .container {
         max-width: 100%;
         box-shadow: none;
+        padding: 0;
     }
 }
 
