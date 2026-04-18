@@ -14,7 +14,7 @@ import SafeErrorBoundary from '../components/SafeErrorBoundary';
 import VoiceAssistant from '../components/VoiceAssistant';
 import PaymentScreen from './PaymentScreen';
 import AppointmentDetails from './AppointmentDetails';
-import { getAIResponse, analyzePrescription } from '../utils/AIService';
+import { getAIResponse, analyzePrescription, identifyMedicine } from '../services/aiService';
 import BottomNav from '../components/BottomNav';
 import Header from '../components/Header';
 import { hospitals as mockHospitals, medicalStores as mockMedicalStores } from '../utils/mockData';
@@ -1407,6 +1407,7 @@ const AIAssistantTab = ({ onNavigate }) => {
     const [aiLoading, setAiLoading] = useState(false);
     const scrollRef = React.useRef(null);
     const fileInputRef = React.useRef(null);
+
     // Voice Recognition Setup
     const [recognition, setRecognition] = useState(null);
     React.useEffect(() => {
@@ -1426,6 +1427,7 @@ const AIAssistantTab = ({ onNavigate }) => {
             setRecognition(rec);
         }
     }, [selectedLang]);
+
     const toggleRecording = () => {
         if (!recognition) return alert("Speech recognition not supported in this browser.");
         if (isRecording) {
@@ -1435,11 +1437,13 @@ const AIAssistantTab = ({ onNavigate }) => {
             setIsRecording(true);
         }
     };
+
     React.useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
     }, [messages]);
+
     const handleSend = async (customText = null) => {
         const textToSend = customText || input;
         if (!textToSend.trim() || isLoading) return;
@@ -1448,19 +1452,16 @@ const AIAssistantTab = ({ onNavigate }) => {
         setInput('');
         setIsLoading(true);
         try {
-            // Call unified AI Service (NVIDIA)
-            const { getAIResponse } = await import('../utils/AIService');
-            const systemPrompt = LANG_SYSTEM_PROMPTS[selectedLang] || LANG_SYSTEM_PROMPTS.en;
-            const result = await getAIResponse([{ role: 'model', text: systemPrompt }, ...messages, userMsg], 'patient');
-            const aiResponse = result.reply;
-
-            setMessages(prev => [...prev, { role: 'model', text: aiResponse }]);
+            const result = await getAIResponse([...messages, userMsg], 'chat', {}, selectedLang);
+            setMessages(prev => [...prev, { role: 'model', text: result.reply }]);
         } catch (error) {
-            setMessages(prev => [...prev, { role: 'model', text: t('ai_error_message') }]);
+            console.error("Chat Error:", error);
+            setMessages(prev => [...prev, { role: 'model', text: t('ai_error_message') || "Sorry, I'm having trouble connecting to the AI. Please try again." }]);
         } finally {
             setIsLoading(false);
         }
     };
+
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -1468,8 +1469,6 @@ const AIAssistantTab = ({ onNavigate }) => {
         setAiLoading(true);
         setAiAnalysis('');
         try {
-            const { identifyMedicine, analyzePrescription } = await import('../utils/AIService');
-            // Check if user specifically asked for medicine identification or if we should just try prescription
             const isMedicine = window.confirm("Is this a medicine photo? (Click Cancel if it's a prescription)");
             let result;
             if (isMedicine) {
@@ -1484,6 +1483,7 @@ const AIAssistantTab = ({ onNavigate }) => {
             setAiLoading(false);
         }
     };
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f8fafc', position: 'relative' }}>
             {/* Glassmorphism Header */}

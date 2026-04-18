@@ -129,59 +129,73 @@ End with: "Your appointment has been successfully booked."
 * Never give risky medical advice.
 `;
 
-export const getAIResponse = async (messages, mode = 'chat', contextData = {}) => {
+export const getAIResponse = async (messages, mode = 'chat', contextData = {}, language = 'en') => {
     try {
         let formattedMessages = [];
         
-        // Choose prompt based on mode
-        const systemPrompt = mode === 'voice' ? VOICE_ASSISTANT_PROMPT : MEDICINE_SYSTEM_PROMPT;
+        // Choose base prompt based on mode
+        let systemPrompt = mode === 'voice' ? VOICE_ASSISTANT_PROMPT : MEDICINE_SYSTEM_PROMPT;
+
+        // Add language instruction if not English
+        if (language === 'hi') {
+            systemPrompt += "\nIMPORTANT: Always respond in Hindi (हिन्दी).";
+        } else if (language === 'te') {
+            systemPrompt += "\nIMPORTANT: Always respond in Telugu (తెలుగు).";
+        }
 
         formattedMessages.push({
             role: "system",
-            content: systemPrompt + (contextData ? `\n\nCONTEXT DATA:\n${JSON.stringify(contextData)}` : '')
+            content: systemPrompt + (contextData && Object.keys(contextData).length > 0 ? `\n\nCONTEXT DATA:\n${JSON.stringify(contextData)}` : '')
         });
 
         if (Array.isArray(messages)) {
-            const history = messages.map(msg => ({
-                role: msg.role === 'model' || msg.role === 'assistant' ? 'assistant' : 'user',
-                content: msg.text || msg.content || ""
-            }));
-            formattedMessages = [...formattedMessages, ...history];
+            const history = messages.map(msg => {
+                // Determine clean role
+                let role = 'user';
+                if (msg.role === 'model' || msg.role === 'assistant') role = 'assistant';
+                if (msg.role === 'system') role = 'system';
+
+                return {
+                    role,
+                    content: msg.text || msg.content || ""
+                };
+            }).filter(msg => msg.role !== 'system' || msg.content !== ''); // Avoid empty system messages
+            
+            // If the first message in history is a system prompt, we skip it because we already added one
+            const filteredHistory = history.filter((msg, idx) => !(idx === 0 && msg.role === 'system'));
+            
+            formattedMessages = [...formattedMessages, ...filteredHistory];
         } else {
             formattedMessages.push({ role: "user", content: messages });
         }
 
         const data = await postToAiProxy({ messages: formattedMessages });
         
-        // Handle specific actions if returned by AI-side (if applicable)
         return {
-            reply: data.reply,
+            reply: data.reply || "I didn't receive a response from the AI. Please try again.",
             action: data.action || null,
             data: data.data || null
         };
 
     } catch (error) {
         console.error("AI Service Error:", error);
-        throw new Error("⚠️ AI connection failed. Try again.");
+        return {
+            reply: "⚠️ I'm having trouble connecting to the AI system. Please check if the backend server is running and try again.",
+            error: error.message
+        };
     }
 };
 
 /**
  * Identify Medicine (Placeholder - Requires Vision Model)
  */
-export const identifyMedicine = async () => {
-    return { 
-        success: false, 
-        message: "Image analysis is currently not supported. We are upgrading our AI systems." 
-    };
+export const identifyMedicine = async (imageFile) => {
+    return "Medicine identification from images is currently being upgraded to NVIDIA NIM. Please describe the medicine in the chat for now.";
 };
 
 /**
  * Analyze Prescription (Placeholder - Requires Vision Model)
  */
-export const analyzePrescription = async () => {
-    return { 
-        success: false, 
-        message: "Image analysis is currently not supported. We are upgrading our AI systems." 
-    };
+export const analyzePrescription = async (imageFile) => {
+    return "Prescription analysis is currently being migrated to NVIDIA Llama 3.2 Vision. Please consult a doctor for official guidance in the meantime.";
 };
